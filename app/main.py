@@ -210,10 +210,17 @@ def first_run(request: Request, email: str = Form(...), password: str = Form(...
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
     who = auth.authenticate(email, password)
     if not who:
+        # first_run belongs on THIS render too. Without it, one failed attempt
+        # hid the only way to create the first account - which is exactly when
+        # somebody signing in to a brand new install needs to see it.
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "That email and password combination was not accepted."},
+            {"error": ("No account has been set up on this install yet — "
+                       "set your password first."
+                       if not auth.load_users()
+                       else "That email and password combination was not accepted."),
+             "first_run": not auth.load_users()},
             status_code=401,
         )
     response = RedirectResponse("/", status_code=303)
