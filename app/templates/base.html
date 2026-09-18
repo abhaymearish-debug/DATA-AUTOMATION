@@ -55,6 +55,15 @@
          font-weight:650; text-decoration:none; cursor:pointer; line-height:1.15; }
   .act:hover { background:var(--hover); }
   .act.primary { background:var(--gold); border-color:var(--gold); color:#20160A; font-weight:700; }
+
+  /* Downloads read the same on every report, so the colour is the format:
+     Excel blue, PDF gold. Nothing else in the app wears these two. */
+  .act.xl, .btn.xl { background:var(--blue); border-color:var(--blue); color:#fff;
+                     font-weight:650; }
+  .act.xl:hover, .btn.xl:hover { background:var(--blue-dark); border-color:var(--blue-dark); }
+  .act.pdf, .btn.pdf { background:var(--gold); border-color:var(--gold); color:#20160A;
+                       font-weight:700; }
+  .act.pdf:hover, .btn.pdf:hover { filter:brightness(.96); }
   .act.danger { border-color:#FCA5A5; color:#991B1B; }
   .act.danger:hover { background:#FEF2F2; }
 
@@ -183,8 +192,6 @@
   .topbar { display:flex; align-items:center; gap:12px; padding:14px 26px;
             background:var(--card); border-bottom:1px solid var(--line); }
   .topbar h1 { margin:0; font-size:19px; font-weight:650; }
-  .topbar .sp { margin-left:auto; display:flex; align-items:center; gap:10px;
-                font-size:13px; color:var(--muted); }
   .content { padding:22px 26px 60px; }
 
   .btn { border:1px solid var(--line); background:var(--card); color:var(--ink);
@@ -212,7 +219,6 @@
     .burger { display:inline-block; }
     .topbar { padding:11px 14px; gap:10px; }
     .topbar h1 { font-size:16px; }
-    .topbar .sp .when { display:none; }
     .content { padding:16px 14px 60px; }
   }
 
@@ -322,10 +328,6 @@
   <div class="topbar">
     <button class="burger" onclick="drawer()" aria-label="Menu">☰</button>
     <h1>{% block heading %}{% endblock %}</h1>
-    <div class="sp">
-      <span class="when" title="Server started at this time — if it is older than your last restart, the old process is still running">
-        started {{ started_at }}</span>
-    </div>
   </div>
   <div class="content">
     {% if problems %}

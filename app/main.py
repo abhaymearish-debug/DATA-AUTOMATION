@@ -1978,23 +1978,26 @@ def daily_page(request: Request, kind: str):
 
 @app.get("/api/reports/daily/{kind}")
 def daily_data(request: Request, kind: str, date_from: str = "", date_to: str = "",
-               cluster: str = ""):
+               cluster: str = "", view: str = "bond"):
     require_user(request)
     _daily_kind(kind)
+    if view not in ("bond", "warehouse"):
+        raise HTTPException(400, "Unknown view.")
     cl = int(cluster) if cluster in ("1", "2", "3") else None
     return JSONResponse(reports_api.daily_grid(kind, date_from=date_from,
-                                               date_to=date_to, cluster=cl))
+                                               date_to=date_to, cluster=cl, view=view))
 
 
 @app.get("/reports/daily/{kind}/export.pdf")
 def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "",
-              cluster: str = ""):
+              cluster: str = "", view: str = "bond"):
     require_user(request)
     _daily_kind(kind)
     import tempfile
 
     cl = int(cluster) if cluster in ("1", "2", "3") else None
-    data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to, cluster=cl)
+    data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to,
+                                  cluster=cl, view=view)
     if "error" in data:
         raise HTTPException(404, data["error"])
 
@@ -2006,7 +2009,7 @@ def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "
 
 @app.get("/reports/daily/{kind}/export.xlsx")
 def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = "",
-               cluster: str = ""):
+               cluster: str = "", view: str = "bond"):
     require_user(request)
     _daily_kind(kind)
     import tempfile
@@ -2014,7 +2017,8 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
     from openpyxl.styles import Alignment, Font, PatternFill
 
     cl = int(cluster) if cluster in ("1", "2", "3") else None
-    data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to, cluster=cl)
+    data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to,
+                                  cluster=cl, view=view)
     if "error" in data:
         raise HTTPException(404, data["error"])
 
@@ -2023,7 +2027,8 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
     ws = wb.active
     ws.title = data["title"][:31]
 
-    ws.append(["BOND"] + [f"{d['dow']} {d['dom']}" for d in data["days"]] + ["TOTAL"])
+    ws.append([data.get("group_label", "Bond").upper()]
+              + [f"{d['dow']} {d['dom']}" for d in data["days"]] + ["TOTAL"])
     for cell in ws[1]:
         cell.fill = PatternFill("solid", fgColor=navy)
         cell.font = Font(bold=True, color=gold, size=10)

@@ -64,11 +64,12 @@
 
   /* The strip wears the grand-total theme - gold ground, navy lettering - so
      the table is book-ended by the same colour at top and bottom. */
-  .lede { display:flex; align-items:center; gap:11px; margin-bottom:9px;
-          padding:9px 15px; border-radius:10px;
+  .lede { position:sticky; top:0; z-index:20;
+          display:flex; align-items:center; gap:11px; margin-bottom:9px;
+          padding:10px 15px; border-radius:10px;
           background:var(--gold); color:#1B2A4A;
           font-weight:800; font-size:10px; letter-spacing:1.1px;
-          text-transform:uppercase; box-shadow:0 1px 2px rgba(16,24,40,.10); }
+          text-transform:uppercase; box-shadow:0 2px 10px rgba(16,24,40,.13); }
   .lede .grp { color:#1B2A4A; }
   .lede .sp { margin-left:auto; display:flex; }
   .lede .sp span { width:var(--numw); text-align:center; }
@@ -84,25 +85,38 @@
   .seg button.on { background:var(--card); color:var(--ink);
                    box-shadow:0 1px 2px rgba(16,24,40,.12); }
 
-  .bd { background:var(--card); border:1px solid var(--line); border-radius:12px;
-        margin-bottom:12px; overflow:hidden; }
-  .bd-h { display:flex; align-items:center; gap:11px; padding:12px 15px; cursor:pointer;
-          background:linear-gradient(180deg,var(--navy-3),var(--navy)); color:#fff;
-          user-select:none; }
-  .bd-h:hover { filter:brightness(1.12); }
-  .bd-h .chev { font-size:10px; opacity:.85; transition:transform .16s; width:10px; }
+  .bd { background:var(--card); border:1px solid var(--line); border-radius:11px;
+        margin-bottom:7px; overflow:hidden;
+        transition:border-color .15s ease, box-shadow .15s ease; }
+  .bd:hover { border-color:#C6D5F4; box-shadow:0 2px 10px rgba(16,24,40,.07); }
+  .bd:not(.shut) { border-color:#B6C9F0; box-shadow:0 6px 20px rgba(16,24,40,.10); }
+
+  .bd-h { position:relative; display:flex; align-items:center; gap:11px;
+          padding:12px 15px 12px 16px; cursor:pointer; user-select:none;
+          background:var(--card); color:var(--ink);
+          transition:background .14s ease; }
+  .bd-h:hover { background:var(--hover); }
+  /* The rail marks the one you opened. Nothing else on the row is coloured,
+     so a page of fifteen bonds has exactly one accent on it. */
+  .bd-h::before { content:''; position:absolute; left:0; top:9px; bottom:9px; width:3px;
+                  border-radius:0 3px 3px 0; background:transparent; }
+  .bd:not(.shut) .bd-h::before { background:var(--gold); }
+  .bd:not(.shut) .bd-h { background:var(--hover); }
+  .bd-h .chev { font-size:9px; color:var(--muted); transition:transform .16s; width:10px; }
   .bd.shut .chev { transform:rotate(-90deg); }
+  .bd:not(.shut) .chev { color:var(--blue); }
   .bd.shut .bd-b { display:none; }
-  .bd-h .nm { font-weight:700; font-size:14px; letter-spacing:.35px; color:var(--gold); }
+  .bd-h .nm { font-weight:700; font-size:14px; letter-spacing:-.1px; color:var(--ink); }
   .bd-h .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
-              border:1px solid #3A4E8C; color:#AEC0EA; border-radius:20px; padding:2px 8px; }
-  .bd-h .cnt { font-size:11px; color:#94A7D6; }
+              background:var(--chip); color:var(--chip-ink); border-radius:20px; padding:2px 8px; }
+  .bd-h .cnt { font-size:11.5px; color:var(--muted); }
   .bd-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
   .bd-h .mini > div { width:var(--numw); text-align:center; }
   .bd-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
-                   color:#94A7D6; }
-  .bd-h .mini .n { font-size:15px; font-weight:700; }
-  .bd-h .mini .n.sold { color:var(--gold); }
+                   color:var(--muted); }
+  .bd-h .mini .n { font-size:15px; font-weight:700; color:var(--ink); }
+  /* Sales is the column people came for, so it is the one that is coloured. */
+  .bd-h .mini .n.sold { color:var(--blue); }
 
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13.5px;
           table-layout:fixed; }
@@ -130,8 +144,9 @@
   tr.tot td { background:var(--row); font-weight:700; height:36px;
               border-top:1px solid var(--line); }
 
-  .grand { display:flex; align-items:center; gap:11px; padding:13px 15px; border-radius:12px;
-           background:var(--gold); color:#1B2A4A; font-weight:700; margin-top:4px; }
+  .grand { display:flex; align-items:center; gap:11px; padding:14px 15px; border-radius:11px;
+           background:var(--gold); color:#1B2A4A; font-weight:700; margin-top:9px;
+           box-shadow:0 2px 10px rgba(16,24,40,.12); }
   .grand .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
                     opacity:.7; }
   .grand .nm { font-size:13.5px; letter-spacing:.5px; text-transform:uppercase; }
@@ -221,9 +236,9 @@
       </label>
     </div>
     <div class="sp" id="dlBar">
-      <a class="act" id="dlXl" href="#">Download Excel</a>
+      <a class="act xl" id="dlXl" href="#">Download Excel</a>
       <div class="menu" id="pdfMenu">
-        <button type="button" class="act primary" onclick="togglePdf(event)">Download PDF ▾</button>
+        <button type="button" class="act pdf" onclick="togglePdf(event)">Download PDF ▾</button>
         <div class="items">
           <a id="dlBooks" href="#">All bonds
             <span class="sub">one file per bond, a page per shop</span></a>

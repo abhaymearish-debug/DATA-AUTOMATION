@@ -60,6 +60,12 @@
 
   /* A day nobody has uploaded yet still gets its column - it just says so,
      rather than passing a zero off as a day that traded nothing. */
+  .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
+  .seg button { border:0; background:none; font:inherit; font-size:12.5px; font-weight:650;
+                color:var(--muted); padding:5px 12px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--card); color:var(--ink);
+                   box-shadow:0 1px 2px rgba(16,24,40,.12); }
+
   thead th.nc { color:#8FA0C4; }
   thead th.nc .d { color:#8FA0C4; }
   tbody td.nc { background:#F7F8FB; color:#C2C9D6; }
@@ -89,6 +95,14 @@
         <div class="calpop" id="calPop"></div>
       </div>
       <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Group by</span>
+        <div class="seg" id="seg">
+          <button type="button" class="on" data-view="bond" onclick="setView('bond')">Bond</button>
+          <button type="button" data-view="warehouse" onclick="setView('warehouse')">Warehouse</button>
+        </div>
+      </div>
+      <span class="fdiv"></span>
       <div class="fitem"><span class="fi-k">Cluster</span>
         <select id="fCluster">
           <option value="">All clusters</option>
@@ -100,8 +114,8 @@
     </div>
     <div class="sp">
       <button class="btn" onclick="resetAll()">Reset</button>
-      <button class="btn" onclick="dl('xlsx')">Download Excel</button>
-      <button class="btn gold" onclick="dl('pdf')">Download PDF</button>
+      <button class="btn xl" onclick="dl('xlsx')">Download Excel</button>
+      <button class="btn pdf" onclick="dl('pdf')">Download PDF</button>
     </div>
   </div>
 </div>
@@ -119,6 +133,16 @@
 const KIND = "{{ kind }}";
 let filled = false;
 let FROM = '', TO = '';
+// Bond is our mapping of the shops; warehouse is the depot KSBC shipped from.
+// Same lines, same grand total, cut two ways.
+let view = 'bond';
+
+function setView(v){
+  if (view === v) return;
+  view = v;
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  load();
+}
 
 const n = v => (v || 0).toLocaleString('en-IN');
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s??''; return d.innerHTML; }
@@ -127,6 +151,7 @@ function params(){
   if (FROM) p.set('date_from', FROM);
   if (TO)   p.set('date_to', TO);
   if (fCluster.value) p.set('cluster', fCluster.value);
+  if (view !== 'bond') p.set('view', view);
   return p;
 }
 function resetAll(){
@@ -165,7 +190,7 @@ function render(d){
   const nc = d.days.map(x => !covered.has(x.iso));
 
   grid.querySelector('thead').innerHTML =
-    '<tr><th>Bond</th>' +
+    `<tr><th>${escapeHtml(d.group_label || 'Bond')}</th>` +
     d.days.map((x, i) => `<th class="${nc[i] ? 'nc' : ''}" title="${nc[i] ? 'No raw uploaded for this day' : ''}">` +
                          `${x.dow}<span class="d">${x.dom}</span></th>`).join('') +
     '<th>Total</th></tr>';
@@ -181,7 +206,8 @@ function render(d){
   }).join('');
 
   const missing = d.days.filter((x, i) => nc[i]).map(x => x.dom);
-  foot.textContent = `${bonds.length} bonds · ${d.days.length} days · ${d.period.label} · from ${d.source}`
+  const what = (d.group_label || 'Bond').toLowerCase() + 's';
+  foot.textContent = `${bonds.length} ${what} · ${d.days.length} days · ${d.period.label} · from ${d.source}`
     + (missing.length ? ` · no raw uploaded for ${missing.join(', ')} — shown as zero` : '')
     + (d.unmapped.length ? ` · ${d.unmapped.length} outlet(s) with no bond in master data` : '');
 }

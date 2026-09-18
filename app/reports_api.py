@@ -669,6 +669,7 @@ def _shop_rows(ws, day, master: dict) -> list[dict]:
     if any(c not in ix for c in SHOP_OUT_COLUMNS):
         return []
     cS, cC, cB, cP = (ix[c] for c in SHOP_OUT_COLUMNS)
+    cW = ix.get("Warehouse Name")
 
     out = []
     for r in rows:
@@ -679,7 +680,12 @@ def _shop_rows(ws, day, master: dict) -> list[dict]:
         if not qty:
             continue
         code = str(r[cS]).strip()
+        # Which warehouse a shop drew from is the raw's own column - a fact
+        # KSBC reports and can change between months - and master is only the
+        # fallback for an export that does not carry it.
+        wh = canonical_warehouse(r[cW]) if (cW is not None and len(r) > cW) else ""
         out.append({"bond": master.get(code, {}).get("bond", ""),
+                    "warehouse": wh or master.get(code, {}).get("warehouse", ""),
                     "shop_code": code, "date": day, "cases": float(qty)})
     return out
 
@@ -808,8 +814,8 @@ DAILY_KINDS = {
 
 
 def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
-               cluster: int | None = None) -> dict:
-    """Bond x day grid with cluster subtotals and a grand total."""
+               cluster: int | None = None, view: str = "bond") -> dict:
+    """Bond (or warehouse) x day grid with cluster subtotals and a grand total."""
     if kind not in DAILY_KINDS:
         return {"error": f"Unknown report '{kind}'."}
 
@@ -866,16 +872,33 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
     lo = _as_date(date_from) or (min(covered) if covered else span_lo)
     hi = _as_date(date_to) or (max(covered) if covered else span_hi)
 
-    live = bond_clusters()
-    of_bond = cluster_of_bond()
-    bonds = [b for c in (1, 2, 3) for b in live.get(c, [])
-             if cluster in (None, 0) or of_bond.get(b) == cluster]
+    # Bond is our own mapping; warehouse is KSBC's. Grouping by either asks
+    # the same question of the same lines, so only the key and the cluster
+    # lookup change - the figures underneath are identical, which is what
+    # makes the two views reconcile to the same grand total.
+    by_warehouse = view == "warehouse"
+    if by_warehouse:
+        live = {c: list(w) for c, w in WAREHOUSE_CLUSTERS.items()}
+        of_group = dict(CLUSTER_OF_WAREHOUSE)
+        field = "warehouse"
+    else:
+        live = bond_clusters()
+        of_group = cluster_of_bond()
+        field = "bond"
+    of_bond = of_group
+
+    present = {l.get(field) for l in lines if lo <= l["date"] <= hi and l.get(field)}
+    groups = [g for c in (1, 2, 3) for g in live.get(c, [])
+              if (cluster in (None, 0) or of_group.get(g) == cluster)
+              and (not by_warehouse or g in present)]
+    bonds = groups
 
     exact: dict[tuple[str, date], float] = defaultdict(float)
     seen_days: set = set()
     for l in lines:
-        if lo <= l["date"] <= hi and l["bond"] in of_bond:
-            exact[(l["bond"], l["date"])] += l["cases"]
+        key = l.get(field) or ""
+        if lo <= l["date"] <= hi and key in of_group:
+            exact[(key, l["date"])] += l["cases"]
             seen_days.add(l["date"])
 
     # Every day in the window gets a column, including days nothing moved: a
@@ -905,6 +928,8 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
 
     return {
         "kind": kind,
+        "view": view,
+        "group_label": "Warehouse" if by_warehouse else "Bond",
         "title": DAILY_KINDS[kind]["title"],
         "unit": DAILY_KINDS[kind]["unit"],
         "days": [{"iso": d.isoformat(), "dom": str(d.day),

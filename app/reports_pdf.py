@@ -471,7 +471,7 @@ def daily_geometry(grid: dict) -> tuple[float, float, float, list[float], float]
     rows = grid["rows"]
     days = grid["days"]
 
-    label_w = max([_w("BOND", BOLD, DF_HEAD)]
+    label_w = max([_w(grid.get("group_label", "Bond").upper(), BOLD, DF_HEAD)]
                   + [_w(r["label"], BOLD if r["kind"] != "bond" else BOOK, DF_BODY)
                      for r in rows]) + D_PAD_LABEL
 
@@ -558,7 +558,8 @@ def build_daily_pdf(grid: dict, path: Path) -> Path:
     # --- header ------------------------------------------------------------
     head_top = sub_top - sub_h
     box(0, head_top, label_w, D_HEAD_H, D_NAVY, D_GOLD, D_LW_HEAD)
-    centred("BOND", 0, label_w, head_top - 30.5, BOLD, DF_HEAD, D_GOLD_T)
+    centred(grid.get("group_label", "Bond").upper(), 0, label_w,
+            head_top - 30.5, BOLD, DF_HEAD, D_GOLD_T)
 
     x = label_w
     for d, w in zip(days, day_w):
