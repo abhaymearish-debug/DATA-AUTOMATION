@@ -16,7 +16,7 @@ services:
     disk:
       name: ksd-data
       mountPath: /data       # matches KSD_WORKSPACE_ROOT below
-      sizeGB: 5
+      sizeGB: 2       # ~2 years of raws and workbooks; can grow, never shrink
     envVars:
       - key: KSD_WORKSPACE_ROOT
         value: /data/workspace  # on the disk, so uploads outlive the container
