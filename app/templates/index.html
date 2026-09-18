@@ -35,7 +35,13 @@
   .drop.has { padding:10px 10px 8px; text-align:left; border-style:solid;
               border-color:var(--line); background:var(--card); }
   .drop.has:hover { border-color:var(--blue); background:var(--card); }
-  .drop .list { display:flex; flex-direction:column; gap:6px; }
+  /* A warehouse batch is 28 files. Uncapped, the list pushes OK off the
+     screen; capped, the box stays the same size whatever lands in it. */
+  .drop .head { display:flex; align-items:baseline; gap:8px; padding:2px 3px 8px; }
+  .drop .head b { font-size:12.5px; font-weight:700; color:var(--ink); }
+  .drop .head span { font-size:11.5px; color:var(--muted); }
+  .drop .list { display:flex; flex-direction:column; gap:6px; cursor:default;
+                max-height:184px; overflow-y:auto; overscroll-behavior:contain; }
   .drop .f { display:flex; align-items:center; gap:9px; min-width:0;
              padding:9px 11px; border-radius:9px; background:var(--row); }
   .drop .f svg { flex:none; width:16px; height:16px; color:var(--navy); fill:none;
@@ -43,8 +49,8 @@
   .drop .f .n { font-size:12.5px; font-weight:600; color:var(--ink); min-width:0;
                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .drop .f .s { margin-left:auto; flex:none; font-size:11.5px; color:var(--muted); }
-  .drop .swap { display:block; margin-top:8px; font-size:11.5px; color:var(--muted);
-                text-align:center; }
+  .drop .swap { display:block; margin-top:9px; padding-top:9px; font-size:11.5px;
+                color:var(--muted); text-align:center; border-top:1px solid var(--line); }
   /* display: on these beats the hidden attribute, so say it again louder. */
   .drop [hidden] { display:none !important; }
 </style>
@@ -263,6 +269,7 @@
           <span class="t"><em>Choose</em> or drop files here</span>
           <span class="h" id="upHint">Excel export from KSBC</span>
         </span>
+        <span class="head" id="upHead" hidden><b id="upCount"></b><span id="upBytes"></span></span>
         <span class="list" id="upList" hidden></span>
         <span class="swap" id="upSwap" hidden>Click or drop to replace</span>
       </label>
@@ -439,11 +446,19 @@ function showPicked(){
   const files = [...upFiles.files];
   const any = files.length > 0;
   upDrop.classList.toggle('has', any);
-  upBlank.hidden = any; upList.hidden = !any; upSwap.hidden = !any;
+  upBlank.hidden = any;
+  upHead.hidden = upList.hidden = upSwap.hidden = !any;
+  upCount.textContent = files.length === 1 ? '1 file' : files.length + ' files';
+  upBytes.textContent = niceSize(files.reduce((n, f) => n + f.size, 0));
   upList.innerHTML = files.map(f =>
     `<span class="f">${FILE_SVG}<span class="n">${esc(f.name)}</span>` +
     `<span class="s">${niceSize(f.size)}</span></span>`).join('');
+  upList.scrollTop = 0;
 }
+
+/* The list scrolls, and it sits inside the label. Without this, reaching for
+   the scrollbar reopens the file picker and loses the selection. */
+upList.addEventListener('click', e => e.preventDefault());
 
 /* Dropping a file anywhere but the box would have the browser navigate away
    from the app and open it, losing whatever was typed. */
