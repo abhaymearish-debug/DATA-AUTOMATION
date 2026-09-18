@@ -53,7 +53,10 @@
      figure sits in a cell instead of floating in the row. */
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
                overflow:auto; max-height:74vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
-  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
+          table-layout:fixed; min-width:1180px; }
+  col.c-nm { width:158px; } col.c-ty { width:84px; }
+  col.c-tot { width:94px; } col.c-pct { width:78px; }
 
   thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);
              text-align:center; vertical-align:middle; font-weight:700; font-size:9.5px;
@@ -199,6 +202,7 @@
 
 <div id="msg"></div>
 <div class="tablewrap"><table id="grid">
+  <colgroup></colgroup>
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
@@ -323,6 +327,9 @@ function pair(r, cols, cls){
 function render(d){
   setPace(d);
   const cols = d.columns;
+  grid.querySelector('colgroup').innerHTML =
+    `<col class="c-nm"><col class="c-ty">` + '<col>'.repeat(cols.length)
+    + `<col class="c-tot"><col class="c-pct">`;
   grid.querySelector('thead').innerHTML =
     `<tr><th>Bond</th><th class="ty">Type</th>` +
     cols.map(c => `<th>${esc(c.label)}</th>`).join('') +
