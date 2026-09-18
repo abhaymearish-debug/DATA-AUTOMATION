@@ -33,20 +33,6 @@
   .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
             color:var(--muted); pointer-events:none; }
 
-  /* What the achievement figure is actually made of. A target report that
-     does not say where 'achieved' came from is a number to argue with. */
-  .legs { display:flex; align-items:center; gap:11px; flex-wrap:wrap;
-          margin-bottom:10px; padding:9px 15px; border-radius:10px;
-          background:var(--gold); color:#1B2A4A; font-weight:800; font-size:10px;
-          letter-spacing:1.1px; text-transform:uppercase;
-          box-shadow:0 1px 2px rgba(16,24,40,.10); }
-  .legs b { font-size:11.5px; letter-spacing:.4px; }
-  .legs .sep { opacity:.45; font-weight:700; }
-  .legs .why { margin-left:auto; text-transform:none; letter-spacing:0;
-               font-weight:600; font-size:11px; opacity:.72; }
-  /* display:flex beats the hidden attribute, so say it again louder. */
-  .legs[hidden] { display:none !important; }
-
   .warn { background:#FEF3C7; border:1px solid #FDE68A; color:#92400E;
           border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px;
           display:flex; align-items:center; gap:12px; }
@@ -202,7 +188,6 @@
 </div>
 
 <div id="msg"></div>
-<div class="legs" id="legs" hidden></div>
 <div class="tablewrap"><table id="grid">
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td class="nm">Loading…</td></tr></tbody>
@@ -265,7 +250,6 @@ async function load(){
   }
   if (d.error){
     msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
-    legs.hidden = true;
     grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
     grid.querySelector('tbody').innerHTML = '<tr><td class="nm">No data</td></tr>';
     foot.textContent = ''; return;
@@ -287,15 +271,6 @@ async function load(){
     `<div class="warn"><div><strong>No targets set for ${esc(d.month_label)}.</strong>
        The achievement below is real; there is just nothing to measure it against yet.</div>
      <button type="button" class="act" onclick="openEditor('${esc(d.month)}')">Set them now</button></div>`;
-
-  const L = d.legs || {};
-  legs.hidden = false;
-  legs.innerHTML =
-    `<span>Total liquidation</span><b>${num(Math.round(d.liquidation))} cs</b>
-     <span class="sep">=</span><span>Shop sales</span><b>${num(Math.round(L.tertiary))}</b>
-     <span class="sep">+</span><span>FED</span><b>${num(Math.round(L.fed))}</b>
-     <span class="sep">+</span><span>BAR</span><b>${num(Math.round(L.bar))}</b>
-     <span class="why">KSBC dispatches are excluded — those cases are counted where the shops sold them.</span>`;
 
   xl.href = '/reports/target-achievement/export.xlsx?' + params().toString();
   render(d);
@@ -340,8 +315,12 @@ function render(d){
 
   const bonds = d.rows.filter(r => r.kind === 'bond').length;
   const m = d.target_meta || {};
+  const L = d.legs || {};
   foot.textContent =
     `${d.period.short} · ${bonds} bonds · ${cols.length} brands`
+    + ` · achieved = shop sales ${num(Math.round(L.tertiary))}`
+    + ` + FED ${num(Math.round(L.fed))} + BAR ${num(Math.round(L.bar))}`
+    + ` = ${num(Math.round(d.liquidation))} cs`
     + (d.targets_set ? ` · targets for ${d.month_label}` +
         (m.updated ? ` set ${m.updated.slice(0,10).split('-').reverse().join('-')}` +
                      (m.by ? ` by ${m.by}` : '') : '') : ' · no targets set')
