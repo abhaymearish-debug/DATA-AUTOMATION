@@ -32,6 +32,11 @@
   .selw select:focus { outline:none; }
   .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
             color:var(--muted); pointer-events:none; }
+  .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
+  .seg button { border:0; background:none; font:inherit; font-size:12.5px; font-weight:650;
+                color:var(--muted); padding:5px 11px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--card); color:var(--ink);
+                   box-shadow:0 1px 2px rgba(16,24,40,.12); }
 
   .warn { background:#FEF3C7; border:1px solid #FDE68A; color:#92400E;
           border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px;
@@ -43,9 +48,9 @@
   /* ---------- the table ----------
      Built to read like the workbook the office already circulates: a gold
      header on navy, plain bond rows, a navy band where the cluster totals up
-     and a gold one for the network. A bond is one row, not two - the achieved
-     figure is the news and sits at full size, with its target underneath it in
-     the same cell so the comparison is where your eye already is. */
+     and a gold one for the network. One number per cell: the SHOW switch says
+     whether that number is the achievement or the target, and the percentage
+     on the right answers the comparison without printing it twice. */
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
                overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
@@ -60,7 +65,7 @@
   thead th .lg { display:block; margin-top:2px; font-size:8.5px; font-weight:600;
                  letter-spacing:.4px; color:rgba(255,255,255,.52); text-transform:none; }
 
-  tbody td { height:42px; padding:4px 9px; text-align:center; white-space:nowrap;
+  tbody td { height:32px; padding:0 9px; text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; color:var(--ink);
              border-bottom:1px solid var(--line); }
   tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
@@ -70,22 +75,13 @@
   tbody td:first-child { border-right:1px solid var(--line); }
   tbody tr.cl td:first-child, tbody tr.gt td:first-child { border-right:0; }
 
-  /* Achieved on top at full strength, target beneath it, quiet. No figure is
-     greyed for being a zero - a zero is a number somebody still has to read. */
-  td .a { display:block; font-weight:700; font-size:13px; line-height:1.18; }
-  td .t { display:block; font-size:10.5px; line-height:1.3; color:#9AA3B2;
-          font-weight:600; }
-
   tbody tr.b:hover td, tbody tr.b:hover td:first-child { background:var(--hover); }
 
   tbody tr.cl td, tbody tr.cl td:first-child { background:var(--navy); color:var(--gold);
       font-weight:700; border-bottom:1px solid #22407F; }
-  tbody tr.cl td .t { color:#93A6CC; }
 
   tbody tr.gt td, tbody tr.gt td:first-child { background:var(--gold); color:#1B2A4A;
-      font-weight:800; height:46px; letter-spacing:.3px; }
-  tbody tr.gt td .a { font-weight:800; font-size:13.5px; }
-  tbody tr.gt td .t { color:#7A6222; font-weight:650; }
+      font-weight:800; height:38px; letter-spacing:.3px; }
 
   /* The percentage, judged against where the month has got to rather than
      against 100. On the 18th of August nobody is at 100%, and a column of red
@@ -175,6 +171,14 @@
           <option value="3">Cluster 3</option>
         </select><i>&#9662;</i></div>
       </label>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Show</span>
+        <div class="seg" id="segShow">
+          <button type="button" class="on" data-m="ach" onclick="setShow('ach')">Achieved</button>
+          <button type="button" data-m="tgt" onclick="setShow('tgt')">Target</button>
+        </div>
+      </div>
       <span class="fdiv"></span>
       <div class="fitem">
         <span class="fi-k">Targets</span>
@@ -297,16 +301,20 @@ function meter(pct){
   return `<div class="pw ${band}" title="${tip}"><span class="v">${pct.toFixed(1)}%</span></div>`;
 }
 
-/* One bond, one row. The achieved figure carries the row; the target sits
-   under it in the same cell, so you compare without moving your eye. */
-function cell(a, t, cls){
-  return `<td${cls ? ' class="' + cls + '"' : ''}>`
-       + `<span class="a">${num(a)}</span><span class="t">${num(t)}</span></td>`;
+/* One bond, one row, one number in a cell. Which number is the SHOW switch's
+   business; the percentage on the right is the comparison either way. */
+let SHOW = 'ach';
+
+function setShow(m){
+  SHOW = m;
+  for (const b of segShow.querySelectorAll('button'))
+    b.classList.toggle('on', b.dataset.m === m);
+  if (DATA) render(DATA);
 }
 
 function line(r, cols, cls){
-  const body = cols.map(c => cell(r.ach[c.key] ?? 0, r.tgt[c.key] ?? 0)).join('')
-             + cell(r.ach_total, r.tgt_total);
+  const body = cols.map(c => `<td>${num(r[SHOW][c.key] ?? 0)}</td>`).join('')
+             + `<td>${num(r[SHOW + '_total'])}</td>`;
   return `<tr class="${cls}"><td>${esc(r.label)}</td>${body}`
        + `<td class="pct">${meter(r.pct)}</td></tr>`;
 }
@@ -315,7 +323,7 @@ function render(d){
   setPace(d);
   const cols = d.columns;
   grid.querySelector('thead').innerHTML =
-    `<tr><th>Bond<span class="lg">achieved &middot; target</span></th>` +
+    `<tr><th>Bond</th>` +
     cols.map(c => `<th>${esc(c.label)}</th>`).join('') +
     `<th>Total</th><th>Ach %</th></tr>`;
 
