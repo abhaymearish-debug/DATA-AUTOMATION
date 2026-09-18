@@ -127,12 +127,6 @@
   .s-promoted { background:#D1FAE5; color:#065F46; }
   .s-failed { background:#FEE2E2; color:#991B1B; }
   .s-discarded,.s-queued { background:var(--hover); color:#4B5563; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 10px; }
-  .chips button { border:1px solid var(--line); background:var(--card); color:var(--ink);
-                  border-radius:20px; padding:6px 13px; font:inherit; font-size:12.5px;
-                  font-weight:650; cursor:pointer; }
-  .chips button:hover { background:var(--hover); }
-  .chips button.on { background:var(--blue); border-color:var(--blue); color:#fff; }
   .rangeSay { font-size:12.5px; color:var(--muted); margin-top:9px; }
 
   .act { display:inline-block; border:1px solid var(--line); background:var(--card); color:var(--ink);
@@ -208,11 +202,9 @@
       <input type="text" id="upName" readonly>
 
       <!-- One picker for both shapes: a day for the daily streams, a window
-           for a cumulative pull. The chips stay, because a KSBC window is
-           almost always 1st-16th or 17th-end and that should be one click. -->
+           for a cumulative pull. -->
       <div id="upWhen">
         <label id="upDayLabel">Date this export covers</label>
-        <div class="chips" id="dayChips"></div>
         <div id="calWrap" style="position:relative; margin-top:4px">
           <button type="button" class="calbtn" onclick="Cal.open(event)">
             <span id="calLabel">Pick a date</span><i>&#9662;</i></button>
@@ -296,48 +288,18 @@ function openUpload(c){
 function closeUpload(){ upVeil.classList.remove('on'); }
 
 /* ---------------- dates without the fight ----------------
-   The same two-month picker the reports use. A daily upload takes one click
-   (single mode); a cumulative pull is two, and the chips put the windows KSBC
-   actually allows - 1st-16th and 17th-end - one click away. A KSBC pull is
-   capped at 16 days, so there is no whole-month chip: a longer window is two
-   files, and offering it as one would only produce a file claiming days it
-   does not hold. */
+   The same two-month picker the reports use: one click for a daily upload
+   (single mode), two for a cumulative window. */
 
 const MONTH_NAMES = ['January','February','March','April','May','June',
                      'July','August','September','October','November','December'];
 
-function shiftDay(n){
-  const d = new Date(); d.setDate(d.getDate() + n); return iso(d);
-}
 function daysIn(ym){ const [y,m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); }
-
-/* The chips differ by mode: single days for a daily upload, windows for a
-   cumulative one. Both write through the picker so the label agrees. */
-function drawDayChips(){
-  if (!card) { dayChips.innerHTML = ''; return; }
-
-  if (card.mode === 'range'){
-    const ym = (upFrom.value || iso(new Date())).slice(0,7);
-    const last = daysIn(ym);
-    const a = +(upFrom.value || '').slice(8), b = +(upTo.value || '').slice(8);
-    const presets = [['1st – 16th', 1, Math.min(16, last)], ['17th – end', 17, last]];
-    dayChips.innerHTML = presets.map(([label, x, y]) =>
-      `<button type="button" class="${a === x && b === y ? 'on' : ''}"
-         onclick="setRange('${ym}',${x},${y})">${label}</button>`).join('');
-    return;
-  }
-
-  const opts = [['Today', shiftDay(0)], ['Yesterday', shiftDay(-1)],
-                ['2 days ago', shiftDay(-2)]];
-  dayChips.innerHTML = opts.map(([label, v]) =>
-    `<button type="button" class="${upDate.value === v ? 'on' : ''}"
-       onclick="setDay('${v}')">${label}</button>`).join('');
-}
 
 function setDay(v){
   upDate.value = v;
   Cal.init(v, v, onPickDay, {single:true});
-  drawDayChips(); refreshName(); saySpan();
+  refreshName(); saySpan();
 }
 
 function setRange(ym, a, b){
@@ -346,10 +308,10 @@ function setRange(ym, a, b){
   upFrom.value = `${ym}-${String(a).padStart(2,'0')}`;
   upTo.value   = `${ym}-${String(b).padStart(2,'0')}`;
   Cal.init(upFrom.value, upTo.value, onPickRange);
-  drawDayChips(); refreshName(); saySpan();
+  refreshName(); saySpan();
 }
 
-function onPickDay(from){ upDate.value = from; drawDayChips(); refreshName(); saySpan(); }
+function onPickDay(from){ upDate.value = from; refreshName(); saySpan(); }
 function onPickRange(from, to){
   // A KSBC pull never crosses a month boundary, and the whole upload is keyed
   // on one month, so say so rather than storing something the build will choke
@@ -364,7 +326,7 @@ function onPickRange(from, to){
   }
   upErr.textContent = '';
   upFrom.value = from; upTo.value = to;
-  drawDayChips(); refreshName(); saySpan();
+  refreshName(); saySpan();
 }
 
 function saySpan(){
