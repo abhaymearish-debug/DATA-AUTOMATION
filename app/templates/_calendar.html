@@ -80,7 +80,10 @@ const Cal = {
   anchor: '', pick: null, hover: '', onApply: null,
 
   /* Called once, on page load, before any data exists. */
-  init(from, to, onApply){
+  /* single:true — one click is the answer. Used where a window makes no
+     sense: an upload covers one day, not a range. */
+  init(from, to, onApply, opts){
+    this.single = !!(opts && opts.single);
     this.from = from || ''; this.to = to || '';
     this.onApply = onApply;
     this.anchor = this.monthOf(this.from) || this.monthOf(new Date().toISOString().slice(0,10));
@@ -118,6 +121,7 @@ const Cal = {
   },
 
   hit(d){
+    if (this.single){ this.from = this.to = d; this.pick = null; this.apply(); return; }
     if (!this.pick){ this.pick = d; this.hover = d; this.paint(); return; }
     // The second click completes the range, so it applies there and then.
     // Making people reach for Apply afterwards reads as the filter ignoring
@@ -143,10 +147,18 @@ const Cal = {
       el.classList.toggle('s-end', !!(lo && hi && lo !== hi && key === hi));
     });
     const say = pop.querySelector('.cal-f .say');
-    if (say) say.textContent = this.pick
-      ? 'Now pick the last day.'
-      : (lo && hi ? calPretty(lo) + ' – ' + calPretty(hi)
-                  : 'Pick the first day, then the last.');
+    if (say) say.textContent = this.foot();
+  },
+
+  /* One date is not a range, so it is not read back as one. '18 Sep 2026 – 18
+     Sep 2026' under a single-day picker reads like the control misunderstood
+     the click. */
+  foot(){
+    const [lo, hi] = this.bounds();
+    if (this.single) return lo ? calPretty(lo) : 'Pick a day.';
+    if (this.pick)   return 'Now pick the last day.';
+    return lo && hi ? calPretty(lo) + ' – ' + calPretty(hi)
+                    : 'Pick the first day, then the last.';
   },
 
   use(from, to){ this.from = from; this.to = to; this.pick = null; this.apply(); },
@@ -159,7 +171,12 @@ const Cal = {
 
   label(){
     const el = document.getElementById('calLabel');
-    if (el) el.textContent = this.from && this.to
+    if (!el) return;
+    if (this.single){
+      el.textContent = this.from ? calPretty(this.from) : 'Pick a date';
+      return;
+    }
+    el.textContent = this.from && this.to
       ? calPretty(this.from) + ' → ' + calPretty(this.to) : 'Pick a period';
   },
 
@@ -206,7 +223,6 @@ const Cal = {
 
     const quick = this.quick.map(q =>
       `<button type="button" onclick="Cal.use('${q.from}','${q.to}')">${q.short}</button>`).join('');
-    const [lo, hi] = this.bounds();
 
     pop.innerHTML = `
       <div class="cal-top">
@@ -220,10 +236,7 @@ const Cal = {
       <div class="cal-two">${this.grid(this.anchor)}${this.grid(next)}</div>
       ${quick ? `<div class="cal-quick">${quick}</div>` : ''}
       <div class="cal-f">
-        <span class="say">${this.pick
-          ? 'Now pick the last day.'
-          : (lo && hi ? calPretty(lo) + ' – ' + calPretty(hi) : 'Pick the first day, then the last.')}
-        </span>
+        <span class="say">${this.foot()}</span>
         <span class="sp">
           <button type="button" onclick="Cal.close()">Close</button>
         </span>

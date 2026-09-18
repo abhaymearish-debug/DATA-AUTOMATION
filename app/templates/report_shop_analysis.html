@@ -253,6 +253,11 @@
 {% block scripts %}
 <script>
 (function(){
+  // Nothing uploaded yet renders a notice, not a filter bar, so there is no
+  // hidden date field to wire the picker to. Without this guard that page
+  // throws on load and every script after it stops running.
+  if (!document.getElementById('dFrom')) return;
+
   const cal = {{ calendar | tojson }};
   const days = new Set(cal.days || []);
   for (const p of cal.periods || []){

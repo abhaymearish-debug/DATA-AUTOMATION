@@ -3,6 +3,16 @@
 {% block heading %}Raw Data Upload{% endblock %}
 
 {% block head %}
+{% include '_calendar.html' %}
+<style>
+  .calbtn { display:flex; align-items:center; justify-content:space-between; gap:10px;
+            width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+            background:var(--card); color:var(--ink); font:inherit; font-size:14px;
+            font-weight:650; cursor:pointer; }
+  .calbtn:hover { background:var(--hover); }
+  .calbtn i { font-style:normal; font-size:10px; color:var(--muted); }
+  #upWhen .calpop { top:calc(100% + 8px); }
+</style>
 <style>
   .lead { margin:-4px 0 18px; color:var(--muted); font-size:13.5px; }
   h3.sec { margin:30px 0 6px; font-size:19px; font-weight:650; }
@@ -197,28 +207,20 @@
       <label>Name</label>
       <input type="text" id="upName" readonly>
 
-      <div id="upDay" hidden>
-        <label>Date this export covers</label>
+      <!-- One picker for both shapes: a day for the daily streams, a window
+           for a cumulative pull. The chips stay, because a KSBC window is
+           almost always 1st-16th or 17th-end and that should be one click. -->
+      <div id="upWhen">
+        <label id="upDayLabel">Date this export covers</label>
         <div class="chips" id="dayChips"></div>
-        <input type="date" id="upDate">
-      </div>
-
-      <!-- A cumulative window always sits inside one month, so the month is
-           picked first and the days after. That makes the invalid case
-           unreachable, and puts the two windows the office actually uses
-           (1st-15th, 16th-end) one click away instead of twelve. -->
-      <div id="upRange" hidden>
-        <label>Month</label>
-        <select id="upMonth" onchange="monthChanged()"></select>
-        <label style="margin-top:12px">Days covered</label>
-        <div class="chips" id="rangeChips"></div>
-        <div class="days" id="dayPickers">
-          <select id="upFromDay" onchange="syncRange()"></select>
-          <span class="sep">to</span>
-          <select id="upToDay" onchange="syncRange()"></select>
+        <div id="calWrap" style="position:relative; margin-top:4px">
+          <button type="button" class="calbtn" onclick="Cal.open(event)">
+            <span id="calLabel">Pick a date</span><i>&#9662;</i></button>
+          <div class="calpop" id="calPop"></div>
         </div>
-        <input type="hidden" id="upFrom"><input type="hidden" id="upTo">
         <div class="rangeSay" id="rangeSay"></div>
+        <input type="hidden" id="upDate">
+        <input type="hidden" id="upFrom"><input type="hidden" id="upTo">
       </div>
 
       <label id="upFilesLabel">File</label>
@@ -274,20 +276,32 @@ function openUpload(c){
   upFilesLabel.textContent = c.mode === 'files' ? 'Files' : 'File';
 
   const today = iso(new Date());
-  upDay.hidden   = c.mode !== 'day';
-  upRange.hidden = c.mode !== 'range';
-  if (c.mode === 'day'){ upDate.value = today; drawDayChips(); }
-  if (c.mode === 'range') buildMonths();
+  // Warehouse stock reads its date out of the Bevco filename, but a date you
+  // cannot see is a date you cannot check - so it is shown and editable, just
+  // filled in for you the moment a file is chosen.
+  upDayLabel.textContent =
+      c.mode === 'range' ? 'Days this pull covers'
+    : c.mode === 'files' ? 'Date this export covers (read from the file name)'
+    : 'Date this export covers';
+
+  if (c.mode === 'range'){
+    const ym = today.slice(0,7);
+    setRange(ym, 1, Math.min(16, daysIn(ym)));
+  } else {
+    setDay(c.mode === 'files' ? '' : today);
+  }
   refreshName();
   upVeil.classList.add('on');
 }
 function closeUpload(){ upVeil.classList.remove('on'); }
 
 /* ---------------- dates without the fight ----------------
-   Safari's native date field wants four separate clicks per date and offers a
-   picker the size of a stamp. Almost every upload is "yesterday" or one of two
-   fixed fortnights, so those are chips; the long way round is still there
-   underneath for the odd window. */
+   The same two-month picker the reports use. A daily upload takes one click
+   (single mode); a cumulative pull is two, and the chips put the windows KSBC
+   actually allows - 1st-16th and 17th-end - one click away. A KSBC pull is
+   capped at 16 days, so there is no whole-month chip: a longer window is two
+   files, and offering it as one would only produce a file claiming days it
+   does not hold. */
 
 const MONTH_NAMES = ['January','February','March','April','May','June',
                      'July','August','September','October','November','December'];
@@ -295,65 +309,99 @@ const MONTH_NAMES = ['January','February','March','April','May','June',
 function shiftDay(n){
   const d = new Date(); d.setDate(d.getDate() + n); return iso(d);
 }
+function daysIn(ym){ const [y,m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+
+/* The chips differ by mode: single days for a daily upload, windows for a
+   cumulative one. Both write through the picker so the label agrees. */
 function drawDayChips(){
+  if (!card) { dayChips.innerHTML = ''; return; }
+
+  if (card.mode === 'range'){
+    const ym = (upFrom.value || iso(new Date())).slice(0,7);
+    const last = daysIn(ym);
+    const a = +(upFrom.value || '').slice(8), b = +(upTo.value || '').slice(8);
+    const presets = [['1st – 16th', 1, Math.min(16, last)], ['17th – end', 17, last]];
+    dayChips.innerHTML = presets.map(([label, x, y]) =>
+      `<button type="button" class="${a === x && b === y ? 'on' : ''}"
+         onclick="setRange('${ym}',${x},${y})">${label}</button>`).join('');
+    return;
+  }
+
   const opts = [['Today', shiftDay(0)], ['Yesterday', shiftDay(-1)],
                 ['2 days ago', shiftDay(-2)]];
   dayChips.innerHTML = opts.map(([label, v]) =>
     `<button type="button" class="${upDate.value === v ? 'on' : ''}"
-       onclick="upDate.value='${v}'; drawDayChips(); refreshName()">${label}</button>`).join('');
+       onclick="setDay('${v}')">${label}</button>`).join('');
 }
 
-function buildMonths(){
-  const now = new Date();
-  let html = '';
-  for (let i = 0; i < 14; i++){
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    html += `<option value="${v}">${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}</option>`;
-  }
-  upMonth.innerHTML = html;
-  monthChanged();
+function setDay(v){
+  upDate.value = v;
+  Cal.init(v, v, onPickDay, {single:true});
+  drawDayChips(); refreshName(); saySpan();
 }
 
-function daysIn(ym){ const [y,m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); }
-
-function monthChanged(){
-  const ym = upMonth.value, last = daysIn(ym);
-  const opts = n => Array.from({length:last}, (_,i) =>
-    `<option value="${i+1}" ${i+1 === n ? 'selected' : ''}>${i+1}</option>`).join('');
-  upFromDay.innerHTML = opts(1);
-  upToDay.innerHTML   = opts(Math.min(16, last));
-  syncRange();
-}
-
-function setRange(a, b){
-  upFromDay.value = a; upToDay.value = Math.min(b, daysIn(upMonth.value));
-  syncRange();
-}
-
-function syncRange(){
-  const ym = upMonth.value, last = daysIn(ym);
-  let a = +upFromDay.value, b = +upToDay.value;
-  if (b < a){ b = a; upToDay.value = a; }
+function setRange(ym, a, b){
+  const last = daysIn(ym);
+  b = Math.min(b, last);
   upFrom.value = `${ym}-${String(a).padStart(2,'0')}`;
   upTo.value   = `${ym}-${String(b).padStart(2,'0')}`;
+  Cal.init(upFrom.value, upTo.value, onPickRange);
+  drawDayChips(); refreshName(); saySpan();
+}
 
-  const presets = [['1st – 15th', 1, 15], ['16th – end', 16, last], ['Full month', 1, last]];
-  rangeChips.innerHTML = presets.map(([label, x, y]) =>
-    `<button type="button" class="${a === x && b === y ? 'on' : ''}"
-       onclick="setRange(${x},${y})">${label}</button>`).join('');
-  rangeSay.textContent =
-    `${a} – ${b} ${MONTH_NAMES[+ym.slice(5) - 1]} ${ym.slice(0,4)} · ${b - a + 1} days`;
-  refreshName();
+function onPickDay(from){ upDate.value = from; drawDayChips(); refreshName(); saySpan(); }
+function onPickRange(from, to){
+  // A KSBC pull never crosses a month boundary, and the whole upload is keyed
+  // on one month, so say so rather than storing something the build will choke
+  // on later.
+  if (from.slice(0,7) !== to.slice(0,7)){
+    upErr.textContent = 'A cumulative pull sits inside one month — pick both days in the same month.';
+    // Put the button back to the window that is actually stored. Leaving it
+    // reading '28 Sep → 2 Oct' while the form holds 1-16 Sep is the control
+    // lying about its own value, and that is how a wrong month gets uploaded.
+    Cal.init(upFrom.value, upTo.value, onPickRange);
+    return;
+  }
+  upErr.textContent = '';
+  upFrom.value = from; upTo.value = to;
+  drawDayChips(); refreshName(); saySpan();
+}
+
+function saySpan(){
+  if (!card) return;
+  if (card.mode === 'range' && upFrom.value && upTo.value){
+    const a = +upFrom.value.slice(8), b = +upTo.value.slice(8);
+    const ym = upFrom.value.slice(0,7);
+    rangeSay.textContent =
+      `${a} – ${b} ${MONTH_NAMES[+ym.slice(5) - 1]} ${ym.slice(0,4)} · ${b - a + 1} days`;
+  } else {
+    rangeSay.textContent = '';
+  }
 }
 
 function refreshName(){
   if (!card) return;
   if (card.mode === 'day')        upName.value = `${card.title} - ${fmt(upDate.value)}`;
   else if (card.mode === 'range') upName.value = `${card.title} - ${fmt(upFrom.value)} to ${fmt(upTo.value)}`;
-  else                            upName.value = `${card.title} - ${fmt(iso(new Date()))}`;
+  else                            upName.value = `${card.title} - ${fmt(upDate.value || iso(new Date()))}`;
 }
-upDate.addEventListener('change', () => { drawDayChips(); refreshName(); });
+
+/* Bevco names its export 'Report_18-Sep-2026...'. Read that and fill the date
+   in, so the usual case needs no typing and an unusual one is still editable. */
+const MONTH3 = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function dateFromFilename(name){
+  const m = /Report[ _](\d{1,2})-([A-Za-z]{3})-(\d{4})/i.exec(name || '');
+  if (!m) return '';
+  const mm = MONTH3.indexOf(m[2].toLowerCase());
+  if (mm < 0) return '';
+  return `${m[3]}-${String(mm + 1).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+}
+upFiles.addEventListener('change', () => {
+  if (!card || card.mode !== 'files' || !upFiles.files.length) return;
+  const found = dateFromFilename(upFiles.files[0].name);
+  if (found && !upDate.value) setDay(found);
+  refreshName();
+});
 
 async function submitUpload(ev){
   ev.preventDefault();
@@ -363,9 +411,13 @@ async function submitUpload(ev){
   for (const f of upFiles.files) fd.append('files', f);
 
   if (card.mode === 'day') fd.append('covers_date', upDate.value);
+  if (card.mode === 'files' && upDate.value) fd.append('covers_date', upDate.value);
   if (card.mode === 'range'){
     const a = upFrom.value, b = upTo.value;
     if (!a || !b){ upErr.textContent = 'Pick the days this file covers.'; return false; }
+    if (a.slice(0,7) !== b.slice(0,7)){
+      upErr.textContent = 'A cumulative pull sits inside one month.'; return false;
+    }
     fd.append('covers_date', b);
     fd.append('cumulative', `${parseInt(a.slice(8),10)}-${parseInt(b.slice(8),10)}`);
   }
@@ -533,8 +585,9 @@ function reupload(day, dayTo){
   if (!historyCard) return;
   closeHistory();
   openUpload(historyCard);
-  if (historyCard.mode === 'day' && day) upDate.value = day;
-  if (historyCard.mode === 'range' && day){ upFrom.value = day; upTo.value = dayTo || day; }
+  if (historyCard.mode === 'day' && day) setDay(day);
+  if (historyCard.mode === 'range' && day)
+    setRange(day.slice(0,7), +day.slice(8), +(dayTo || day).slice(8));
   refreshName();
 }
 

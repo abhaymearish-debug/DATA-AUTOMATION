@@ -449,8 +449,12 @@ async def build(
                 placed.append(target)
             # Bevco writes the report date into the filename and the build
             # aborts on a mixed batch, so the first name speaks for all of them.
-            job.covers = _warehouse_covers(job.uploaded_names or
-                                           [p.name for p in placed]) or ""
+            # A date typed in the dialog wins: the operator is looking at the
+            # file, and a renamed export should not silently file itself wrong.
+            typed = _parse_date(covers_date) if covers_date else None
+            job.covers = (typed.isoformat() if typed else
+                          _warehouse_covers(job.uploaded_names or
+                                            [p.name for p in placed]) or "")
 
         elif stream_key == "shop_sales_daily":
             # Standalone day: name it canonically and store it. No month
