@@ -427,6 +427,8 @@ def build_stock_pdf(data: dict, out_path: Path, *, title_suffix: str = "") -> Pa
 
 D_TITLE_H = 45.4
 D_SUB_H   = 26.0
+D_SUB_GAP  = 16.0           # the least air allowed between the two sub-band strings
+D_SUB_LINE = 17.0           # the extra height when the period needs its own line
 D_HEAD_H  = 54.0
 D_DOW_H   = 30.0            # weekday half of the header; the rest is the date
 D_ROW_H   = 30.0
@@ -441,6 +443,7 @@ D_PAD_TOTAL = 9.07
 
 DF_TITLE = 18.0
 DF_SUB   = 13.0
+DF_SUB_MIN = 8.5
 DF_HEAD  = 10.0
 DF_BODY  = 11.0
 
@@ -483,8 +486,32 @@ def daily_geometry(grid: dict) -> tuple[float, float, float, list[float], float]
                   + [_w(str(r['total']), BOLD, DF_BODY) for r in rows]) + D_PAD_TOTAL
 
     page_w = label_w + sum(day_w) + total_w
-    page_h = D_TITLE_H + D_SUB_H + D_HEAD_H + D_ROW_H * len(rows)
+    _size, sub_h = _sub_band(grid, page_w)
+    page_h = D_TITLE_H + sub_h + D_HEAD_H + D_ROW_H * len(rows)
     return page_w, page_h, label_w, day_w, total_w
+
+
+def _sub_band(grid: dict, page_w: float) -> tuple[float, float]:
+    """The sub band's type size, and how tall the band has to be.
+
+    The band carries the report name on the left and the period on the right,
+    and the page is only as wide as the grid needs. Four days of shop sales is
+    a narrow page, and there the two strings ran straight through each other -
+    'SHOP SALES DAILYugust 2026 - 4 August 2026'. So: shrink until they fit
+    side by side, and when even the floor will not do it, give the period a
+    line of its own.
+    """
+    title = grid["title"].upper()
+    period = grid["period"]["label"]
+    room = page_w - 2 * D_INSET - D_SUB_GAP
+    size = DF_SUB
+    while size > DF_SUB_MIN:
+        if _w(title, BOLD, size) + _w(period, BOLD, size) <= room:
+            return size, D_SUB_H
+        size -= 0.5
+    if _w(title, BOLD, size) + _w(period, BOLD, size) <= room:
+        return size, D_SUB_H
+    return size, D_SUB_H + D_SUB_LINE
 
 
 def build_daily_pdf(grid: dict, path: Path) -> Path:
@@ -513,18 +540,23 @@ def build_daily_pdf(grid: dict, path: Path) -> Path:
     centred("K.S DISTILLERY", 0, page_w, page_h - 29.0, BOLD, DF_TITLE, D_GOLD_T)
 
     # --- sub band ----------------------------------------------------------
+    size, sub_h = _sub_band(grid, page_w)
+    title, period = grid["title"].upper(), grid["period"]["label"]
     sub_top = page_h - D_TITLE_H
     c.setFillColor(D_GOLD)
-    c.rect(0, sub_top - D_SUB_H, page_w, D_SUB_H, stroke=0, fill=1)
-    c.setFont(BOLD, DF_SUB)
+    c.rect(0, sub_top - sub_h, page_w, sub_h, stroke=0, fill=1)
+    c.setFont(BOLD, size)
     c.setFillColor(D_NAVY_T)
-    base = sub_top - 17.55
-    c.drawString(D_INSET, base, grid["title"].upper())
-    period = grid["period"]["label"]
-    c.drawString(page_w - D_INSET - _w(period, BOLD, DF_SUB), base, period)
+    if sub_h == D_SUB_H:
+        base = sub_top - 17.55
+        c.drawString(D_INSET, base, title)
+        c.drawString(page_w - D_INSET - _w(period, BOLD, size), base, period)
+    else:
+        centred(title, 0, page_w, sub_top - 16.2, BOLD, size, D_NAVY_T)
+        centred(period, 0, page_w, sub_top - 16.2 - D_SUB_LINE, BOLD, size, D_NAVY_T)
 
     # --- header ------------------------------------------------------------
-    head_top = sub_top - D_SUB_H
+    head_top = sub_top - sub_h
     box(0, head_top, label_w, D_HEAD_H, D_NAVY, D_GOLD, D_LW_HEAD)
     centred("BOND", 0, label_w, head_top - 30.5, BOLD, DF_HEAD, D_GOLD_T)
 
