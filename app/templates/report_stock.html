@@ -117,6 +117,16 @@
                 margin-left:9px; vertical-align:2px; }
   tbody tr.wh-r > td.amber { color:var(--gold); }
 
+  tbody tr.grand > td { position:sticky; bottom:0; z-index:4; background:var(--gold);
+                        color:#1B2A4A; font-weight:800; height:40px; letter-spacing:.3px;
+                        font-size:15px; font-variant-numeric:tabular-nums;
+                        border-top:1px solid rgba(27,42,74,.25); border-bottom:0; }
+  tbody tr.grand > td.item { font-size:13.5px; }
+  tbody tr.grand .cnt { margin-left:10px; font-size:10.5px; font-weight:700;
+                        letter-spacing:.45px; text-transform:uppercase;
+                        color:rgba(27,42,74,.62); }
+  tbody tr.grand > td.amber { color:#7A3E00; }
+
   /* fixed layout so the declared column widths are honoured exactly; auto
      table layout was widening the last column and pushing it off the axis
      that the strip and the warehouse bars sit on. */
@@ -381,8 +391,7 @@ function render(){
 
     const safe = wh.name.replace(/'/g, "\\'");
     return `<tr class="wh-r ${isShut ? 'shut' : ''}" onclick="fold('${safe}')">
-        <td class="item"><span class="chev">&#9660;</span>${escapeHtml(wh.name)}` +
-        (wh.cluster ? `<span class="cl">Cluster ${wh.cluster}</span>` : '') + `</td>
+        <td class="item"><span class="chev">&#9660;</span>${escapeHtml(wh.name)}</td>
         <td>${n(t.physical)}</td><td>${n(t.allotable)}</td>
         <td class="${t.pending ? 'amber' : ''}">${n(t.pending)}</td></tr>`
       + (isShut ? '' : body
@@ -391,7 +400,14 @@ function render(){
           + cell(t.pending,'Pending') + `</tr>`);
   }).join('');
 
-  list.innerHTML = html ||
+  // What is on screen adds up at the foot of it, so a filtered view still ties.
+  const grand = !shown ? '' :
+    `<tr class="grand"><td class="item">GRAND TOTAL` +
+    `<span class="cnt">${shown} warehouse${shown === 1 ? '' : 's'} &middot; ${n(items)} items</span></td>` +
+    `<td>${n(g.physical)}</td><td>${n(g.allotable)}</td>` +
+    `<td class="${g.pending ? 'amber' : ''}">${n(g.pending)}</td></tr>`;
+
+  list.innerHTML = (html && html + grand) ||
     `<tr><td class="item" colspan="4"><div class="empty">Nothing matches that.</div></td></tr>`;
   foot.textContent = `${shown} of ${d.warehouses.length} warehouses · ${n(items)} items · snapshot ${d.date}`;
   foldBtn.textContent = shut.size >= shown && shown > 0 ? 'Expand all' : 'Collapse all';
