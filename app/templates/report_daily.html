@@ -38,14 +38,23 @@
              padding:8px 6px; text-align:center; white-space:nowrap;
              border-bottom:1px solid #22407F; }
   thead th .d { display:block; font-size:12px; margin-top:2px; color:#FFD98A; }
-  thead th:first-child { left:0; z-index:4; text-align:left; padding-left:15px; min-width:168px; }
-  thead th:last-child { right:0; z-index:4; }
+  thead th + th { border-left:1px solid rgba(255,255,255,.12); }
+  thead th:first-child { left:0; z-index:4; text-align:left; padding-left:15px; min-width:168px;
+                         box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
+  thead th:last-child { right:0; z-index:4; box-shadow:-7px 0 9px -7px rgba(0,0,0,.45); }
 
+  /* Ruled both ways, the way the other reports read, and the name column
+     casts an edge so a half-scrolled day passes under it rather than
+     printing its digits down the middle. */
   tbody td { padding:0 8px; height:34px; text-align:center; white-space:nowrap;
-             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); }
+             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line);
+             border-left:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
-                         padding-left:15px; font-weight:600; }
-  tbody td:last-child { position:sticky; right:0; z-index:2; font-weight:700; }
+                         padding-left:15px; font-weight:600; border-left:0;
+                         border-right:1px solid var(--line);
+                         box-shadow:7px 0 9px -7px rgba(16,24,40,.28); }
+  tbody td:last-child { position:sticky; right:0; z-index:2; font-weight:700;
+                        box-shadow:-7px 0 9px -7px rgba(16,24,40,.28); }
 
   tr.bond td { background:var(--card); }
   tr.bond.alt td { background:var(--row); }
@@ -53,9 +62,10 @@
   td.z { color:var(--zero); }
 
   tr.cluster td { background:var(--navy); color:var(--gold); font-weight:700;
-                  border-bottom:1px solid #22407F; }
+                  border-bottom:1px solid #22407F; border-left-color:#22407F; }
   tr.cluster td.z { color:#7C89A6; }
-  tr.grand td { background:var(--gold); color:#1B2A4A; font-weight:700; }
+  tr.grand td { background:var(--gold); color:#1B2A4A; font-weight:700;
+                border-left-color:rgba(27,42,74,.22); }
   tr.grand td.z { color:#9A8340; }
 
   /* A day nobody has uploaded yet still gets its column - it just says so,

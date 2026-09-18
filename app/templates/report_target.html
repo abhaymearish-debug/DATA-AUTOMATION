@@ -92,8 +92,9 @@
 
   /* The two lines belong together, so the rule falls under the achieved one
      and never between them. */
-  tbody tr.tgt td.ty { color:#8A94A6; }
-  tbody tr.ach td.ty { color:var(--navy); }
+  /* Both labels read at full strength. Greying TARGET made it look switched
+     off rather than quieter. */
+  tbody tr.tgt td.ty, tbody tr.ach td.ty { color:var(--navy); }
   tbody tr.tgt td { border-bottom:1px solid #EEF1F6; }
   tbody tr.ach td { border-bottom:1px solid var(--line); }
   /* The target line carries a shade the whole way across, the way the printed
@@ -109,7 +110,7 @@
   tbody tr.cl td, tbody tr.cl td.nm, tbody tr.cl td.pct {
       background:var(--navy); color:var(--gold); border-right-color:#22407F; }
   tbody tr.cl.tgt td { font-weight:600; color:#C8D4EE; }
-  tbody tr.cl.tgt td.ty { color:#8FA3D0; }
+  tbody tr.cl.tgt td.ty { color:var(--gold); }
   tbody tr.cl.ach td { font-weight:750; }
   tbody tr.cl.ach td.ty { color:var(--gold); }
   tbody tr.cl.tgt td { border-bottom:1px solid #1B3766; }
@@ -119,7 +120,7 @@
   tbody tr.gt td, tbody tr.gt td.nm, tbody tr.gt td.pct {
       background:var(--gold); color:#1B2A4A; border-right-color:rgba(27,42,74,.18); }
   tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
-  tbody tr.gt.tgt td.ty { color:#6B5520; }
+  tbody tr.gt.tgt td.ty { color:#1B2A4A; }
   tbody tr.gt.tgt td { border-bottom:1px solid rgba(27,42,74,.16); }
   tbody tr.gt.ach td { font-weight:800; }
   tbody tr.gt.ach td.ty { color:#1B2A4A; }
