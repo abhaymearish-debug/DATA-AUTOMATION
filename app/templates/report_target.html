@@ -32,6 +32,15 @@
   .selw select:focus { outline:none; }
   .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
             color:var(--muted); pointer-events:none; }
+  .menu { position:relative; display:inline-block; }
+  .menu .items { display:none; position:absolute; right:0; top:112%; background:var(--card);
+                 border:1px solid var(--line); border-radius:10px; min-width:262px; z-index:40;
+                 box-shadow:0 10px 28px rgba(16,24,40,.14); overflow:hidden; }
+  .menu.open .items { display:block; }
+  .menu .items a { display:block; padding:10px 14px; font-size:13.5px; cursor:pointer;
+                   color:var(--ink); text-decoration:none; }
+  .menu .items a:hover { background:var(--hover); }
+  .menu .items a .sub { display:block; font-size:11px; color:var(--muted); margin-top:1px; }
   .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
   .seg button { border:0; background:none; font:inherit; font-size:12.5px; font-weight:650;
                 color:var(--muted); padding:5px 11px; border-radius:7px; cursor:pointer; }
@@ -83,6 +92,7 @@
      and never between them. */
   tbody tr.tgt td.ty { color:#8A94A6; }
   tbody tr.ach td.ty { color:var(--navy); }
+  tbody tr.tgt td { border-bottom:1px solid #EEF1F6; }
   tbody tr.ach td { border-bottom:1px solid var(--line); }
   tbody tr.hot td, tbody tr.hot td.nm, tbody tr.hot td.pct { background:var(--hover); }
 
@@ -92,6 +102,7 @@
   tbody tr.cl.tgt td.ty { color:#8FA3D0; }
   tbody tr.cl.ach td { font-weight:750; }
   tbody tr.cl.ach td.ty { color:var(--gold); }
+  tbody tr.cl.tgt td { border-bottom:1px solid #1B3766; }
   tbody tr.cl.ach td { border-bottom:1px solid #22407F; }
   tbody tr.cl td.nm { color:var(--gold); font-weight:750; }
 
@@ -99,6 +110,7 @@
       background:var(--gold); color:#1B2A4A; border-right-color:rgba(27,42,74,.18); }
   tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
   tbody tr.gt.tgt td.ty { color:#6B5520; }
+  tbody tr.gt.tgt td { border-bottom:1px solid rgba(27,42,74,.16); }
   tbody tr.gt.ach td { font-weight:800; }
   tbody tr.gt.ach td.ty { color:#1B2A4A; }
   tbody tr.gt td.nm { font-weight:800; letter-spacing:.3px; }
@@ -195,6 +207,15 @@
     </div>
     <div class="sp">
       <button type="button" class="act" onclick="openEditor()">Edit targets</button>
+      <div class="menu" id="pdfMenu">
+        <button type="button" class="act pdf" onclick="togglePdf(event)">Download PDF &#9662;</button>
+        <div class="items">
+          <a id="dlAll" href="#">All clusters
+            <span class="sub">a sheet per cluster, plus the summary</span></a>
+          <a id="dlView" href="#">Current view
+            <span class="sub">exactly what is on screen</span></a>
+        </div>
+      </div>
       <a class="act xl" id="xl" href="#">Download Excel</a>
     </div>
   </div>
@@ -284,7 +305,10 @@ async function load(){
        The achievement below is real; there is just nothing to measure it against yet.</div>
      <button type="button" class="act" onclick="openEditor('${esc(d.month)}')">Set them now</button></div>`;
 
-  xl.href = '/reports/target-achievement/export.xlsx?' + params().toString();
+  const q = params().toString();
+  xl.href     = '/reports/target-achievement/export.xlsx?' + q;
+  dlAll.href  = '/reports/target-achievement/export.pdf?' + q + '&scope=all';
+  dlView.href = '/reports/target-achievement/export.pdf?' + q + '&scope=current';
   render(d);
 }
 
@@ -477,6 +501,16 @@ async function saveTargets(){
     edSave.disabled = false; edSave.textContent = 'Save targets';
   }
 }
+
+function togglePdf(ev){
+  ev.stopPropagation();
+  pdfMenu.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#pdfMenu')) pdfMenu.classList.remove('open');
+});
+pdfMenu.querySelectorAll('.items a').forEach(a =>
+  a.addEventListener('click', () => pdfMenu.classList.remove('open')));
 
 Cal.init('', '', onPick);
 load();

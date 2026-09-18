@@ -2302,6 +2302,65 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
     return FileResponse(tmp, filename=tmp.name)
 
 
+@app.get("/reports/target-achievement/export.pdf")
+def target_achievement_pdf(request: Request, date_from: str = "", date_to: str = "",
+                           cluster: int = 0, month: str = "", scope: str = "current"):
+    """Two ways out: what is on screen, or the set the office circulates.
+
+    'all' is four sheets - one per cluster and the summary that sits on top of
+    them - zipped, because that is how they go out together. 'current' is the
+    page as it stands, cluster filter and all.
+    """
+    require_user(request)
+    if scope not in ("current", "all"):
+        raise HTTPException(400, "Unknown scope.")
+    window = _tva_window(date_from, date_to)
+    if window is None:
+        raise HTTPException(404, "No shop sales have been uploaded yet.")
+
+    import tempfile, zipfile
+
+    def grid(which: int | None):
+        got = reports_api.target_vs_achievement(
+            window[0], window[1], cluster=which, month=month)
+        if "error" in got:
+            raise HTTPException(404, got["error"])
+        return got
+
+    out = Path(tempfile.mkdtemp())
+    span = None
+
+    if scope == "current":
+        data = grid(cluster or None)
+        span = data["period"]["short"].replace(" to ", " - ")
+        name = f"CLUSTER {cluster}" if cluster in (1, 2, 3) else ""
+        stem = f"TARGET vs ACHIEVEMENT{' - ' + name if name else ''} ({span})"
+        pdf = reports_pdf.build_target_pdf(data, out / f"{stem}.pdf", scope=name)
+        return FileResponse(pdf, filename=pdf.name, media_type="application/pdf")
+
+    whole = grid(None)
+    span = whole["period"]["short"].replace(" to ", " - ")
+    made: list[Path] = []
+    for cid in (1, 2, 3):
+        one = grid(cid)
+        if not one["rows"]:
+            continue
+        made.append(reports_pdf.build_target_pdf(
+            one, out / f"TARGET vs ACHIEVEMENT - CLUSTER {cid} ({span}).pdf",
+            scope=f"CLUSTER {cid}"))
+
+    summary = [r for r in whole["rows"] if r.get("kind") in ("cluster", "grand")]
+    made.append(reports_pdf.build_target_pdf(
+        whole, out / f"TARGET vs ACHIEVEMENT - CLUSTER SUMMARY ({span}).pdf",
+        rows=summary, scope="CLUSTER SUMMARY"))
+
+    bundle = out / f"TARGET vs ACHIEVEMENT ({span}).zip"
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
+        for pdf in made:
+            z.write(pdf, pdf.name)
+    return FileResponse(bundle, filename=bundle.name, media_type="application/zip")
+
+
 # ---------------------------------------------------------------------------
 # Purchase instruction
 # ---------------------------------------------------------------------------

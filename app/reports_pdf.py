@@ -747,3 +747,227 @@ def build_cumulative_view_pdf(data: dict, out_path: Path, *, scope: str = "All b
         c.showPage()
     c.save()
     return out_path
+
+
+# ---------------------------------------------------------------------------
+# Target vs Achievement
+#
+# MEASURED, NOT APPROXIMATED
+# --------------------------
+# Every number below was read out of the content streams of the two PDFs the
+# office already circulates - the cluster summary and a single-cluster sheet -
+# so this is a reproduction rather than a resemblance:
+#
+#     page          595.276 wide, 123.25 + 60 per bond (two 30pt rows)
+#     title band    42pt navy, "K.S DISTILLERY" Bold 18 gold, centred
+#     gold band     28pt, title Bold 13 navy at x=9, "AS ON ..." right at x=9
+#     header band   53.25pt navy, labels Bold 7.25 WHITE, 11.75 line pitch,
+#                   bracketed by 2pt gold rules and divided by 1.4pt gold
+#     columns       bond 104, cat 28, brands share 377.276, total 44, pct 42
+#     bond cell     navy, spans the pair; name Bold 10 white (gold on a total)
+#     target row    grey 0.95 / gold 0.95,0.70,0.18 on a total row
+#     achieved row  white / gold 1,0.74,0.19 on a total row
+#     every cell    stroked 0.4pt in 0.78 grey; the pair closes on a 1.5pt navy
+#     figures       Helvetica 9 centred; Bold on the total column and on totals
+#     percentage    Bold 9.5 red (0.812,0.075,0.133), black on the grand total
+# ---------------------------------------------------------------------------
+
+TA_W        = 595.276
+TA_TITLE_H  = 42.0
+TA_SUB_H    = 28.0
+TA_HEAD_H   = 53.25
+TA_ROW_H    = 30.0
+TA_BOND_W   = 104.0
+TA_CAT_W    = 28.0
+TA_TOT_W    = 44.0
+TA_PCT_W    = 42.0
+TA_INSET    = 9.0
+TA_WRAP_PAD = 8.0
+TA_PITCH    = 11.75
+
+TA_NAVY   = colors.Color(0.04, 0.16, 0.31)
+TA_NAVY_T = colors.Color(0.043, 0.161, 0.31)
+TA_GOLD   = colors.Color(1.0, 0.74, 0.19)
+TA_GOLD_T = colors.Color(1.0, 0.741, 0.192)
+TA_GOLD_D = colors.Color(0.95, 0.70, 0.18)      # the target half of a total row
+TA_SHADE  = colors.Color(0.95, 0.95, 0.95)      # the target half of a bond row
+TA_GRID   = colors.Color(0.78, 0.78, 0.78)
+TA_RED    = colors.Color(0.812, 0.075, 0.133)
+TA_WHITE  = colors.Color(1.0, 1.0, 1.0)
+TA_BLACK  = colors.Color(0.0, 0.0, 0.0)
+
+_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+TAF_TITLE = 18.0
+TAF_SUB   = 13.0
+TAF_HEAD  = 7.25
+TAF_NAME  = 10.0
+TAF_BODY  = 9.0
+TAF_PCT   = 9.5
+
+# The office writes these brands short. Their sheet, their spelling.
+TA_LABELS = {
+    "BCB": "BCB", "BLENDERS": "BLENDERS CHOICE", "CHAIRMANS": "CCB",
+    "KS99": "KS.99", "MAGIC": "MAGIC BLEND", "MORNING": "MORNING WALKERS",
+    "OLDPEARL": "OLD PEARL", "OLDFORT": "ROYAL OLD FORT", "OTHER": "OTHER",
+}
+
+
+def _ta_wrap(text: str, size: float, max_w: float) -> list[str]:
+    """Break a header label on spaces, the way the office's own file breaks."""
+    words, lines, cur = str(text).split(), [], ""
+    for word in words:
+        trial = f"{cur} {word}".strip()
+        if cur and _w(trial, BOLD, size) > max_w:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    return lines or [""]
+
+
+def _ta_num(v) -> str:
+    """Whole cases, no separators - the shape the office's sheet prints."""
+    try:
+        return f"{int(round(float(v or 0)))}"
+    except (TypeError, ValueError):
+        return "0"
+
+
+def _ta_centre(c, x0: float, x1: float, y: float, text: str,
+               font: str, size: float) -> None:
+    c.setFont(font, size)
+    c.drawString((x0 + x1) / 2 - _w(text, font, size) / 2, y, text)
+
+
+def target_geometry(columns: list, pairs: int) -> tuple[float, float, list[float]]:
+    """(page_w, page_h, [x boundaries]) for a sheet of this many bonds."""
+    span = TA_W - TA_BOND_W - TA_CAT_W - TA_TOT_W - TA_PCT_W
+    each = span / max(1, len(columns))
+    xs = [0.0, TA_BOND_W, TA_BOND_W + TA_CAT_W]
+    for i in range(len(columns)):
+        xs.append(xs[2] + each * (i + 1))
+    xs.append(xs[-1] + TA_TOT_W)
+    xs.append(TA_W)
+    height = TA_TITLE_H + TA_SUB_H + TA_HEAD_H + TA_ROW_H * 2 * max(1, pairs)
+    return TA_W, height, xs
+
+
+def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
+                     scope: str = "") -> Path:
+    """One Target vs Achievement sheet: a cluster, the summary, or the view."""
+    cols = data["columns"]
+    rows = data["rows"] if rows is None else rows
+    page_w, page_h, xs = target_geometry(cols, len(rows))
+
+    end = data["period"]["to"]
+    as_on = f"AS ON {int(end[8:10])} {_MONTH_ABBR[int(end[5:7]) - 1]} {end[:4]}"
+    title = "TARGET VS ACHIEVEMENT" + (f" - {scope}" if scope else "")
+
+    c = pdfcanvas.Canvas(str(out_path), pagesize=(page_w, page_h))
+    c.setTitle(out_path.stem)
+
+    # ---- the two bands ----
+    top = page_h
+    c.setFillColor(TA_NAVY)
+    c.rect(0, top - TA_TITLE_H, page_w, TA_TITLE_H, stroke=0, fill=1)
+    c.setFillColor(TA_GOLD_T)
+    _ta_centre(c, 0, page_w, top - 26.0, "K.S DISTILLERY", BOLD, TAF_TITLE)
+
+    sub_top = top - TA_TITLE_H
+    c.setFillColor(TA_GOLD)
+    c.rect(0, sub_top - TA_SUB_H, page_w, TA_SUB_H, stroke=0, fill=1)
+    c.setFillColor(TA_NAVY_T)
+    c.setFont(BOLD, TAF_SUB)
+    base = sub_top - 18.5
+    c.drawString(TA_INSET, base, title)
+    c.drawString(page_w - TA_INSET - _w(as_on, BOLD, TAF_SUB), base, as_on)
+
+    # ---- the header band ----
+    head_top = sub_top - TA_SUB_H
+    head_bot = head_top - TA_HEAD_H
+    c.setFillColor(TA_NAVY)
+    c.rect(0, head_bot, page_w, TA_HEAD_H, stroke=0, fill=1)
+
+    labels = ["BOND", "CAT"] + [TA_LABELS.get(col["key"], str(col["label"]).upper())
+                                for col in cols] + ["GRAND TOTAL", "ACH %"]
+    mid = head_bot + TA_HEAD_H / 2 - 2.538
+    c.setFillColor(TA_WHITE)
+    for i, label in enumerate(labels):
+        x0, x1 = xs[i], xs[i + 1]
+        if i == 0:                      # BOND is the one label set against the edge
+            c.setFont(BOLD, TAF_HEAD)
+            c.drawString(TA_INSET, mid, label)
+            continue
+        lines = _ta_wrap(label, TAF_HEAD, (x1 - x0) - TA_WRAP_PAD)
+        first = mid + TA_PITCH * (len(lines) - 1) / 2
+        for j, line in enumerate(lines):
+            _ta_centre(c, x0, x1, first - TA_PITCH * j, line, BOLD, TAF_HEAD)
+
+    c.setStrokeColor(TA_GOLD)
+    c.setLineWidth(2.0)
+    c.line(0, head_top - 1.0, page_w, head_top - 1.0)
+    c.line(0, head_bot + 1.0, page_w, head_bot + 1.0)
+    c.setLineWidth(1.4)
+    for x in xs[1:-1]:
+        c.line(x, head_top, x, head_bot)
+
+    # ---- the bonds ----
+    # Exactly one row wears the gold, and it is the one the sheet adds up to:
+    # the cluster on a cluster sheet, the network on the summary. A cluster
+    # sitting among its own bonds is only a subtotal, so it takes bold figures
+    # and keeps the body's colours.
+    has_bonds = any(r.get("kind") == "bond" for r in rows)
+    y = head_bot
+    for idx, row in enumerate(rows):
+        total = idx == len(rows) - 1
+        strong = total or (has_bonds and row.get("kind") == "cluster")
+        pair_top, pair_bot = y, y - TA_ROW_H * 2
+        tgt_fill = TA_GOLD_D if total else TA_SHADE
+        ach_fill = TA_GOLD if total else TA_WHITE
+
+        c.setStrokeColor(TA_GRID)
+        c.setLineWidth(0.4)
+        c.setFillColor(TA_NAVY)
+        c.rect(xs[0], pair_bot, xs[1] - xs[0], TA_ROW_H * 2, stroke=1, fill=1)
+        for i in range(1, len(xs) - 2):
+            c.setFillColor(tgt_fill)
+            c.rect(xs[i], pair_top - TA_ROW_H, xs[i + 1] - xs[i], TA_ROW_H, stroke=1, fill=1)
+            c.setFillColor(ach_fill)
+            c.rect(xs[i], pair_bot, xs[i + 1] - xs[i], TA_ROW_H, stroke=1, fill=1)
+        c.setFillColor(ach_fill)
+        c.rect(xs[-2], pair_bot, xs[-1] - xs[-2], TA_ROW_H * 2, stroke=1, fill=1)
+
+        # the name, on its navy, gold once the row is a total
+        c.setFillColor(TA_GOLD_T if total else TA_WHITE)
+        c.setFont(BOLD, TAF_NAME)
+        c.drawString(TA_INSET, pair_bot + TA_ROW_H - 3.5, str(row.get("label", "")))
+
+        body = BOLD if strong else BOOK
+        for which, tag, line_y in (("tgt", "TGT", pair_top - TA_ROW_H + 11.85),
+                                   ("ach", "ACH", pair_bot + 11.85)):
+            c.setFillColor(TA_BLACK)
+            _ta_centre(c, xs[1], xs[2], line_y, tag, BOLD, TAF_BODY)
+            cells = row.get(which) or {}
+            for i, col in enumerate(cols):
+                _ta_centre(c, xs[2 + i], xs[3 + i], line_y,
+                           _ta_num(cells.get(col["key"], 0)), body, TAF_BODY)
+            _ta_centre(c, xs[-3], xs[-2], line_y,
+                       _ta_num(row.get(which + "_total", 0)), BOLD, TAF_BODY)
+
+        pct = row.get("pct")
+        c.setFillColor(TA_BLACK if total else TA_RED)
+        _ta_centre(c, xs[-2], xs[-1], pair_bot + TA_ROW_H - 3.325,
+                   "-" if pct is None else f"{pct:.2f}%", BOLD, TAF_PCT)
+
+        c.setStrokeColor(TA_NAVY)
+        c.setLineWidth(1.5)
+        c.line(0, pair_bot, page_w, pair_bot)
+        y = pair_bot
+
+    c.showPage()
+    c.save()
+    return out_path
