@@ -48,28 +48,30 @@
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
 
   thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);
-             text-align:center; vertical-align:middle; font-weight:700; font-size:10px;
-             letter-spacing:.5px; text-transform:uppercase; line-height:1.32;
-             padding:12px 10px; border-bottom:1px solid #22407F;
+             text-align:center; vertical-align:middle; font-weight:700; font-size:9.5px;
+             letter-spacing:.5px; text-transform:uppercase; line-height:1.28;
+             padding:10px 9px; border-bottom:1px solid #22407F;
              border-right:1px solid rgba(255,255,255,.07); }
   thead th:first-child { text-align:left; left:0; z-index:4; min-width:176px; padding-left:16px; }
   thead th.ty { min-width:74px; }
   thead th:last-child { right:0; z-index:4; border-right:0; min-width:92px; }
 
-  tbody td { height:34px; padding:0 10px; text-align:center; white-space:nowrap;
+  tbody td { height:30px; padding:0 10px; text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; color:var(--ink); }
   tbody td.nm { text-align:left; position:sticky; left:0; z-index:2; background:var(--card);
                 font-weight:650; padding-left:16px; vertical-align:middle; }
   tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card);
                  vertical-align:middle; }
 
-  /* Target on top in muted ink, achieved under it in full ink: the eye reads
-     down the pair rather than across two unrelated rows. */
-  tbody tr.tgt td { color:var(--muted); border-bottom:1px dashed #EDF0F5; }
-  tbody tr.ach td { font-weight:650; border-bottom:1px solid var(--line); }
-  tbody td.ty { font-size:10px; letter-spacing:.7px; text-transform:uppercase;
-                font-weight:700; color:var(--muted); text-align:left; }
+  /* The target is the reference and the achievement is the news, so they are
+     not printed at the same volume: small and grey above, full ink below. */
+  tbody tr.tgt td { height:25px; font-size:11.5px; color:#98A1B0; border-bottom:0; }
+  tbody tr.ach td { height:32px; font-weight:650; border-bottom:1px solid var(--line); }
+  tbody td.ty { font-size:9px; letter-spacing:.8px; text-transform:uppercase;
+                font-weight:700; color:#A8B0BE; text-align:left; }
   tbody tr.ach td.ty { color:var(--blue); }
+  tbody tr.hot td, tbody tr.hot td.nm, tbody tr.hot td.pct { background:var(--hover); }
+  tbody td.nm { font-size:13.5px; letter-spacing:-.1px; }
   tbody tr.tgt td.nm, tbody tr.tgt td.pct { border-bottom:0; }
   tbody tr.band td { background:var(--row); }
   tbody tr.band td.nm, tbody tr.band td.pct { background:var(--row); }
@@ -88,19 +90,30 @@
   tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
   tbody tr.gt.tgt td.ty { color:#6B5520; }
 
-  /* The percentage, with the bar doing the comparing. */
-  .pw { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding:3px 0; }
-  .pw .v { font-size:12.5px; font-weight:750; text-align:center; }
-  .pw .m { height:4px; border-radius:3px; background:rgba(16,24,40,.10); overflow:hidden; }
+  /* The percentage, judged against where the month has got to rather than
+     against 100. On the 18th of August nobody is at 100%, and a column of red
+     that only means 'it is the 18th' teaches you nothing. The tick on the bar
+     is the pace; the colour is how the bond sits against it. */
+  .pw { display:flex; flex-direction:column; align-items:stretch; gap:5px; padding:4px 0; }
+  .pw .v { align-self:center; padding:2px 10px; border-radius:20px;
+           font-size:11.5px; font-weight:750; letter-spacing:.2px; }
+  .pw.lo  .v { background:#FEE2E2; color:#991B1B; }
+  .pw.mid .v { background:#FEF3C7; color:#92400E; }
+  .pw.hi  .v { background:#D1FAE5; color:#065F46; }
+  .pw.none .v { background:var(--chip); color:var(--muted); font-weight:600; font-size:10.5px;
+                letter-spacing:.4px; text-transform:uppercase; }
+  .pw .m { position:relative; height:4px; border-radius:3px;
+           background:rgba(16,24,40,.10); }
   .pw .m i { display:block; height:100%; border-radius:3px; background:var(--blue); }
-  .pw.done .m i { background:var(--ok); }
-  .pw.none .v { color:var(--zero); font-weight:500; }
-  tr.cl .pw .m { background:rgba(255,255,255,.16); }
-  tr.cl .pw .m i { background:var(--gold); }
-  tr.gt .pw .m { background:rgba(27,42,74,.18); }
-  tr.gt .pw .m i { background:#1B2A4A; }
-
-  .status { font-size:12.5px; color:var(--muted); margin:11px 2px; }
+  .pw.hi .m i { background:var(--ok); }
+  .pw.lo .m i { background:#EF4444; }
+  .pw.mid .m i { background:#F59E0B; }
+  .pw .m u { position:absolute; top:-2px; bottom:-2px; width:2px; border-radius:2px;
+             background:rgba(16,24,40,.42); }
+  tr.cl .pw .m, tr.gt .pw .m { background:rgba(255,255,255,.20); }
+  tr.gt .pw .m { background:rgba(27,42,74,.20); }
+  tr.cl .pw .m u { background:rgba(255,255,255,.65); }
+  tr.gt .pw .m u { background:rgba(27,42,74,.55); }
 
   /* ---------- typing the targets ---------- */
   .veil { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
@@ -192,7 +205,6 @@
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td class="nm">Loading…</td></tr></tbody>
 </table></div>
-<div class="status" id="foot"></div>
 
 <!-- typing the month's targets -->
 <div class="veil" id="edVeil" onclick="if(event.target===this)closeEditor()">
@@ -239,20 +251,19 @@ function params(){
 function onPick(from, to){ FROM = from; TO = to; load(); }
 
 async function load(){
-  foot.textContent = 'Loading…';
   let d;
   try {
     const res = await fetch('/api/target-achievement?' + params().toString());
     d = await res.json();
   } catch (e) {
     msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
-    foot.textContent = ''; return;
+    return;
   }
   if (d.error){
     msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
     grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
     grid.querySelector('tbody').innerHTML = '<tr><td class="nm">No data</td></tr>';
-    foot.textContent = ''; return;
+    return;
   }
 
   DATA = d;
@@ -276,12 +287,28 @@ async function load(){
   render(d);
 }
 
+/* How much of the target month the chosen window has used up. A bond at 55%
+   on the 18th of a 31-day month is exactly on pace, not failing. */
+let PACE = 1;
+
+function setPace(d){
+  const [y, m] = (d.month || '').split('-').map(Number);
+  if (!y || !m){ PACE = 1; return; }
+  const last = new Date(y, m, 0).getDate();
+  const to = new Date(d.period.to + 'T00:00:00');
+  const days = (to.getFullYear() === y && to.getMonth() + 1 === m) ? to.getDate() : last;
+  PACE = Math.max(0.01, Math.min(1, days / last));
+}
+
 function meter(pct){
   if (pct === null || pct === undefined)
-    return `<div class="pw none"><span class="v">—</span></div>`;
+    return `<div class="pw none"><span class="v">no target</span></div>`;
   const w = Math.max(0, Math.min(100, pct));
-  return `<div class="pw${pct >= 100 ? ' done' : ''}"><span class="v">${pct.toFixed(1)}%</span>
-          <span class="m"><i style="width:${w}%"></i></span></div>`;
+  const ratio = pct / (PACE * 100);
+  const band = ratio >= 1 ? 'hi' : ratio >= 0.8 ? 'mid' : 'lo';
+  const tip = `${pct.toFixed(1)}% of target, against ${(PACE * 100).toFixed(0)}% of the month`;
+  return `<div class="pw ${band}" title="${tip}"><span class="v">${pct.toFixed(1)}%</span>
+          <span class="m"><i style="width:${w}%"></i><u style="left:${(PACE*100).toFixed(1)}%"></u></span></div>`;
 }
 
 function pair(r, cols, cls, band){
@@ -291,14 +318,16 @@ function pair(r, cols, cls, band){
     return `<td${v ? '' : ' class="zero"'}>${num(v)}</td>`;
   }).join('') + `<td>${num(r[which + '_total'])}</td>`;
 
-  return `<tr class="${cls} tgt${band ? ' band' : ''}" data-bond="${esc(r.bond)}">
+  const id = (r.kind === 'bond') ? esc(r.label) : '';
+  return `<tr class="${cls} tgt${band ? ' band' : ''}" data-pair="${id}">
             ${nameCell}<td class="ty">Target</td>${line('tgt')}
             <td class="pct" rowspan="2">${meter(r.pct)}</td></tr>
-          <tr class="${cls} ach${band ? ' band' : ''}" data-bond="${esc(r.bond)}">
+          <tr class="${cls} ach${band ? ' band' : ''}" data-pair="${id}">
             <td class="ty">Achieved</td>${line('ach')}</tr>`;
 }
 
 function render(d){
+  setPace(d);
   const cols = d.columns;
   grid.querySelector('thead').innerHTML =
     `<tr><th>Bond</th><th class="ty"></th>` +
@@ -313,19 +342,17 @@ function render(d){
   }
   grid.querySelector('tbody').innerHTML = html;
 
-  const bonds = d.rows.filter(r => r.kind === 'bond').length;
-  const m = d.target_meta || {};
-  const L = d.legs || {};
-  foot.textContent =
-    `${d.period.short} · ${bonds} bonds · ${cols.length} brands`
-    + ` · achieved = shop sales ${num(Math.round(L.tertiary))}`
-    + ` + FED ${num(Math.round(L.fed))} + BAR ${num(Math.round(L.bar))}`
-    + ` = ${num(Math.round(d.liquidation))} cs`
-    + (d.targets_set ? ` · targets for ${d.month_label}` +
-        (m.updated ? ` set ${m.updated.slice(0,10).split('-').reverse().join('-')}` +
-                     (m.by ? ` by ${m.by}` : '') : '') : ' · no targets set')
-    + (d.sources.tertiary.length ? ` · shop sales from ${d.sources.tertiary.join(' + ')}` : '')
-    + (d.sources.invoice.length ? ` · invoices from ${d.sources.invoice.join(' + ')}` : '');
+  // A bond is two rows that mean one thing, so it highlights as one thing.
+  const body = grid.querySelector('tbody');
+  body.onmouseover = e => {
+    const tr = e.target.closest('tr');
+    body.querySelectorAll('tr.hot').forEach(t => t.classList.remove('hot'));
+    if (!tr || !tr.dataset.pair) return;
+    body.querySelectorAll(`tr[data-pair="${tr.dataset.pair}"]`)
+        .forEach(t => t.classList.add('hot'));
+  };
+  body.onmouseleave = () => body.querySelectorAll('tr.hot')
+                                .forEach(t => t.classList.remove('hot'));
 }
 
 /* ---------------- typing the targets ----------------

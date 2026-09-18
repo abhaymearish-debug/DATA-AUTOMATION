@@ -95,8 +95,8 @@
      glows into the navy rather than being cut out of it. The rule below fades
      at both ends instead of running wall to wall, which is the whole
      difference between a panel and a form. */
-  .sb-top { position:relative; display:flex; align-items:center; gap:13px;
-            padding:22px 16px 20px;
+  .sb-top { position:relative; display:flex; align-items:center; gap:12px;
+            padding:16px 16px 15px;
             background:linear-gradient(180deg, rgba(0,0,0,.20), transparent 78%); }
   /* Gold, not white: the rule under the mark belongs to the mark. */
   .sb-top::after { content:''; position:absolute; left:14px; right:14px; bottom:0; height:1px;
@@ -106,9 +106,9 @@
   /* One tight dark shadow, and nothing else. The gold bloom that used to sit
      under this spread the mark's own colour back over its edges, which is a
      halo when you want an edge. */
-  .sb-top .mark img { width:54px; height:54px; display:block;
-                      filter:drop-shadow(0 3px 7px rgba(0,0,0,.55)); }
-  .sb-top .n { font-size:19px; font-weight:750; color:#fff; letter-spacing:-.4px;
+  .sb-top .mark img { width:44px; height:44px; display:block;
+                      filter:drop-shadow(0 2px 6px rgba(0,0,0,.55)); }
+  .sb-top .n { font-size:16.5px; font-weight:750; color:#fff; letter-spacing:-.3px;
                line-height:1.1; text-shadow:0 1px 3px rgba(0,0,0,.35); }
 
   /* A section label, not something you can click. */
@@ -262,10 +262,10 @@
     </div>
   </div>
   <nav>
-    <a class="item {% if page == 'upload' %}active{% endif %}" href="/">
-      {{ nav_icon('upload') }}Raw Data Upload</a>
     <a class="item {% if page == 'calendar' %}active{% endif %}" href="/status-calendar">
       {{ nav_icon('calendar') }}Status Calendar</a>
+    <a class="item {% if page == 'upload' %}active{% endif %}" href="/">
+      {{ nav_icon('upload') }}Raw Data Upload</a>
 
     <div class="sect">Reports</div>
 

@@ -157,12 +157,6 @@
         </select><i>▾</i></div>
       </label>
     </div>
-    <span class="vs">
-      {% if not no_data %}
-        {% if prev %}vs {{ prev.short }}{% else %}No matching window last month, so LM reads zero{% endif %}
-        {% if chain and chain|length > 1 %}<span class="warn">stitched from {{ chain|length }} uploads</span>{% endif %}
-      {% endif %}
-    </span>
     <div class="sp">
       {% if not no_data %}
         <a class="act xl" href="/reports/shop-analysis/export.xlsx?{{ qs }}">Download Excel</a>
@@ -242,6 +236,8 @@
 </div>
 
 <p class="status">
+  {% if prev %}Compared against {{ prev.short }}.{% else %}No matching window last month, so LM reads zero.{% endif %}
+  {% if chain and chain|length > 1 %}<span class="warn">stitched from {{ chain|length }} uploads</span>{% endif %}
   Cases, rounded to whole numbers. Every figure is rounded from its own unrounded total, so a
   column can read one apart from the sum of the rows above it and both be right.
   Averages are over {{ chosen.days }} day{{ '' if chosen.days == 1 else 's' }}.

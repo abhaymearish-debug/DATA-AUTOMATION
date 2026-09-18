@@ -320,18 +320,23 @@ function openUpload(c){
   upTitle.textContent = 'Add New ' + c.title;
   upErr.textContent = '';
   upFiles.value = '';
-  upFiles.multiple = (c.mode === 'files');
-  upFilesLabel.textContent = c.mode === 'files' ? 'Files' : 'File';
-  upHint.textContent = c.mode === 'files'
-      ? 'One or more Bevco exports (.xlsx)'
-      : c.mode === 'range' ? 'One KSBC export covering this window (.xlsx)'
-                           : 'One KSBC export for this date (.xlsx)';
+  upFiles.multiple = (c.mode === 'files' || c.mode === 'batch');
+  upFilesLabel.textContent = (c.mode === 'files' || c.mode === 'batch') ? 'Files' : 'File';
+  upHint.textContent =
+      c.mode === 'batch' ? 'Every shop\u2019s instruction for one month \u2014 the whole folder'
+    : c.mode === 'files' ? 'One or more Bevco exports (.xlsx)'
+    : c.mode === 'range' ? 'One KSBC export covering this window (.xlsx)'
+                         : 'One KSBC export for this date (.xlsx)';
   showPicked();
 
   const today = iso(new Date());
   // Warehouse stock reads its date out of the Bevco filename, but a date you
   // cannot see is a date you cannot check - so it is shown and editable, just
   // filled in for you the moment a file is chosen.
+  // A batch names its own month - every file in it carries a Report Month,
+  // and ~295 of them agreeing beats one date typed into a box - so that card
+  // gets no date control at all.
+  upWhen.hidden = (c.mode === 'batch');
   upDayLabel.textContent =
       c.mode === 'range' ? 'Days this pull covers'
     : c.mode === 'files' ? 'Date this export covers (read from the file name)'
@@ -340,8 +345,10 @@ function openUpload(c){
   if (c.mode === 'range'){
     const ym = today.slice(0,7);
     setRange(ym, 1, Math.min(16, daysIn(ym)));
-  } else {
+  } else if (c.mode !== 'batch'){
     setDay(c.mode === 'files' ? '' : today);
+  } else {
+    upDate.value = upFrom.value = upTo.value = '';
   }
   refreshName();
   upVeil.classList.add('on');
@@ -404,7 +411,11 @@ function saySpan(){
 
 function refreshName(){
   if (!card) return;
-  if (card.mode === 'day')        upName.value = `${card.title} - ${fmt(upDate.value)}`;
+  if (card.mode === 'batch'){
+    const n = upFiles.files.length;
+    upName.value = n ? `${card.title} - ${n} file${n > 1 ? 's' : ''}` : card.title;
+  }
+  else if (card.mode === 'day')   upName.value = `${card.title} - ${fmt(upDate.value)}`;
   else if (card.mode === 'range') upName.value = `${card.title} - ${fmt(upFrom.value)} to ${fmt(upTo.value)}`;
   else                            upName.value = `${card.title} - ${fmt(upDate.value || iso(new Date()))}`;
 }
@@ -421,6 +432,7 @@ function dateFromFilename(name){
 }
 upFiles.addEventListener('change', () => {
   showPicked();
+  if (card && card.mode === 'batch'){ refreshName(); return; }
   if (!card || card.mode !== 'files' || !upFiles.files.length) return;
   const found = dateFromFilename(upFiles.files[0].name);
   if (found && !upDate.value) setDay(found);
@@ -478,6 +490,12 @@ upDrop.addEventListener('drop', e => {
   if (!upFiles.multiple && files.length > 1){
     upErr.textContent = 'This upload takes one file at a time.';
     return;
+  }
+  // A month of instructions is hundreds of files, and a folder drop arrives
+  // as hundreds of entries - so they are added to what is already there
+  // rather than replacing it, which is what lets two drops make one batch.
+  if (card && card.mode === 'batch' && upFiles.files.length){
+    files.unshift(...upFiles.files);
   }
   const dt = new DataTransfer();
   files.forEach(f => dt.items.add(f));

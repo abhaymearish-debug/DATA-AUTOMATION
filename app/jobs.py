@@ -79,6 +79,10 @@ class Job:
     # so history can say what a raw actually holds instead of only when it
     # arrived - which is what makes one upload look like fifteen days of data.
     spans_from: str = ""        # ISO date: the earliest day inside the raw
+    # A line the upload itself worked out and history should keep - what a
+    # batch turned out to contain, when the files decide that rather than the
+    # dialog. Written at upload, shown in history, never inferred later.
+    note: str = ""
 
     def to_dict(self) -> dict:
         d = asdict(self)

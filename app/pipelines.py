@@ -333,9 +333,22 @@ SHOP_SALES_CUMULATIVE = Stream(
     steps=(),
 )
 
+# One month's purchase instruction is ~295 files, one per shop, each an HTML
+# table KSBC saves with an .xls extension. Storing them IS the work: the report
+# reads the raws, so a month answers the moment it is uploaded.
+PURCHASE_INSTRUCTION = Stream(
+    key="purchase_instruction",
+    label="Purchase Instruction",
+    blurb="KSBC's monthly buying instruction, one file per shop.",
+    input_dir="PURCHASE INSTRUCTION/_months",
+    extensions=(".xls", ".xlsx"),
+    multi_file=True,
+    steps=(),
+)
+
 STREAMS: dict[str, Stream] = {
     s.key: s for s in (SHOP_SALES, SHOP_SALES_DAILY, SHOP_SALES_CUMULATIVE,
-                       SECONDARY_SALES, WAREHOUSE_STOCK)
+                       SECONDARY_SALES, WAREHOUSE_STOCK, PURCHASE_INSTRUCTION)
 }
 
 

@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (bootstrap, auth, bondmap, config, promote as promote_mod,
+from . import (bootstrap, auth, bondmap, config, pi as pi_mod, promote as promote_mod,
                reports_api, reports_pdf, targets as targets_mod)
 from .jobs import STORE, Job, JobContext, JobStatus, run_pipeline
 from .pipelines import (
@@ -60,8 +60,8 @@ UPLOAD_CARDS = [
      "mode": "range", "icon": "calendar", "ready": True},
     {"id": "secondary", "title": "Secondary Sales - Daily", "stream": "secondary_sales",
      "mode": "day", "icon": "truck", "ready": True},
-    {"id": "pi_variance", "title": "Purchase Instruction", "stream": None,
-     "mode": "range", "icon": "clipboard", "ready": False},
+    {"id": "pi_variance", "title": "Purchase Instruction", "stream": "purchase_instruction",
+     "mode": "batch", "icon": "clipboard", "ready": True},
     {"id": "wh_monthly", "title": "WH Monthly Stock & Sales", "stream": None,
      "mode": "range", "icon": "layers", "ready": False},
 ]
@@ -541,6 +541,24 @@ async def build(
             # the difference between a report that looks invented and one that
             # can be traced back to the raw it came from.
             job.spans_from = _first_dispatch_day(target)
+
+        elif stream_key == "purchase_instruction":
+            # The month is in the files, not in the dialog: every instruction
+            # names its own Report Month, and ~295 of them agreeing is a better
+            # answer than one typed date. pi.store() files them under it, and
+            # refuses a batch that turns out to span two months.
+            staged = []
+            for upload in files:
+                target = scratch_dir / (upload.filename or "pi.xls")
+                _save_upload(upload, target)
+                staged.append(target)
+            got = pi_mod.store(staged)
+            if "error" in got:
+                raise UploadRejected(got["error"])
+            placed = sorted(pi_mod.month_dir(got["month"]).glob("*.xls*"))
+            job.covers = f"{got['month']}-01"
+            job.note = (f"{got['label']}: {got['shops']} shops"
+                        + (f", {got['blank']} with no instruction" if got["blank"] else ""))
 
         ctx.uploaded = placed
         job.uploaded_names = [p.name for p in placed]
