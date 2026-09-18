@@ -508,8 +508,8 @@ async function submitUpload(ev){
   upOk.disabled = true; upOk.textContent = 'Uploading…';
   try {
     const res = await fetch('/build/' + card.stream, { method:'POST', body:fd });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Upload failed.');
+    const data = await readReply(res);
+    if (!res.ok) throw new Error(data.error || data.detail || whyFailed(res));
     closeUpload();
     poll(true);
   } catch(e){
@@ -518,6 +518,29 @@ async function submitUpload(ev){
     upOk.disabled = false; upOk.textContent = 'OK';
   }
   return false;
+}
+
+/* The app answers in JSON; a proxy in front of it does not. When the server
+   is restarting - a deploy, a cold start - what comes back is an HTML error
+   page, and asking the browser to read that as JSON threw ITS parse error
+   into the dialog ('The string did not match the expected pattern'), which
+   tells you nothing about the upload and looks like the file was wrong. Read
+   the body once, as text, and decide what it is afterwards. */
+async function readReply(res){
+  let body = '';
+  try { body = await res.text(); } catch (e) { return {}; }
+  try { return JSON.parse(body) || {}; } catch (e) { return {}; }
+}
+
+function whyFailed(res){
+  if (res.status === 502 || res.status === 503 || res.status === 504)
+    return 'The server is restarting — it is usually back within a minute. '
+         + 'Your file is still selected, so press OK again in a moment.';
+  if (res.status === 401 || res.status === 403)
+    return 'Your session has expired. Open the app in a new tab, sign in, then try again.';
+  if (res.status === 413)
+    return 'That upload is too large for the server to accept.';
+  return `The upload failed and the server did not say why (HTTP ${res.status}).`;
 }
 
 /* ---------------- card state ---------------- */
