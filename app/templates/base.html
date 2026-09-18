@@ -79,28 +79,24 @@
   .sb nav::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.22);
                                            background-clip:padding-box; }
 
-  /* The brand plate. The house logo is gold on black, so it sits on a faint
-     gold-tinted plaque rather than straight on the navy - otherwise the
-     shield's dark interior reads as a hole in the sidebar. The rule under it
-     fades at both ends instead of running wall to wall, which is the whole
+  /* The brand line. The shield is a transparent gold mark, so it sits
+     straight on the navy: a plaque behind it only drew a box around the one
+     thing in the panel that already has an edge. The shadows under it do the
+     lifting instead - one dark for depth, one gold and wide so the shield
+     glows into the navy rather than being cut out of it. The rule below fades
+     at both ends instead of running wall to wall, which is the whole
      difference between a panel and a form. */
-  .sb-top { position:relative; display:flex; align-items:center; gap:13px;
-            padding:19px 16px 17px; }
+  .sb-top { position:relative; display:flex; align-items:center; gap:14px;
+            padding:22px 18px 20px; }
   .sb-top::after { content:''; position:absolute; left:14px; right:14px; bottom:0; height:1px;
                    background:linear-gradient(90deg, transparent,
                               rgba(255,255,255,.14) 22%, rgba(255,255,255,.14) 78%, transparent); }
-  .sb-top .mark { flex:none; width:50px; height:50px; border-radius:15px;
-                  display:grid; place-items:center; position:relative;
-                  background:radial-gradient(120% 120% at 30% 16%,
-                             rgba(255,189,48,.20), rgba(255,189,48,.05) 60%, rgba(255,255,255,.02));
-                  border:1px solid rgba(255,189,48,.30);
-                  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),
-                             0 4px 14px rgba(0,0,0,.30); }
-  .sb-top .mark img { width:42px; height:42px; display:block;
-                      filter:drop-shadow(0 1px 3px rgba(0,0,0,.55)); }
-  .sb-top .n { font-size:14.5px; font-weight:700; color:#fff; letter-spacing:.1px; }
-  .sb-top .t { font-size:8.5px; letter-spacing:1.9px; text-transform:uppercase;
-               color:var(--gold); margin-top:4px; opacity:.92; }
+  .sb-top .mark { flex:none; display:grid; place-items:center; }
+  .sb-top .mark img { width:46px; height:46px; display:block;
+                      filter:drop-shadow(0 2px 5px rgba(0,0,0,.50))
+                             drop-shadow(0 0 16px rgba(255,189,48,.26)); }
+  .sb-top .n { font-size:17.5px; font-weight:700; color:#fff; letter-spacing:-.25px;
+               line-height:1.15; }
 
   /* A section label, not something you can click. */
   .sb .sect { padding:17px 11px 7px; font-size:9px; font-weight:800;
@@ -253,7 +249,6 @@
     <span class="mark"><img src="/static/ksd-logo.png" alt="K.S. Distillery"></span>
     <div>
       <div class="n">K.S. Distillery</div>
-      <div class="t">Report Transformer</div>
     </div>
   </div>
   <nav>
