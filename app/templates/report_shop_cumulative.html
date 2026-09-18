@@ -66,7 +66,8 @@
      total in gold at the foot - the house pair, top and bottom. */
   .lede { position:sticky; top:0; z-index:20;
           display:flex; align-items:center; gap:11px; margin-bottom:0;
-          padding:11px 15px 11px 17px; border-radius:10px 10px 0 0;
+          align-items:stretch; min-height:40px;
+          padding:0 15px 0 17px; border-radius:10px 10px 0 0;
           background:var(--navy); color:var(--gold);
           font-weight:700; font-size:9.5px; letter-spacing:.9px;
           text-transform:uppercase; box-shadow:0 2px 10px rgba(16,24,40,.13); }
@@ -74,9 +75,11 @@
      that starts wherever the bond name happens to end draws a ragged diagonal
      down fifteen rows, which is most of what read as mess. */
   .lede .pad { width:10px; flex:none; }
+  .lede .grp, .lede .pad { display:flex; align-items:center; }
   .lede .grp { width:var(--namew); flex:none; color:var(--gold); }
   .lede .sp { margin-left:auto; display:flex; }
-  .lede .sp span { width:var(--numw); text-align:center;
+  .lede .sp span { width:var(--numw); display:flex; align-items:center;
+                   justify-content:center;
                    border-left:1px solid rgba(255,255,255,.12); }
 
   /* .fitem sets display:flex, which beats the UA rule behind [hidden] - so
@@ -97,8 +100,8 @@
   .bd { background:var(--card); border-bottom:1px solid var(--line); }
   #list > .bd:last-child { border-bottom:0; }
 
-  .bd-h { position:relative; display:flex; align-items:center; gap:11px;
-          padding:11px 15px 11px 16px; cursor:pointer; user-select:none;
+  .bd-h { position:relative; display:flex; align-items:stretch; gap:11px;
+          min-height:50px; padding:0 15px 0 16px; cursor:pointer; user-select:none;
           background:var(--card); color:var(--ink);
           transition:background .14s ease; }
   .bd-h:hover { background:var(--hover); }
@@ -109,6 +112,7 @@
   .bd:not(.shut) .bd-h::before { background:var(--gold); }
   .bd:not(.shut) .bd-h { background:var(--hover); }
   .bd-h .nm, .grand .nm, .lede .grp { position:relative; }
+  .bd-h .chev, .bd-h .nm { align-self:center; }
   .bd-h .chev { font-size:9px; color:var(--muted); transition:transform .16s; width:10px; }
   .bd.shut .chev { transform:rotate(-90deg); }
   .bd:not(.shut) .chev { color:var(--blue); }
@@ -117,8 +121,9 @@
               letter-spacing:-.1px; color:var(--ink); white-space:nowrap;
               overflow:hidden; text-overflow:ellipsis; }
   .bd-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
-  .bd-h .mini > div { width:var(--numw); text-align:center;
-                      border-left:1px solid var(--line); padding:2px 0; }
+  .bd-h .mini > div { width:var(--numw); display:flex; align-items:center;
+                      justify-content:center;
+                      border-left:1px solid var(--line); }
   .bd-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
                    color:var(--muted); }
   .bd-h .mini .n { font-size:15px; font-weight:700; color:var(--ink); }
@@ -153,16 +158,18 @@
               border-top:1px solid var(--line); }
 
   /* The last row of the table, not a card after it. */
-  .grand { display:flex; align-items:center; gap:11px; padding:14px 15px;
-           background:var(--gold); color:#1B2A4A; font-weight:700; }
+  .grand { display:flex; align-items:stretch; gap:11px; min-height:54px;
+           padding:0 15px; background:var(--gold); color:#1B2A4A; font-weight:700; }
+  .grand .pad, .grand .nm { align-self:center; }
   .grand .pad { width:10px; flex:none; }
   .grand .nm { width:var(--namew); flex:none; }
   .grand .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
                     opacity:.7; }
   .grand .nm { font-size:13px; letter-spacing:.5px; text-transform:uppercase; }
   .grand .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
-  .grand .mini > div { width:var(--numw); text-align:center; font-size:15.5px;
-                       border-left:1px solid rgba(27,42,74,.22); padding:2px 0; }
+  .grand .mini > div { width:var(--numw); display:flex; align-items:center;
+                       justify-content:center; font-size:15.5px;
+                       border-left:1px solid rgba(27,42,74,.22); }
 
   .empty { padding:26px 16px; text-align:center; color:var(--muted); font-size:13.5px; }
 
