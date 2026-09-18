@@ -48,6 +48,17 @@
   .banner { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
             border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
 
+  /* The workbook opens with two bands and so does this: the house name on
+     navy, the report and its month on gold. Same two lines, same order, same
+     colours as the file the office already circulates. */
+  .bands { border:1px solid var(--line); border-bottom:0; border-radius:14px 14px 0 0;
+           overflow:hidden; }
+  .bands .b1 { background:var(--navy); color:var(--gold); text-align:center;
+               font-size:19px; font-weight:800; letter-spacing:.6px; padding:10px 12px; }
+  .bands .b2 { background:var(--gold); color:#0B2C52; font-size:12.5px; font-weight:800;
+               letter-spacing:.8px; text-transform:uppercase; padding:7px 16px; }
+  .tablewrap.under { border-radius:0 0 14px 14px; }
+
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
                overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
@@ -72,8 +83,9 @@
   tbody tr.g:hover td, tbody tr.g:hover td:first-child { background:var(--hover); }
   tbody tr.cl td, tbody tr.cl td:first-child { background:var(--navy); color:var(--gold);
       font-weight:700; border-bottom:1px solid #22407F; }
-  tbody tr.gt td, tbody tr.gt td:first-child { background:var(--gold); color:#1B2A4A;
+  tbody tr.gt td, tbody tr.gt td:first-child { background:#2C3540; color:#FFFFFF;
       font-weight:800; height:38px; }
+  tbody tr.gt td:first-child { color:var(--gold); }
 
   td.nm .opener { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
                   user-select:none; }
@@ -89,6 +101,8 @@
       font-size:9.5px; letter-spacing:.5px; text-transform:uppercase; font-weight:700;
       color:#92400E; background:#FEF3C7; border-radius:20px; padding:2px 7px; }
 
+  .nil { color:#9AA3B2; font-weight:500; }
+  tr.cl .nil, tr.gt .nil { color:rgba(255,255,255,.45); }
   .d-up { color:var(--ok); font-weight:700; }
   .d-dn { color:var(--bad); font-weight:700; }
   .status { font-size:12.5px; color:var(--muted); margin:11px 2px; }
@@ -145,7 +159,11 @@
 </div>
 
 <div id="msg"></div>
-<div class="tablewrap"><table id="grid">
+<div class="bands">
+  <div class="b1">K.S DISTILLERY</div>
+  <div class="b2" id="bandSub">PURCHASE INSTRUCTION</div>
+</div>
+<div class="tablewrap under"><table id="grid">
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
@@ -159,7 +177,10 @@ const open = new Set();
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const num = n => (n === 0 || n == null) ? '0' : Number(n).toLocaleString('en-IN');
+// A nil instruction prints as a dash, the way the workbook prints it - a
+// column of zeros reads as data, a column of dashes reads as nothing asked for.
+const num = n => (!n) ? '<span class="nil">&ndash;</span>'
+                      : Number(n).toLocaleString('en-IN');
 
 const MEASURES = {mq:'MQ', rq:'RQ', rl:'RL', l3ms:'L3MS'};
 function shown(){ return measure === 'all' ? ['l3ms','rl','rq','mq'] : [measure]; }
@@ -243,9 +264,11 @@ function flag(d){
 function head(d){
   const ms = shown();
   const wide = ms.length > 1;
-  const groupRow = `<th rowspan="2">${esc(d.view === 'warehouse' ? 'Warehouse' : 'Bond')}</th>`
+  // "Row Labels" and the full brand names are the workbook's own wording, and
+  // the full name only fits when the brand owns four columns.
+  const groupRow = `<th rowspan="2">Row Labels</th>`
     + d.brands.map(b => wide
-        ? `<th class="grp" colspan="${ms.length}">${esc(b.short)}</th>`
+        ? `<th class="grp" colspan="${ms.length}">${esc(b.full)}</th>`
         : `<th class="grp" rowspan="2">${esc(b.short)}</th>`).join('')
     + (wide ? `<th class="grp" colspan="${ms.length}">Total</th>`
             : `<th class="grp" rowspan="2">Total</th>`)
@@ -285,6 +308,10 @@ function delta(r){
 }
 
 function render(d){
+  // The office reads its brands alphabetically by the full name; so does this.
+  d.brands = d.brands.slice().sort((a, b) => a.full.localeCompare(b.full));
+  bandSub.textContent =
+    `PURCHASE INSTRUCTION \u00b7 1 ${(d.month_label || '').toUpperCase()}`;
   grid.querySelector('thead').innerHTML = head(d);
   const span = 1 + (d.brands.length + 1) * shown().length + (d.prior ? 2 : 0);
 

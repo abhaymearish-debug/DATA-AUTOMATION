@@ -83,19 +83,6 @@
   .link { border:0; background:none; font:inherit; font-size:13px; color:var(--blue);
           cursor:pointer; padding:6px 2px; font-weight:600; }
 
-  /* ---------- KPIs ---------- */
-  .kpis { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); margin-bottom:18px; }
-  .kpi { position:relative; background:var(--card); border:1px solid var(--line); border-radius:12px;
-         padding:14px 16px 13px; overflow:hidden; }
-  .kpi::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent,var(--blue)); }
-  .kpi .l { font-size:10.5px; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); font-weight:650; }
-  .kpi .v { font-size:27px; font-weight:700; letter-spacing:-.5px; margin-top:3px;
-            font-variant-numeric:tabular-nums; line-height:1.15; }
-  .kpi .s { font-size:11.5px; color:var(--muted); margin-top:1px; }
-  .kpi .v .of { font-size:15px; font-weight:600; color:var(--muted); letter-spacing:0; }
-  .kpi .meter { height:4px; border-radius:3px; background:var(--line); margin-top:9px; overflow:hidden; }
-  .kpi .meter i { display:block; height:100%; border-radius:3px; background:var(--accent,var(--blue)); }
-
   /* ---------- shared column geometry ----------
      The strip above the list, the numbers on each warehouse bar and the
      columns inside an expanded table all use --numw, so the three figures
@@ -104,29 +91,31 @@
      same axis as the others. */
   :root { --numw:130px; }
 
-  .lede { display:flex; align-items:center; border:1px solid transparent;
-          padding:0 15px 8px; color:var(--muted); font-weight:700;
-          font-size:10.5px; letter-spacing:.75px; text-transform:uppercase; }
-  .lede .sp { margin-left:auto; display:flex; }
-  .lede .sp span { width:var(--numw); text-align:center; }
+  /* ---------- one table ----------
+     The warehouses used to be a stack of cards, each with its own table, so
+     twenty-eight of them read as twenty-eight documents. They are rows in one
+     table now: a navy row opens a warehouse, its stock sits underneath, and
+     the three figures stay on one axis the whole way down. */
+  .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
+               overflow:auto; max-height:calc(100vh - 210px);
+               box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  thead th { position:sticky; top:0; z-index:5; background:var(--navy); color:var(--gold);
+             font-size:9.5px; letter-spacing:.7px; text-transform:uppercase; font-weight:700;
+             text-align:center; padding:10px 8px; border-bottom:1px solid #22407F; }
+  thead th:first-child { text-align:left; padding-left:15px; }
 
-  /* ---------- warehouse cards ---------- */
-  .wh { background:var(--card); border:1px solid var(--line); border-radius:12px;
-        margin-bottom:12px; overflow:hidden; }
-  .wh-h { display:flex; align-items:center; gap:11px; padding:12px 15px 12px 15px; cursor:pointer;
-          background:linear-gradient(180deg,var(--navy-3),var(--navy)); color:#fff; user-select:none; }
-  .wh-h:hover { filter:brightness(1.12); }
-  .wh-h .chev { font-size:10px; opacity:.85; transition:transform .16s; width:10px; }
-  .wh.shut .chev { transform:rotate(-90deg); }
-  .wh.shut .wh-b { display:none; }
-  .wh-h .nm { font-weight:700; font-size:14px; letter-spacing:.35px; color:var(--gold); }
-  .wh-h .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
-              border:1px solid #3A4E8C; color:#AEC0EA; border-radius:20px; padding:2px 8px; }
-  .wh-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
-  .wh-h .mini > div { width:var(--numw); text-align:center; }
-  .wh-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:#94A7D6; }
-  .wh-h .mini .n { font-size:15px; font-weight:700; }
-  .wh-h .mini .n.amber { color:var(--gold); }
+  tbody tr.wh-r > td { background:linear-gradient(180deg,var(--navy-3),var(--navy)); color:#fff;
+                 cursor:pointer; user-select:none; height:38px; border-bottom:0;
+                 font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+  tbody tr.wh-r:hover > td { filter:brightness(1.12); }
+  tbody tr.wh-r > td.item { color:var(--gold); font-size:14px; letter-spacing:.35px; }
+  tr.wh-r .chev { display:inline-block; font-size:10px; opacity:.85; width:12px;
+                  transition:transform .16s; color:#fff; }
+  tr.wh-r.shut .chev { transform:rotate(-90deg); }
+  tr.wh-r .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
+                border:1px solid #3A4E8C; color:#AEC0EA; border-radius:20px; padding:2px 8px;
+                margin-left:9px; vertical-align:2px; }
+  tbody tr.wh-r > td.amber { color:var(--gold); }
 
   /* fixed layout so the declared column widths are honoured exactly; auto
      table layout was widening the last column and pushing it off the axis
@@ -141,7 +130,7 @@
              text-align:center; font-variant-numeric:tabular-nums; width:var(--numw); }
   tbody td:first-child { text-align:left; width:auto; padding-left:15px; }
   tbody tr:last-child td { border-bottom:0; }
-  tbody tr:hover td { background:var(--hover); }
+  tbody tr:not(.wh-r):hover td { background:var(--hover); }
   tr.g-start:first-child td { border-top:0; }
 
   td.item { font-weight:650; color:var(--ink); white-space:nowrap;
@@ -186,10 +175,6 @@
   /* On a phone a 4-column table cannot fit, so each item becomes a block:
      the name on its own line, then the three figures captioned underneath. */
   @media (max-width:620px){
-    .lede { display:none; }
-    .wh-h .mini { width:100%; }
-    .wh-h .mini > div { width:33.3%; }
-    .wh-h .mini .k { display:block; }
     tbody tr { display:block; padding:10px 13px; border-bottom:1px solid var(--line); }
     tbody tr:hover td { background:none; }
     tbody td { display:inline-block; height:auto; padding:0 !important; width:auto !important;
@@ -206,10 +191,6 @@
   }
 
   @media (max-width:760px){
-    .kpis { grid-template-columns:repeat(2,1fr); gap:9px; margin-bottom:14px; }
-    .kpi { padding:11px 12px 10px; border-radius:10px; }
-    .kpi .v { font-size:21px; }
-    .kpi .s { font-size:10.5px; }
     .searchwrap kbd { display:none; }
     input[type=search].search { padding-right:11px; }
     .controls { padding-bottom:11px; }
@@ -221,8 +202,6 @@
     .selw select { max-width:none; width:100%; }
     .fdiv { display:none; }
     .calpop { left:auto; right:0; }
-    .wh-h { flex-wrap:wrap; }
-    .wh-h .mini { margin-left:0; width:100%; justify-content:space-between; gap:8px; }
     tbody td, thead th { padding:0 9px; font-size:12.5px; }
     td.item .pk { margin-left:6px; padding:1px 5px; }
   }
@@ -286,12 +265,11 @@
 </div>
 
 <div id="msg"></div>
-<div class="kpis" id="kpis"></div>
-<div class="lede" id="lede">
-  <span>Warehouse</span>
-  <div class="sp"><span>Physical</span><span>Allotable</span><span>Pending</span></div>
-</div>
-<div id="list"><div class="wh"><div class="empty">Loading…</div></div></div>
+<div class="tablewrap"><table id="grid">
+  <colgroup><col><col class="num"><col class="num"><col class="last"></colgroup>
+  <thead><tr><th>Warehouse</th><th>Physical</th><th>Allotable</th><th>Pending</th></tr></thead>
+  <tbody id="list"><tr><td class="item" colspan="4"><div class="empty">Loading…</div></td></tr></tbody>
+</table></div>
 <div class="status" id="foot"></div>
 {% endblock %}
 
@@ -338,8 +316,8 @@ async function load(){
 
   if (d.error){
     msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`;
-    list.innerHTML = '<div class="wh"><div class="empty">No data</div></div>';
-    kpis.innerHTML = ''; foot.textContent = ''; return;
+    list.innerHTML = '<tr><td class="item" colspan="4"><div class="empty">No data</div></td></tr>';
+    foot.textContent = ''; return;
   }
   msg.innerHTML = '';
   DATA = d;
@@ -401,41 +379,20 @@ function render(){
 
     const body = brandGroups(rows);
 
-    return `<section class="wh ${isShut ? 'shut' : ''}">
-      <div class="wh-h" onclick="fold('${wh.name.replace(/'/g,"\\'")}')">
-        <span class="chev">▼</span>
-        <span class="nm">${escapeHtml(wh.name)}</span>
-        ${wh.cluster ? `<span class="cl">Cluster ${wh.cluster}</span>` : ''}
-        <div class="mini">
-          <div><div class="k">Physical</div><div class="n">${n(t.physical)}</div></div>
-          <div><div class="k">Allotable</div><div class="n">${n(t.allotable)}</div></div>
-          <div><div class="k">Pending</div><div class="n ${t.pending?'amber':''}">${n(t.pending)}</div></div>
-        </div>
-      </div>
-      <div class="wh-b">
-        <table>
-          <colgroup><col><col class="num"><col class="num"><col class="last"></colgroup>
-          <tbody>${body}
-          <tr class="tot"><td class="item">TOTAL<span class="cnt">${rows.length} items</span></td>
-            ${cell(t.physical,'Physical')}${cell(t.allotable,'Allotable')}${cell(t.pending,'Pending')}
-          </tr></tbody>
-        </table>
-      </div></section>`;
+    const safe = wh.name.replace(/'/g, "\\'");
+    return `<tr class="wh-r ${isShut ? 'shut' : ''}" onclick="fold('${safe}')">
+        <td class="item"><span class="chev">&#9660;</span>${escapeHtml(wh.name)}` +
+        (wh.cluster ? `<span class="cl">Cluster ${wh.cluster}</span>` : '') + `</td>
+        <td>${n(t.physical)}</td><td>${n(t.allotable)}</td>
+        <td class="${t.pending ? 'amber' : ''}">${n(t.pending)}</td></tr>`
+      + (isShut ? '' : body
+          + `<tr class="tot"><td class="item">TOTAL<span class="cnt">${rows.length} items</span></td>`
+          + cell(t.physical,'Physical') + cell(t.allotable,'Allotable')
+          + cell(t.pending,'Pending') + `</tr>`);
   }).join('');
 
-  kpis.innerHTML = [
-    ['Physical',  g.physical,  narrowed ? 'cases in this selection' : 'cases on hand', '#2563EB', 100],
-    ['Allotable', g.allotable, `${pct(g.allotable, g.physical)}% of physical`, '#059669', pct(g.allotable, g.physical)],
-    ['Pending',   g.pending,   `${pct(g.pending, g.physical)}% not yet allotable`, '#D97706', pct(g.pending, g.physical)],
-  ].map(([l,v,sub,c,w]) => `<div class="kpi" style="--accent:${c}">
-        <div class="l">${l}</div><div class="v">${n(v)}</div><div class="s">${sub}</div>
-        <div class="meter"><i style="width:${w}%"></i></div></div>`).join('')
-    + `<div class="kpi" style="--accent:#0D1B4A"><div class="l">Warehouses</div>
-        <div class="v">${shown}${narrowed ? `<span class="of"> of ${d.warehouses.length}</span>` : ''}</div>
-        <div class="s">snapshot ${escapeHtml(d.date)}</div>
-        <div class="meter"><i style="width:${pct(shown, d.warehouses.length)}%"></i></div></div>`;
-
-  list.innerHTML = html || `<div class="wh"><div class="empty">Nothing matches that.</div></div>`;
+  list.innerHTML = html ||
+    `<tr><td class="item" colspan="4"><div class="empty">Nothing matches that.</div></td></tr>`;
   foot.textContent = `${shown} of ${d.warehouses.length} warehouses · ${n(items)} items · snapshot ${d.date}`;
   foldBtn.textContent = shut.size >= shown && shown > 0 ? 'Expand all' : 'Collapse all';
 }

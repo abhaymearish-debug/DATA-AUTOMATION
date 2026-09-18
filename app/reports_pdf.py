@@ -764,7 +764,10 @@ def build_cumulative_view_pdf(data: dict, out_path: Path, *, scope: str = "All b
 #     header band   53.25pt navy, labels Bold 7.25 WHITE, 11.75 line pitch,
 #                   bracketed by 2pt gold rules and divided by 1.4pt gold
 #     columns       bond 104, cat 28, brands share 377.276, total 44, pct 42
-#     bond cell     navy, spans the pair; name Bold 10 white (gold on a total)
+#     bond cell     navy, spans the pair; name Bold 10 white (gold on a total).
+#                   The office sets BOND and the names against the left edge;
+#                   here they are centred, which is the one place this sheet
+#                   departs from theirs, and it was asked for.
 #     target row    grey 0.95 / gold 0.95,0.70,0.18 on a total row
 #     achieved row  white / gold 1,0.74,0.19 on a total row
 #     every cell    stroked 0.4pt in 0.78 grey; the pair closes on a 1.5pt navy
@@ -898,10 +901,6 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
     c.setFillColor(TA_WHITE)
     for i, label in enumerate(labels):
         x0, x1 = xs[i], xs[i + 1]
-        if i == 0:                      # BOND is the one label set against the edge
-            c.setFont(BOLD, TAF_HEAD)
-            c.drawString(TA_INSET, mid, label)
-            continue
         lines = _ta_wrap(label, TAF_HEAD, (x1 - x0) - TA_WRAP_PAD)
         first = mid + TA_PITCH * (len(lines) - 1) / 2
         for j, line in enumerate(lines):
@@ -941,10 +940,10 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
         c.setFillColor(ach_fill)
         c.rect(xs[-2], pair_bot, xs[-1] - xs[-2], TA_ROW_H * 2, stroke=1, fill=1)
 
-        # the name, on its navy, gold once the row is a total
+        # the name, centred on its navy, gold once the row is a total
         c.setFillColor(TA_GOLD_T if total else TA_WHITE)
-        c.setFont(BOLD, TAF_NAME)
-        c.drawString(TA_INSET, pair_bot + TA_ROW_H - 3.5, str(row.get("label", "")))
+        _ta_centre(c, xs[0], xs[1], pair_bot + TA_ROW_H - 3.5,
+                   str(row.get("label", "")), BOLD, TAF_NAME)
 
         body = BOLD if strong else BOOK
         for which, tag, line_y in (("tgt", "TGT", pair_top - TA_ROW_H + 11.85),

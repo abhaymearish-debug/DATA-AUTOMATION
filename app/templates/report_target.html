@@ -61,7 +61,8 @@
      cluster totals up, gold for the network - and ruled both ways, so every
      figure sits in a cell instead of floating in the row. */
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
-               overflow:auto; max-height:74vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+               overflow:auto; max-height:calc(100vh - 186px);
+               box-shadow:0 1px 2px rgba(16,24,40,.05); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
           table-layout:fixed; min-width:1180px; }
   col.c-nm { width:158px; } col.c-ty { width:84px; }
@@ -74,7 +75,7 @@
              border-bottom:1px solid #22407F;
              border-right:1px solid rgba(255,255,255,.10); }
   thead th:first-child { text-align:left; left:0; z-index:4; min-width:150px; padding-left:16px; }
-  thead th.ty { min-width:78px; text-align:left; }
+  thead th.ty { text-align:left; left:158px; z-index:4; }
   thead th:last-child { right:0; z-index:4; border-right:0; min-width:74px; }
 
   tbody td { height:29px; padding:0 9px; text-align:center; white-space:nowrap;
@@ -86,7 +87,8 @@
   tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card);
                  border-right:0; vertical-align:middle; font-weight:750; font-size:12.5px; }
   tbody td.ty { text-align:left; font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
-                font-weight:700; }
+                font-weight:700; position:sticky; left:158px; z-index:2;
+                background:var(--card); border-right:1px solid var(--line); }
 
   /* The two lines belong together, so the rule falls under the achieved one
      and never between them. */
@@ -94,7 +96,15 @@
   tbody tr.ach td.ty { color:var(--navy); }
   tbody tr.tgt td { border-bottom:1px solid #EEF1F6; }
   tbody tr.ach td { border-bottom:1px solid var(--line); }
-  tbody tr.hot td, tbody tr.hot td.nm, tbody tr.hot td.pct { background:var(--hover); }
+  /* The target line carries a shade the whole way across, the way the printed
+     sheet does, so the eye can tell at a glance which of the two it is on.
+     The name and the percentage span the pair, so they keep the pair's own
+     colour rather than half of each. */
+  tbody tr.b.tgt td:not(.nm):not(.pct) { background:var(--row); }
+  tbody tr.cl.tgt td:not(.nm):not(.pct) { background:var(--navy-3); }
+  tbody tr.gt.tgt td:not(.nm):not(.pct) { background:#F2A81A; }
+  tbody tr.hot td:not(.nm):not(.pct), tbody tr.hot td.nm,
+  tbody tr.hot td.pct { background:var(--hover); }
 
   tbody tr.cl td, tbody tr.cl td.nm, tbody tr.cl td.pct {
       background:var(--navy); color:var(--gold); border-right-color:#22407F; }

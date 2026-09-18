@@ -2224,76 +2224,104 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
 
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
-    navy, gold, ink = "FF0A294F", "FFFFBD30", "FF1B2A4A"
+    # The same sheet as the PDF, cell for cell: the office should not be able
+    # to tell which of the two it is looking at.
+    NAVY, GOLD, GOLD_D = "FF0A294F", "FFFFBD30", "FFF2B22E"
+    SHADE, INK, RED = "FFF2F2F2", "FF1B2A4A", "FFCF1322"
+    LINE = Side(style="thin", color="FFC7C7C7")
+    BOX = Border(left=LINE, right=LINE, top=LINE, bottom=LINE)
+
     cols = data["columns"]
+    labels = ["BOND", "CAT"] + [reports_pdf.TA_LABELS.get(c["key"], str(c["label"]).upper())
+                                for c in cols] + ["GRAND TOTAL", "ACH %"]
+    span = len(labels)
+    last_col = get_column_letter(span)
+
     wb = Workbook()
     ws = wb.active
     ws.title = f"TGT vs ACH {data['month'][:4]}"[:31]
+    ws.sheet_view.showGridLines = False
 
-    ws.append(["K.S DISTILLERY"])
-    ws["A1"].font = Font(bold=True, size=13, color=navy)
-    ws.append(["TARGET VS ACHIEVEMENT", "", "", "",
-               f"AS ON {window[1].strftime('%-d-%-m-%Y')}"])
-    ws["A2"].font = Font(bold=True, size=11)
-    ws["E2"].font = Font(bold=True, size=11, color="FF6B7280")
+    def band(row, text, fill, colour, size, align="center", height=None):
+        ws.cell(row=row, column=1, value=text)
+        ws.merge_cells(f"A{row}:{last_col}{row}")
+        for col in range(1, span + 1):
+            c = ws.cell(row=row, column=col)
+            c.fill = PatternFill("solid", fgColor=fill)
+            c.font = Font(bold=True, size=size, color=colour)
+            c.alignment = Alignment(horizontal=align, vertical="center")
+        if height:
+            ws.row_dimensions[row].height = height
+
+    end_day = data["period"]["to"]
+    as_on = (f"AS ON {int(end_day[8:10])} "
+             f"{reports_pdf._MONTH_ABBR[int(end_day[5:7]) - 1]} {end_day[:4]}")
+    title = "TARGET VS ACHIEVEMENT"
+    if cluster in (1, 2, 3):
+        title += f" - CLUSTER {cluster}"
+
+    band(1, "K.S DISTILLERY", NAVY, GOLD, 18, height=32)
+    band(2, title, GOLD, NAVY, 12, align="left", height=22)
+    # the as-on date sits at the far end of the same gold band
+    ws.unmerge_cells(f"A2:{last_col}2")
+    ws.merge_cells(f"A2:{get_column_letter(span - 4)}2")
+    ws.merge_cells(f"{get_column_letter(span - 3)}2:{last_col}2")
+    right = ws.cell(row=2, column=span - 3, value=as_on)
+    right.font = Font(bold=True, size=12, color=NAVY)
+    right.alignment = Alignment(horizontal="right", vertical="center")
+
     ws.append([])
+    head_row = 4
+    for i, label in enumerate(labels, start=1):
+        c = ws.cell(row=head_row, column=i, value=label)
+        c.fill = PatternFill("solid", fgColor=NAVY)
+        c.font = Font(bold=True, size=9.5, color="FFFFFFFF")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = BOX
+    ws.row_dimensions[head_row].height = 30
 
-    head = ["BOND", "CAT"] + [c["label"].upper() for c in cols] + ["GRAND TOTAL", "ACH %"]
-    ws.append(head)
-    for cell in ws[ws.max_row]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(bold=True, color=gold, size=9.5)
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    ws.row_dimensions[ws.max_row].height = 30
-    head_row = ws.max_row
+    rows = data["rows"]
+    has_bonds = any(r.get("kind") == "bond" for r in rows)
+    r = head_row
 
-    for row in data["rows"]:
-        for which, tag in (("tgt", "TGT"), ("ach", "ACH")):
-            line = [row["label"] if which == "tgt" else "", tag]
-            line += [row[which][c["key"]] for c in cols]
-            line.append(row[which + "_total"])
-            # The percentage belongs to the pair, so it is written once, on the
-            # target line, and the merge below makes it read as one cell.
-            line.append((row["pct"] / 100) if (which == "tgt" and row["pct"] is not None) else None)
-            ws.append(line)
+    for idx, row in enumerate(rows):
+        total = idx == len(rows) - 1
+        strong = total or (has_bonds and row.get("kind") == "cluster")
+        top, bottom = r + 1, r + 2
+        for which, tag, rr, fill in (("tgt", "TGT", top, GOLD_D if total else SHADE),
+                                     ("ach", "ACH", bottom, GOLD if total else "FFFFFFFF")):
+            line = [row["label"] if rr == top else None, tag]
+            line += [round(float(row[which].get(c["key"], 0) or 0)) for c in cols]
+            line.append(round(float(row.get(which + "_total", 0) or 0)))
+            line.append((row["pct"] / 100) if (rr == top and row["pct"] is not None) else None)
+            for i, value in enumerate(line, start=1):
+                c = ws.cell(row=rr, column=i, value=value)
+                c.border = BOX
+                c.alignment = Alignment(horizontal="center", vertical="center")
+                if i == 1:
+                    c.fill = PatternFill("solid", fgColor=NAVY)
+                    c.font = Font(bold=True, size=10, color=GOLD if total else "FFFFFFFF")
+                elif i == span:
+                    c.fill = PatternFill("solid", fgColor=GOLD if total else "FFFFFFFF")
+                    c.font = Font(bold=True, size=9.5, color=INK if total else RED)
+                    c.number_format = "0.0%"
+                else:
+                    c.fill = PatternFill("solid", fgColor=fill)
+                    c.font = Font(bold=strong or i in (2, span - 1), size=9.5, color=INK)
 
-        top, bottom = ws.max_row - 1, ws.max_row
-        last = len(head)
         ws.merge_cells(start_row=top, start_column=1, end_row=bottom, end_column=1)
-        ws.merge_cells(start_row=top, start_column=last, end_row=bottom, end_column=last)
-        ws.cell(row=top, column=1).alignment = Alignment(vertical="center")
-        pct_cell = ws.cell(row=top, column=last)
-        pct_cell.number_format = "0.0%"
-        pct_cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.merge_cells(start_row=top, start_column=span, end_row=bottom, end_column=span)
+        ws.row_dimensions[top].height = 18
+        ws.row_dimensions[bottom].height = 18
+        r = bottom
 
-        if row["kind"] in ("cluster", "grand"):
-            fill = PatternFill("solid", fgColor=gold if row["kind"] == "grand" else navy)
-            font = Font(bold=True, size=10,
-                        color=ink if row["kind"] == "grand" else gold)
-            for r in (top, bottom):
-                for cell in ws[r]:
-                    cell.fill = fill
-                    cell.font = font
-            pct_cell.number_format = "0.0%"
-
-    for r in range(head_row + 1, ws.max_row + 1):
-        for c in range(2, len(head)):
-            ws.cell(row=r, column=c).alignment = Alignment(horizontal="center")
-
-    ws.append([])
-    ws.append([f"All figures in cases. Achievement is total liquidation: shop sales "
-               f"{data['legs']['tertiary']:,.0f} + FED {data['legs']['fed']:,.0f} + BAR "
-               f"{data['legs']['bar']:,.0f} = {data['liquidation']:,.0f}. "
-               f"KSBC dispatches are excluded."])
-    ws.cell(row=ws.max_row, column=1).font = Font(size=9, color="FF6B7280")
-
-    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 7
-    for i in range(3, len(head) + 1):
-        ws.column_dimensions[get_column_letter(i)].width = 14
+    for i in range(3, span + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 13
     ws.freeze_panes = ws.cell(row=head_row + 1, column=3)
 
     label = data["period"]["short"].replace(" to ", " - ")
