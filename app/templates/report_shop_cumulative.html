@@ -60,17 +60,23 @@
   /* ---------- shared column geometry ----------
      The strip, each bond bar and the shop rows inside all use --numw, so the
      four figures sit on one axis whatever is open. */
-  :root { --numw:118px; }
+  :root { --numw:118px; --namew:184px; --clw:86px; --shw:72px; }
 
   /* The strip wears the grand-total theme - gold ground, navy lettering - so
      the table is book-ended by the same colour at top and bottom. */
   .lede { position:sticky; top:0; z-index:20;
           display:flex; align-items:center; gap:11px; margin-bottom:0;
-          padding:10px 15px; border-radius:10px 10px 0 0;
+          padding:10px 15px 10px 17px; border-radius:10px 10px 0 0;
           background:var(--gold); color:#1B2A4A;
           font-weight:800; font-size:10px; letter-spacing:1.1px;
           text-transform:uppercase; box-shadow:0 2px 10px rgba(16,24,40,.13); }
-  .lede .grp { color:#1B2A4A; }
+  /* The left of the row is three columns, not three things in a row. A chip
+     that starts wherever the bond name happens to end draws a ragged diagonal
+     down fifteen rows, which is most of what read as mess. */
+  .lede .pad { width:10px; flex:none; }
+  .lede .grp { width:var(--namew); flex:none; color:#1B2A4A; }
+  .lede .k-cl { width:var(--clw); flex:none; }
+  .lede .k-sh { width:var(--shw); flex:none; text-align:right; }
   .lede .sp { margin-left:auto; display:flex; }
   .lede .sp span { width:var(--numw); text-align:center; }
 
@@ -107,10 +113,13 @@
   .bd.shut .chev { transform:rotate(-90deg); }
   .bd:not(.shut) .chev { color:var(--blue); }
   .bd.shut .bd-b { display:none; }
-  .bd-h .nm { font-weight:700; font-size:14px; letter-spacing:-.1px; color:var(--ink); }
-  .bd-h .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
-              background:var(--chip); color:var(--chip-ink); border-radius:20px; padding:2px 8px; }
-  .bd-h .cnt { font-size:11.5px; color:var(--muted); }
+  .bd-h .nm { width:var(--namew); flex:none; font-weight:700; font-size:14px;
+              letter-spacing:-.1px; color:var(--ink); white-space:nowrap;
+              overflow:hidden; text-overflow:ellipsis; }
+  .bd-h .cl { width:var(--clw); flex:none; font-size:11.5px; color:var(--muted);
+              font-variant-numeric:tabular-nums; }
+  .bd-h .cnt { width:var(--shw); flex:none; text-align:right;
+               font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
   .bd-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
   .bd-h .mini > div { width:var(--numw); text-align:center; }
   .bd-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
@@ -148,9 +157,13 @@
   /* The last row of the table, not a card after it. */
   .grand { display:flex; align-items:center; gap:11px; padding:14px 15px;
            background:var(--gold); color:#1B2A4A; font-weight:700; }
+  .grand .pad { width:10px; flex:none; }
+  .grand .nm { width:var(--namew); flex:none; }
+  .grand .cl { width:var(--clw); flex:none; }
+  .grand .cnt { width:var(--shw); flex:none; }
   .grand .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
                     opacity:.7; }
-  .grand .nm { font-size:13.5px; letter-spacing:.5px; text-transform:uppercase; }
+  .grand .nm { font-size:13px; letter-spacing:.5px; text-transform:uppercase; }
   .grand .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
   .grand .mini > div { width:var(--numw); text-align:center; font-size:15.5px; }
 
@@ -263,7 +276,10 @@
 </div>
 
 <div class="lede" id="lede">
+  <span class="pad"></span>
   <span class="grp" id="ledeGroup">Bond</span>
+  <span class="k-cl">Cluster</span>
+  <span class="k-sh">Shops</span>
   <div class="sp"><span>Opening</span><span>Receipt</span><span>Sales</span><span>Closing</span></div>
 </div>
 <div id="list"><div class="bd"><div class="empty">Loading…</div></div></div>
@@ -481,8 +497,8 @@ function render(){
       <div class="bd-h" onclick="toggle('${esc(g.bond)}')">
         <span class="chev">▼</span>
         <span class="nm">${esc(g.bond.charAt(0) + g.bond.slice(1).toLowerCase())}</span>
-        ${g.cluster ? `<span class="cl">Cluster ${g.cluster}</span>` : ''}
-        <span class="cnt">${g.shops.length} shop${g.shops.length === 1 ? '' : 's'}</span>
+        <span class="cl">${g.cluster ? 'Cluster ' + g.cluster : '&mdash;'}</span>
+        <span class="cnt">${g.shops.length}</span>
         <div class="mini">
           <div><span class="k">Opening</span><div class="n">${num(g.totals[0])}</div></div>
           <div><span class="k">Receipt</span><div class="n">${num(g.totals[1])}</div></div>
@@ -510,7 +526,8 @@ function render(){
     const shown = [0,1,2,3].map(k => bonds.reduce((sum, g) => sum + g.totals[k], 0));
     const use = (term || fCluster.value || fBond.value || fWh.value) ? shown : t;
 
-    html += `<div class="grand"><span class="nm">Grand total</span><div class="mini">
+    html += `<div class="grand"><span class="pad"></span><span class="nm">Grand total</span>
+        <span class="cl"></span><span class="cnt"></span><div class="mini">
         <div><span class="k">Opening</span>${num(use[0])}</div>
         <div><span class="k">Receipt</span>${num(use[1])}</div>
         <div><span class="k">Sales</span>${num(use[2])}</div>

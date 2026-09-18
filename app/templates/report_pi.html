@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}Purchase Instruction{% endblock %}
+{% block heading %}Purchase Instruction{% endblock %}
+
+{% block head %}
+<style>
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg);
+              padding:2px 0 12px; margin:-4px 0 0; }
+  .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar1 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+  .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
+  .seg button { border:0; background:none; font:inherit; font-size:12.5px; font-weight:650;
+                color:var(--muted); padding:5px 11px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--card); color:var(--ink);
+                   box-shadow:0 1px 2px rgba(16,24,40,.12); }
+
+  /* The one thing this report exists to catch. A shop whose PI was never
+     generated prints as zeros and reads exactly like a shop KSBC cut to
+     nothing, so it is named here instead. */
+  .flag { background:#FEF3C7; border:1px solid #FDE68A; color:#7C4A03;
+          border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px; }
+  .flag .hd { display:flex; align-items:center; gap:10px; }
+  .flag b { color:#7C2D12; }
+  .flag .more { margin-left:auto; border:0; background:none; font:inherit; font-size:12.5px;
+                font-weight:650; color:#92400E; cursor:pointer; text-decoration:underline; }
+  .flag .list { display:none; margin-top:10px; padding-top:10px;
+                border-top:1px solid #FDE68A; column-count:3; column-gap:22px;
+                font-size:12px; line-height:1.75; }
+  .flag.open .list { display:block; }
+  .flag .list span { display:block; break-inside:avoid; }
+  .flag .list em { font-style:normal; color:#92400E; font-weight:650; }
+  .banner { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
+            border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
+
+  .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
+               overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
+  thead th { position:sticky; background:var(--navy); color:var(--gold); text-align:center;
+             vertical-align:middle; font-weight:700; font-size:9.5px; letter-spacing:.5px;
+             text-transform:uppercase; line-height:1.28; padding:9px 8px;
+             border-bottom:1px solid #22407F; border-right:1px solid rgba(255,255,255,.07); }
+  thead tr:first-child th { top:0; z-index:3; }
+  thead tr:nth-child(2) th { top:31px; z-index:3; }
+  thead th:first-child { text-align:left; left:0; z-index:4; min-width:190px; padding-left:16px; }
+  thead th.grp { border-right:1px solid rgba(255,255,255,.22); }
+
+  tbody td { height:31px; padding:0 9px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; color:var(--ink);
+             border-bottom:1px solid var(--line); }
+  tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
+                         background:var(--card); font-weight:650; padding-left:16px; }
+  tbody td.mq { font-weight:700; }
+  tbody td.edge { border-right:1px solid var(--line); }
+  tbody tr.g:nth-of-type(even) td, tbody tr.g:nth-of-type(even) td:first-child {
+      background:var(--row); }
+  tbody tr.g:hover td, tbody tr.g:hover td:first-child { background:var(--hover); }
+  tbody tr.cl td, tbody tr.cl td:first-child { background:var(--navy); color:var(--gold);
+      font-weight:700; border-bottom:1px solid #22407F; }
+  tbody tr.gt td, tbody tr.gt td:first-child { background:var(--gold); color:#1B2A4A;
+      font-weight:800; height:38px; }
+
+  td.nm .opener { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+                  user-select:none; }
+  td.nm .chev { width:9px; font-size:9px; color:var(--muted); transition:transform .16s;
+                flex:none; }
+  tr.open td.nm .chev { transform:rotate(90deg); color:var(--blue); }
+  tr.open td, tr.open td:first-child { background:#EEF3FD !important; }
+  tbody tr.shop td, tbody tr.shop td:first-child { background:#F7F9FC; font-size:12.5px;
+      height:28px; color:#3F4A5E; font-weight:500; border-bottom:1px solid #EEF1F6; }
+  tbody tr.shop td:first-child { padding-left:40px; }
+  tbody tr.shop:hover td, tbody tr.shop:hover td:first-child { background:#EDF1F8; }
+  tbody tr.shop.blank td:first-child::after { content:'no instruction'; margin-left:9px;
+      font-size:9.5px; letter-spacing:.5px; text-transform:uppercase; font-weight:700;
+      color:#92400E; background:#FEF3C7; border-radius:20px; padding:2px 7px; }
+
+  .d-up { color:var(--ok); font-weight:700; }
+  .d-dn { color:var(--bad); font-weight:700; }
+  .status { font-size:12.5px; color:var(--muted); margin:11px 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="bar1">
+    <div class="fbar">
+      <label class="fitem">
+        <span class="fi-k">Month</span>
+        <div class="selw"><select id="fMonth" onchange="load()"></select><i>&#9662;</i></div>
+      </label>
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Against</span>
+        <div class="selw"><select id="fPrior" onchange="load()"></select><i>&#9662;</i></div>
+      </label>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Group by</span>
+        <div class="seg" id="segView">
+          <button type="button" class="on" data-v="bond" onclick="setView('bond')">Bond</button>
+          <button type="button" data-v="warehouse" onclick="setView('warehouse')">Warehouse</button>
+        </div>
+      </div>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Show</span>
+        <div class="seg" id="segCols">
+          <button type="button" class="on" data-m="mq" onclick="setMeasure('mq')">MQ</button>
+          <button type="button" data-m="rq" onclick="setMeasure('rq')">RQ</button>
+          <button type="button" data-m="rl" onclick="setMeasure('rl')">RL</button>
+          <button type="button" data-m="l3ms" onclick="setMeasure('l3ms')">L3MS</button>
+          <button type="button" data-m="all" onclick="setMeasure('all')">All</button>
+        </div>
+      </div>
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Cluster</span>
+        <div class="selw"><select id="fCluster" onchange="load()">
+          <option value="0">All clusters</option>
+          <option value="1">Cluster 1</option>
+          <option value="2">Cluster 2</option>
+          <option value="3">Cluster 3</option>
+        </select><i>&#9662;</i></div>
+      </label>
+    </div>
+    <div class="sp">
+      <a class="act xl" id="xl" href="#">Download Excel</a>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+<div class="tablewrap"><table id="grid">
+  <thead><tr><th>Bond</th></tr></thead>
+  <tbody><tr><td>Loading…</td></tr></tbody>
+</table></div>
+<div class="status" id="foot"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let view = 'bond', measure = 'mq', DATA = null;
+const open = new Set();
+
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = n => (n === 0 || n == null) ? '0' : Number(n).toLocaleString('en-IN');
+
+const MEASURES = {mq:'MQ', rq:'RQ', rl:'RL', l3ms:'L3MS'};
+function shown(){ return measure === 'all' ? ['l3ms','rl','rq','mq'] : [measure]; }
+
+function params(){
+  const p = new URLSearchParams({view});
+  if (fMonth.value) p.set('month', fMonth.value);
+  if (fPrior.value) p.set('prior', fPrior.value);
+  if (+fCluster.value) p.set('cluster', fCluster.value);
+  return p;
+}
+function setView(v){
+  if (view === v) return;
+  view = v; open.clear();
+  segView.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  load();
+}
+function setMeasure(m){
+  if (measure === m) return;
+  measure = m;
+  segCols.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  if (DATA) render(DATA);
+}
+
+async function load(){
+  foot.textContent = 'Loading…';
+  let d;
+  try {
+    const res = await fetch('/api/pi-variance?' + params().toString());
+    d = await res.json();
+  } catch (e) {
+    msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
+    foot.textContent = ''; return;
+  }
+  if (d.error){
+    msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
+    grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
+    grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
+    foot.textContent = ''; return;
+  }
+  DATA = d;
+  fillMonths(d);
+  xl.href = '/reports/pi-variance/export.xlsx?' + params().toString();
+  flag(d);
+  render(d);
+}
+
+function fillMonths(d){
+  const opts = (d.months || []).map(m =>
+    `<option value="${m.key}"${m.key === d.month ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
+  if (fMonth.innerHTML !== opts) fMonth.innerHTML = opts;
+  const prior = `<option value="-">Nothing</option>` + (d.months || [])
+    .filter(m => m.key !== d.month)
+    .map(m => `<option value="${m.key}"${m.key === d.prior ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
+  if (fPrior.innerHTML !== prior) fPrior.innerHTML = prior;
+  if (!d.prior) fPrior.value = '-';
+}
+
+function flag(d){
+  const b = d.blanks || [];
+  if (!b.length){ msg.innerHTML = ''; return; }
+  const cases = b.reduce((n, x) => n + (x.prior_mq || 0), 0);
+  const live = b.filter(x => x.prior_mq > 0);
+  msg.innerHTML =
+    `<div class="flag" id="flag">
+       <div class="hd">
+         <div><b>${b.length} shop${b.length === 1 ? '' : 's'} came back with no instruction</b> —
+           the ERP had not generated a ${esc(d.month_label)} PI for them when the export was taken.
+           They are printed as zeros, which is not the same as KSBC giving them nothing.
+           ${cases ? `Between them they carried <b>${num(cases)} cases</b> of ${esc(d.prior_label || 'last month')} MQ.` : ''}
+         </div>
+         <button type="button" class="more" onclick="flag.classList.toggle('open')">Which ones</button>
+       </div>
+       <div class="list">
+         ${b.map(x => `<span>${esc(x.name)}${x.bond ? ' · ' + esc(x.bond) : ''}` +
+                      `${x.prior_mq ? ` <em>${num(x.prior_mq)} cs</em>` : ''}</span>`).join('')}
+       </div>
+     </div>`;
+}
+
+function head(d){
+  const ms = shown();
+  const wide = ms.length > 1;
+  const groupRow = `<th rowspan="2">${esc(d.view === 'warehouse' ? 'Warehouse' : 'Bond')}</th>`
+    + d.brands.map(b => wide
+        ? `<th class="grp" colspan="${ms.length}">${esc(b.short)}</th>`
+        : `<th class="grp" rowspan="2">${esc(b.short)}</th>`).join('')
+    + (wide ? `<th class="grp" colspan="${ms.length}">Total</th>`
+            : `<th class="grp" rowspan="2">Total</th>`)
+    + (d.prior ? `<th rowspan="2">${esc(d.prior_label)}<br>MQ</th><th rowspan="2">Δ</th>` : '');
+  const unitRow = wide
+    ? d.brands.concat([{code:'__t'}]).map(() =>
+        ms.map(m => `<th>${MEASURES[m]}</th>`).join('')).join('')
+    : '';
+  return `<tr>${groupRow}</tr>` + (wide ? `<tr>${unitRow}</tr>` : '');
+}
+
+function cells(cellSet, total){
+  const ms = shown();
+  let out = '';
+  for (const b of DATA.brands){
+    const c = cellSet[b.code] || {};
+    out += ms.map((m, i) => {
+      const cls = [m === 'mq' ? 'mq' : '', i === ms.length - 1 ? 'edge' : '']
+                    .filter(Boolean).join(' ');
+      return `<td${cls ? ` class="${cls}"` : ''}>${num(c[m] || 0)}</td>`;
+    }).join('');
+  }
+  out += ms.map((m, i) => {
+    const cls = [m === 'mq' ? 'mq' : '', i === ms.length - 1 ? 'edge' : '']
+                  .filter(Boolean).join(' ');
+    return `<td${cls ? ` class="${cls}"` : ''}>${num(total[m] || 0)}</td>`;
+  }).join('');
+  return out;
+}
+
+function delta(r){
+  if (!DATA.prior) return '';
+  const d = r.delta ?? 0;
+  const cls = d > 0 ? 'd-up' : d < 0 ? 'd-dn' : '';
+  return `<td>${num(r.prior_mq || 0)}</td>` +
+         `<td class="${cls}">${d > 0 ? '+' : ''}${num(d)}</td>`;
+}
+
+function render(d){
+  grid.querySelector('thead').innerHTML = head(d);
+  const span = 1 + (d.brands.length + 1) * shown().length + (d.prior ? 2 : 0);
+
+  let html = '';
+  for (const r of d.rows){
+    if (r.kind === 'group'){
+      const n = r.shops + (r.blank ? ` · ${r.blank} blank` : '');
+      html += `<tr class="g" data-key="${esc(r.key)}">
+          <td class="nm"><span class="opener" onclick="toggle('${esc(r.key)}')">
+            <span class="chev">&#9654;</span>${esc(r.label)}
+            <span style="color:var(--muted);font-weight:500;font-size:11.5px">${n}</span>
+          </span></td>${cells(r.cells, r.total)}${delta(r)}</tr>`;
+    } else {
+      html += `<tr class="${r.kind === 'grand' ? 'gt' : 'cl'}">
+          <td>${esc(r.label)}</td>${cells(r.cells, r.total)}${delta(r)}</tr>`;
+    }
+  }
+  grid.querySelector('tbody').innerHTML = html;
+  for (const k of open) paint(k, span);
+
+  const g = d.rows.find(r => r.kind === 'grand');
+  foot.textContent = g
+    ? `${esc(d.month_label)} · ${g.shops} shops · MQ ${num(g.total.mq)} cs · `
+      + `RL ${num(g.total.rl)} + RQ ${num(g.total.rq)} · L3MS ${num(g.total.l3ms)} btl`
+      + (d.prior ? ` · ${esc(d.prior_label)} MQ ${num(g.prior_mq)} (${g.delta > 0 ? '+' : ''}${num(g.delta)})` : '')
+      + (d.unknown_codes.length ? ` · unknown brand codes: ${d.unknown_codes.join(', ')}` : '')
+    : '';
+}
+
+function toggle(key){
+  const span = 1 + (DATA.brands.length + 1) * shown().length + (DATA.prior ? 2 : 0);
+  if (open.has(key)){
+    open.delete(key);
+    document.querySelectorAll(`tr.shop[data-of="${CSS.escape(key)}"]`).forEach(t => t.remove());
+    const row = document.querySelector(`tr.g[data-key="${CSS.escape(key)}"]`);
+    if (row) row.classList.remove('open');
+    return;
+  }
+  open.add(key);
+  paint(key, span);
+}
+
+function paint(key, span){
+  const row = document.querySelector(`tr.g[data-key="${CSS.escape(key)}"]`);
+  const shops = (DATA.shops || {})[key];
+  if (!row || !shops) return;
+  row.classList.add('open');
+  const html = shops.map(s =>
+    `<tr class="shop${s.blank ? ' blank' : ''}" data-of="${esc(key)}">
+       <td>${esc(s.name)}</td>${cells(s.cells, s.total)}` +
+    (DATA.prior ? `<td>${num(s.prior_mq || 0)}</td><td></td>` : '') + `</tr>`).join('');
+  row.insertAdjacentHTML('afterend', html);
+}
+
+load();
+</script>
+{% endblock %}

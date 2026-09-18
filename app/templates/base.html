@@ -290,7 +290,8 @@
       {{ nav_icon('drop') }}Liquidation Summary</a>
     <a class="item {% if page == 'target' %}active{% endif %}" href="/reports/target-achievement">
       {{ nav_icon('target') }}Target vs Achievement</a>
-    <a class="item soon">{{ nav_icon('clipboard') }}Purchase Instruction<span class="tag">soon</span></a>
+    <a class="item {% if page == 'pi' %}active{% endif %}" href="/reports/pi-variance">
+      {{ nav_icon('clipboard') }}Purchase Instruction</a>
     <a class="item soon">{{ nav_icon('badge') }}Permit Status<span class="tag">soon</span></a>
     <a class="item soon">{{ nav_icon('layers') }}WH Monthly Stock &amp; Sales<span class="tag">soon</span></a>
 

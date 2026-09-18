@@ -2300,3 +2300,134 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
     tmp = Path(tempfile.mkdtemp()) / f"TARGET vs ACHIEVEMENT ({label}).xlsx"
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
+
+
+# ---------------------------------------------------------------------------
+# Purchase instruction
+# ---------------------------------------------------------------------------
+
+
+@app.get("/reports/pi-variance", response_class=HTMLResponse)
+def pi_page(request: Request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        request, "report_pi.html",
+        {"user": user, "page": "pi", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", [])},
+    )
+
+
+def _pi_months(month: str = "", prior: str = "") -> tuple[str, str]:
+    """The month to show and the one to compare it with.
+
+    Default to the newest stored month against the one before it, because the
+    only question anyone opens this report with is 'what changed'.
+    """
+    have = [m["key"] for m in pi_mod.months()]
+    if not have:
+        return "", ""
+    month = month if month in have else have[0]
+    if prior == "-":
+        return month, ""
+    if prior in have and prior != month:
+        return month, prior
+    later = [m for m in have if m < month]
+    return month, (later[0] if later else "")
+
+
+@app.get("/api/pi-variance")
+def pi_data(request: Request, month: str = "", prior: str = "",
+            view: str = "bond", cluster: int = 0):
+    require_user(request)
+    if view not in ("bond", "warehouse"):
+        raise HTTPException(400, "Unknown view.")
+    cur, prev = _pi_months(month, prior)
+    if not cur:
+        return JSONResponse({"error": "No purchase instruction has been uploaded yet. "
+                                      "Upload a month's files on the Raw Data Upload page.",
+                             "months": []})
+    return JSONResponse(pi_mod.variance(cur, view=view,
+                                        cluster=cluster or None, prior=prev))
+
+
+@app.get("/reports/pi-variance/export.xlsx")
+def pi_xlsx(request: Request, month: str = "", prior: str = "",
+            view: str = "bond", cluster: int = 0):
+    require_user(request)
+    cur, prev = _pi_months(month, prior)
+    if not cur:
+        raise HTTPException(404, "No purchase instruction has been uploaded yet.")
+    data = pi_mod.variance(cur, view=view, cluster=cluster or None, prior=prev)
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+
+    import tempfile
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    navy, gold, ink = "FF0A294F", "FFFFBD30", "FF1B2A4A"
+    brands = data["brands"]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "PI " + data["month"]
+
+    top = [data["view"].title(), "Shops", "Blank"]
+    for b in brands:
+        top += [b["short"], "", "", ""]
+    top += ["L3MS", "RL", "RQ", "MQ"]
+    ws.append(top)
+    ws.append(["", "", ""] + ["L3MS", "RL", "RQ", "MQ"] * len(brands)
+              + ["Total", "Total", "Total", "Total"])
+    for r in (1, 2):
+        for cell in ws[r]:
+            cell.fill = PatternFill("solid", fgColor=navy)
+            cell.font = Font(bold=True, color=gold, size=9)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+    # One merged heading per brand, so four columns read as one brand's block.
+    col = 4
+    for _b in brands:
+        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 3)
+        col += 4
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 3)
+
+    for row in data["rows"]:
+        line = [row["label"], row["shops"], row["blank"] or ""]
+        for b in brands:
+            c = row["cells"][b["code"]]
+            line += [c["l3ms"], c["rl"], c["rq"], c["mq"]]
+        t = row["total"]
+        line += [t["l3ms"], t["rl"], t["rq"], t["mq"]]
+        ws.append(line)
+        if row["kind"] in ("cluster", "grand"):
+            fill = PatternFill("solid", fgColor=gold if row["kind"] == "grand" else navy)
+            font = Font(bold=True, size=10, color=ink if row["kind"] == "grand" else gold)
+            for cell in ws[ws.max_row]:
+                cell.fill = fill
+                cell.font = font
+
+    for r in range(3, ws.max_row + 1):
+        for c in range(2, len(top) + 1):
+            ws.cell(row=r, column=c).alignment = Alignment(horizontal="center")
+    ws.column_dimensions["A"].width = 24
+    for i in range(2, len(top) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 10
+    ws.freeze_panes = ws.cell(row=3, column=2)
+
+    if data["blanks"]:
+        b = wb.create_sheet("No instruction")
+        b.append(["Bond", "Shop", "Last month MQ"])
+        for cell in b[1]:
+            cell.fill = PatternFill("solid", fgColor=navy)
+            cell.font = Font(bold=True, color=gold, size=10)
+        for x in data["blanks"]:
+            b.append([x["bond"], x["name"], x["prior_mq"] or ""])
+        b.column_dimensions["A"].width = 20
+        b.column_dimensions["B"].width = 38
+        b.column_dimensions["C"].width = 15
+
+    tmp = Path(tempfile.mkdtemp()) / f"PURCHASE INSTRUCTION ({data['month_label']}).xlsx"
+    wb.save(tmp)
+    return FileResponse(tmp, filename=tmp.name)
