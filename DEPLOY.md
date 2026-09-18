@@ -6,9 +6,12 @@ Two things to know before you start.
 (every shop code, name and bond) and the 81 build scripts. Neither belongs on
 the public internet.
 
-**The disk is not optional.** The workbooks *are* the data — a month's earlier
-days exist only inside them. A service without a disk comes up empty after
-every deploy. `render.yaml` asks for a 5 GB disk on the Starter plan.
+**Right now this deploys on the FREE plan, which has no disk.** The workbooks
+*are* the data, so on free every deploy, restart or wake-from-sleep starts the
+workspace empty and the raws have to go in again. Free instances also sleep
+after 15 minutes idle and take about a minute to wake. Good enough to prove the
+app works and to show someone; not what to run the month on. `render.yaml`
+says how to switch to Starter with a 5 GB disk — three lines and a push.
 
 ---
 
