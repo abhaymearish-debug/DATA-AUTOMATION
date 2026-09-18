@@ -1,0 +1,15 @@
+# K.S. Distillery Report Transformer — backend dependencies
+#
+# openpyxl is PINNED. The existing build scripts depend on documented
+# behaviour of openpyxl 3.1.5 (legacy-comment VML box sizes, style-only
+# merged-range interiors, chart round-tripping). Do not float this version.
+openpyxl==3.1.5
+
+fastapi==0.141.1
+uvicorn[standard]==0.46.0
+python-multipart==0.0.20
+itsdangerous==2.2.0
+Jinja2==3.1.6
+
+# Used by the existing scripts
+reportlab==4.2.5

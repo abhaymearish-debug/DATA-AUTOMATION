@@ -1,0 +1,27 @@
+# Render blueprint for the KSD Report Transformer.
+#
+# One web service, one persistent disk. The disk is not optional: the workbooks
+# ARE the data - a month's earlier days exist only inside them - and a service
+# without a disk starts empty after every deploy.
+services:
+  - type: web
+    name: ksd-report-transformer
+    runtime: docker
+    plan: starter            # a disk requires a paid instance
+    region: singapore        # nearest to Kerala of Render's regions
+    healthCheckPath: /login
+    disk:
+      name: ksd-data
+      mountPath: /data       # matches KSD_WORKSPACE_ROOT below
+      sizeGB: 5
+    envVars:
+      - key: KSD_WORKSPACE_ROOT
+        value: /data/workspace
+      - key: KSD_SESSION_SECRET
+        generateValue: true  # Render makes one and keeps it; never in the repo
+      - key: KSD_ALLOWED_EMAILS
+        value: abhaymearish@gmail.com
+      - key: KSD_COOKIE_SECURE
+        value: "1"           # Render serves HTTPS, so the cookie can insist on it
+      - key: PYTHONUNBUFFERED
+        value: "1"

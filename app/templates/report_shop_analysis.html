@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Shop Sales - Analysis{% endblock %}
+{% block heading %}Shop Sales - Analysis{% endblock %}
+
+{% block head %}
+{% include '_calendar.html' %}
+<style>
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg); padding:2px 0 14px; }
+  .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar1 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fitem:focus-within { background:var(--hover); box-shadow:inset 0 0 0 1px #C7D2FE; }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+  .fi-v { display:flex; align-items:center; gap:7px; border:0; background:none; padding:0;
+          font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+          cursor:pointer; white-space:nowrap; }
+  .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
+  .warn { display:inline-block; font-size:12px; font-weight:650; color:#92400E;
+          background:#FEF3C7; border:1px solid #FDE68A; border-radius:20px; padding:4px 11px; }
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; max-width:196px;
+                 text-overflow:ellipsis; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+  .vs { font-size:12.5px; color:var(--muted); flex:0 1 auto; min-width:0;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          overflow:auto; }
+  /* Fixed layout, so a header and the figures under it sit on one axis. Auto
+     layout was stretching CM / LM / TREND and pulling the numbers off it. */
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
+          table-layout:fixed; min-width:1040px; }
+  col.bond { width:170px; }
+  col.num  { width:80px; }
+  col.pct  { width:86px; }
+  col.avg  { width:74px; }
+  col.trend{ width:96px; }
+
+  thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:#fff;
+             font-weight:700; font-size:10px; letter-spacing:.4px; text-transform:uppercase;
+             padding:7px 6px; text-align:center; line-height:1.28;
+             border-bottom:1px solid #22407F; }
+  thead th.grp { color:var(--gold); border-bottom:1px solid rgba(255,189,48,.45); }
+  thead th:first-child { left:0; z-index:4; text-align:left; padding-left:15px; }
+
+  tbody td { padding:0 6px; height:36px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); }
+  tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
+                         padding-left:15px; font-weight:600; overflow:hidden;
+                         text-overflow:ellipsis; }
+
+  tr.bond td { background:var(--card); }
+  tr.bond.alt td { background:var(--row); }
+  tr.bond:hover td { background:var(--hover); }
+  tr.cluster td { background:var(--navy); color:var(--gold); font-weight:700;
+                  border-top:2px solid var(--gold); border-bottom:2px solid var(--gold); }
+  tr.grand td { background:var(--gold); color:#1B2A4A; font-weight:700; }
+
+  /* Sell-through is the column the office reads first, so it keeps its own
+     wash: amber from 40 per cent, pink below. */
+  td.sell { font-weight:700; }
+  tr.bond td.sell.hi { background:#FFE0B2; color:#E65100; }
+  tr.bond td.sell.lo { background:#FFCCD1; color:#C62828; }
+  tr.bond.alt td.sell.hi { background:#FFDCA8; }
+  tr.bond.alt td.sell.lo { background:#FFC5CB; }
+  tr.cluster td.sell.hi { color:#FFB74D; }
+  tr.cluster td.sell.lo { color:#E57373; }
+  tr.grand td.sell.hi { color:#E65100; }
+  tr.grand td.sell.lo { color:#C62828; }
+
+  .tr { display:inline-flex; align-items:center; gap:5px; font-weight:700; }
+  .tr .ar { font-size:10px; line-height:1; }
+  tr.bond .up, tr.grand .up { color:#3F8600; }
+  tr.bond .dn, tr.grand .dn { color:#CF1322; }
+  tr.cluster .up { color:#90EE90; }
+  tr.cluster .dn { color:#FFB6C1; }
+
+  .empty { background:var(--card); border:1px solid var(--line); border-radius:12px;
+           padding:34px 22px; text-align:center; color:var(--muted); font-size:13.5px; }
+
+  /* Same empty state as the cumulative screen: a window nobody has pulled yet
+     is a normal request, so it gets an answer rather than a bare sentence. */
+  .nodata { background:var(--card); border:1px solid var(--line); border-radius:12px;
+            padding:46px 24px 42px; text-align:center; }
+  .nodata .ic { width:52px; height:52px; margin:0 auto 15px; border-radius:14px;
+                display:flex; align-items:center; justify-content:center;
+                background:#EEF2FB; color:var(--navy); }
+  .nodata h3 { margin:0 0 7px; font-size:16px; font-weight:750; color:var(--ink);
+               letter-spacing:-.2px; }
+  .nodata p { margin:0 auto; max-width:560px; font-size:13.5px; line-height:1.55;
+              color:var(--muted); }
+  .nodata .acts { display:flex; justify-content:center; flex-wrap:wrap; gap:9px;
+                  margin-top:19px; }
+  .nodata .have { margin-top:17px; font-size:12px; color:var(--muted); }
+  .nodata .have b { color:var(--ink); font-weight:650; }
+  .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
+
+  @media (max-width:860px){
+    .bar1 .sp { margin-left:0; width:100%; }
+    .fbar { width:100%; flex-wrap:wrap; }
+    .fitem { flex:1 1 44%; padding:7px 11px; }
+    .selw select { max-width:none; width:100%; }
+    .fdiv { display:none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not periods %}
+  <div class="empty">
+    No cumulative period has been uploaded yet.<br>
+    Upload a <strong>Shop Sales - Cumulative</strong> raw file and this sheet builds itself.
+  </div>
+{% else %}
+{% set qs = 'date_from=' ~ chosen.start ~ '&date_to=' ~ chosen.end ~ ('&cluster=' ~ cluster if cluster else '') ~ ('&bond=' ~ bond if bond else '') %}
+<div class="controls">
+  <form method="get" class="bar1" id="f">
+    <div class="fbar">
+      <div class="fitem" id="calWrap" style="position:relative">
+        <span class="fi-k">Period</span>
+        <button type="button" class="fi-v" onclick="Cal.open(event)">
+          <span id="calLabel">{{ chosen.short if chosen else (asked.short if asked else 'Pick a period') }}</span><i>▾</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
+      <input type="hidden" name="date_from" id="dFrom" value="{{ chosen.start if chosen else (asked.start if asked else '') }}">
+      <input type="hidden" name="date_to" id="dTo" value="{{ chosen.end if chosen else (asked.end if asked else '') }}">
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Cluster</span>
+        <div class="selw"><select name="cluster" onchange="f.submit()">
+          <option value="0">All clusters</option>
+          {% for c in [1, 2, 3] %}
+          <option value="{{ c }}" {% if cluster == c %}selected{% endif %}>Cluster {{ c }}</option>
+          {% endfor %}
+        </select><i>▾</i></div>
+      </label>
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Bond</span>
+        <div class="selw"><select name="bond" onchange="f.submit()">
+          <option value="">All bonds</option>
+          {% for b in bonds %}
+          <option value="{{ b }}" {% if bond == b %}selected{% endif %}>{{ b.title() }}</option>
+          {% endfor %}
+        </select><i>▾</i></div>
+      </label>
+    </div>
+    <span class="vs">
+      {% if not no_data %}
+        {% if prev %}vs {{ prev.short }}{% else %}No matching window last month, so LM reads zero{% endif %}
+        {% if chain and chain|length > 1 %}<span class="warn">stitched from {{ chain|length }} uploads</span>{% endif %}
+      {% endif %}
+    </span>
+    <div class="sp">
+      {% if not no_data %}
+        <a class="act" href="/reports/shop-analysis/export.xlsx?{{ qs }}">Download Excel</a>
+        <a class="act primary" href="/reports/shop-analysis/export.pdf?{{ qs }}">Download PDF</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% if no_data %}
+  <div class="nodata">
+    <div class="ic">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round">
+        <rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>
+        <path d="M9 15.5l6 3M15 15.5l-6 3"/></svg>
+    </div>
+    <h3>No raw data for {{ asked.short if asked else 'that period' }}</h3>
+    <p>{{ no_data }}</p>
+    <div class="acts">
+      <a class="act primary" href="/">Upload raw data</a>
+      <button type="button" class="act" onclick="Cal.open(event)">Pick another period</button>
+      {% if suggest %}
+        <button type="button" class="act" onclick="useSuggested()">
+          Show {{ suggest.short }} instead</button>
+      {% endif %}
+    </div>
+    {% if calendar.periods %}
+      <div class="have">Uploaded so far:
+        {% for p in calendar.periods[:4] %}<b>{{ p.short }}</b>{% if not loop.last %}, {% endif %}{% endfor %}
+        {% if calendar.periods | length > 4 %} and {{ calendar.periods | length - 4 }} more{% endif %}
+      </div>
+    {% endif %}
+  </div>
+{% elif not rows %}
+  <div class="empty">Nothing matches that filter.</div>
+{% else %}
+<div class="wrap">
+  <table>
+    <colgroup>
+      <col class="bond"><col class="num"><col class="num"><col class="num"><col class="num">
+      <col class="num"><col class="pct"><col class="pct">
+      <col class="avg"><col class="avg"><col class="trend">
+    </colgroup>
+    <thead>
+      <tr>
+        <th rowspan="2">Bond</th>
+        <th rowspan="2">Opening</th>
+        <th rowspan="2">Receipt</th>
+        <th rowspan="2">Sales</th>
+        <th rowspan="2">Closing</th>
+        <th rowspan="2">Stock<br>Net</th>
+        <th rowspan="2">Stock<br>Net %</th>
+        <th rowspan="2">Sell-<br>through %</th>
+        <th class="grp" colspan="3">Average sales / day</th>
+      </tr>
+      <tr><th>CM</th><th>LM</th><th>Trend</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="{{ 'cluster' if r.kind == 'cluster' else ('grand' if r.kind == 'total' else 'bond') }}{% if r.kind == 'bond' and loop.index0 % 2 == 1 %} alt{% endif %}">
+        <td>{{ r.label }}</td>
+        {% for v in r.cells %}<td>{{ v }}</td>{% endfor %}
+        <td>{{ r.net_pct }}</td>
+        <td class="sell {{ 'hi' if r.amber else 'lo' }}">{{ r.sell }}</td>
+        <td>{{ r.cm }}</td>
+        <td>{{ r.lm }}</td>
+        <td>
+          <span class="tr {{ 'up' if r.up else 'dn' }}">
+            <span class="ar">{{ '▲' if r.up else '▼' }}</span>{{ '+' if r.up else '-' }}{{ r.trend }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="status">
+  Cases, rounded to whole numbers. Every figure is rounded from its own unrounded total, so a
+  column can read one apart from the sum of the rows above it and both be right.
+  Averages are over {{ chosen.days }} day{{ '' if chosen.days == 1 else 's' }}.
+</p>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const cal = {{ calendar | tojson }};
+  const days = new Set(cal.days || []);
+  for (const p of cal.periods || []){
+    let d = new Date(p.from + 'T00:00:00'), end = new Date(p.to + 'T00:00:00');
+    while (d <= end){ days.add(d.toISOString().slice(0,10)); d.setDate(d.getDate() + 1); }
+  }
+  // Reachable from the empty state's inline onclick, so it hangs off window.
+  window.useSuggested = function(){
+    dFrom.value = '{{ suggest.from if suggest else "" }}';
+    dTo.value   = '{{ suggest.to if suggest else "" }}';
+    document.getElementById('f').submit();
+  };
+  Cal.init(dFrom.value, dTo.value, (from, to) => {
+    dFrom.value = from; dTo.value = to; document.getElementById('f').submit();
+  });
+  Cal.setData([...days], cal.periods || []);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+{% block title %}Secondary Sales - Cumulative{% endblock %}
+{% block heading %}Secondary Sales - Cumulative{% endblock %}
+
+{% block head %}
+{% include '_calendar.html' %}
+<style>
+  /* The same control bar as Shop Sales - Cumulative: one row of labelled
+     filters, the exports on the right. */
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg);
+              padding:2px 0 14px; margin:-4px 0 0; }
+  .bar1, .bar2 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar2 { margin-top:10px; }
+  .bar1 .sp, .bar2 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fitem:focus-within { background:var(--hover); box-shadow:inset 0 0 0 1px #C7D2FE; }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+  .fi-v { display:flex; align-items:center; gap:7px; border:0; background:none; padding:0;
+          font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+          cursor:pointer; white-space:nowrap; }
+  .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; max-width:196px; text-overflow:ellipsis; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+  .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
+  .seg button { border:0; background:none; font:inherit; font-size:12.5px; font-weight:650;
+                color:var(--muted); padding:5px 12px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--card); color:var(--ink);
+                   box-shadow:0 1px 2px rgba(16,24,40,.12); }
+  .link { border:0; background:none; font:inherit; font-size:13px; color:var(--blue);
+          cursor:pointer; padding:6px 2px; font-weight:600; }
+  .chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted);
+         cursor:pointer; }
+  .fitem[hidden] { display:none !important; }
+
+  /* Drill-down: a group row opens into the shops inside it, on the same
+     brand columns as the row above. */
+  tbody tr.grp td:first-child { cursor:pointer; user-select:none; }
+  tbody tr.grp .nm { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+  tbody tr.grp .chev { display:inline-block; width:9px; font-size:9px; color:var(--muted);
+                       transition:transform .16s; flex:none; }
+  tbody tr.grp.open .chev { transform:rotate(90deg); color:var(--blue); }
+  tbody tr.grp.open td, tbody tr.grp.open td:first-child,
+  tbody tr.grp.open td:last-child { background:#EEF3FD; }
+
+  tbody tr.shop td, tbody tr.shop td:first-child, tbody tr.shop td:last-child {
+      background:#F7F9FC; font-size:12.5px; height:36px; color:#3F4A5E;
+      border-bottom:1px solid #EEF1F6; }
+  tbody tr.shop td:first-child { padding-left:38px; font-weight:500; }
+  /* the shop rows set their own colour, so the dimmed zero has to say it again */
+  tbody tr.shop td.zero { color:#C2C9D6; }
+  tbody tr.shop:hover td, tbody tr.shop:hover td:first-child,
+  tbody tr.shop:hover td:last-child { background:#EDF1F8; }
+  tbody tr.note td { background:#F7F9FC; color:var(--muted); font-size:12.5px;
+                     padding-left:38px; text-align:left; }
+
+  /* ---------- the table ----------
+     One axis for every figure: numbers are centred under their brand, names
+     stay left, and the head, the cluster bands and the grand total wear the
+     same navy-and-gold the rest of the app uses. */
+  .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
+               overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
+
+  thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);
+             text-align:center; vertical-align:middle; font-weight:700; font-size:10.5px;
+             letter-spacing:.5px; text-transform:uppercase; line-height:1.35;
+             padding:13px 12px; border-bottom:1px solid #22407F;
+             border-right:1px solid rgba(255,255,255,.07); }
+  thead th:first-child { text-align:left; left:0; z-index:4; min-width:212px;
+                         padding-left:16px; }
+  thead th:last-child { right:0; z-index:4; border-right:0; }
+
+  tbody td { height:42px; padding:0 12px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; color:var(--ink);
+             border-bottom:1px solid var(--line); }
+  tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
+                         background:var(--card); font-weight:650; padding-left:16px; }
+  tbody td:last-child { position:sticky; right:0; z-index:2; background:var(--card);
+                        font-weight:700; }
+  tbody tr.grp:hover td { background:var(--hover); }
+  tbody tr.grp:nth-of-type(even) td { background:var(--row); }
+  tbody tr.grp:nth-of-type(even) td:first-child,
+  tbody tr.grp:nth-of-type(even) td:last-child { background:var(--row); }
+
+  tbody tr.cluster td, tbody tr.cluster td:first-child, tbody tr.cluster td:last-child {
+      background:var(--navy); color:var(--gold); font-weight:700; font-size:12.5px;
+      letter-spacing:.4px; border-bottom:1px solid #22407F; }
+
+  tfoot td, tfoot td:first-child, tfoot td:last-child {
+      position:sticky; bottom:0; z-index:3; background:var(--gold); color:#1B2A4A;
+      font-weight:800; font-size:13.5px; height:46px; padding:0 12px; text-align:center; }
+  tfoot td:first-child { text-align:left; left:0; z-index:4; letter-spacing:.5px;
+                         padding-left:16px; }
+  tfoot td:last-child { right:0; z-index:4; }
+
+  td.zero { color:var(--zero); font-weight:400; }
+  .meta { font-size:11.5px; color:var(--muted); font-weight:400; display:block; }
+  .status { font-size:13px; color:var(--muted); margin:10px 2px; }
+  .menu { position:relative; display:inline-block; }
+  .menu .items { display:none; position:absolute; right:0; top:112%; background:var(--card);
+                 border:1px solid var(--line); border-radius:10px; min-width:248px; z-index:40;
+                 box-shadow:0 10px 28px rgba(16,24,40,.14); overflow:hidden; }
+  .menu.open .items { display:block; }
+  .menu .items a { display:block; padding:10px 14px; font-size:13.5px; cursor:pointer; }
+  .menu .items a:hover { background:var(--hover); }
+  .menu .items a .sub { display:block; font-size:11px; color:var(--muted); margin-top:1px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="bar1">
+    <div class="fbar">
+      <div class="fitem" id="calWrap" style="position:relative">
+        <span class="fi-k">Period</span>
+        <button type="button" class="fi-v" onclick="Cal.open(event)">
+          <span id="calLabel">Pick a period</span><i>&#9662;</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Group by</span>
+        <div class="seg" id="seg">
+          <button type="button" class="on" data-view="bond" onclick="setView('bond')">Bond</button>
+          <button type="button" data-view="warehouse" onclick="setView('warehouse')">Warehouse</button>
+        </div>
+      </div>
+      <span class="fdiv"></span>
+      <label class="fitem" id="wrapBond">
+        <span class="fi-k">Bond</span>
+        <div class="selw"><select id="fBond" onchange="load()">
+          <option value="">All bonds</option>
+        </select><i>&#9662;</i></div>
+      </label>
+      <label class="fitem" id="wrapWh" hidden>
+        <span class="fi-k">Warehouse</span>
+        <div class="selw"><select id="fWh" onchange="load()">
+          <option value="">All warehouses</option>
+        </select><i>&#9662;</i></div>
+      </label>
+    </div>
+    <div class="sp">
+      <div class="menu" id="xlMenu">
+        <button type="button" class="act" onclick="toggleMenu('xlMenu')">Download Excel &#9662;</button>
+        <div class="items">
+          <a onclick="dl('excel','')">Current view<span class="sub">exactly what is on screen</span></a>
+        </div>
+      </div>
+      <div class="menu" id="pdfMenu">
+        <button type="button" class="act primary" onclick="toggleMenu('pdfMenu')">Download PDF &#9662;</button>
+        <div class="items">
+          <a onclick="dlPdf('clusters')">All clusters<span class="sub">3 files, one per ASM cluster</span></a>
+          <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar2">
+    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
+    <div class="sp">
+      <button type="button" class="link" onclick="resetAll()">Reset filters</button>
+      <button type="button" class="act" onclick="load(true)">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+<div class="tablewrap"><table id="grid">
+  <thead><tr><th>Bond</th></tr></thead>
+  <tbody><tr><td>Loading…</td></tr></tbody>
+</table></div>
+<div class="status" id="foot"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let view = 'bond';
+let filled = false;
+let FROM = '', TO = '';
+
+function toggleMenu(id){
+  document.querySelectorAll('.menu').forEach(m => { if (m.id !== id) m.classList.remove('open'); });
+  document.getElementById(id).classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu')) document.querySelectorAll('.menu').forEach(m => m.classList.remove('open'));
+});
+
+function setView(v){
+  if (view === v) return;
+  view = v;
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  // Bond or warehouse, never both: the list is cut one way or the other, so
+  // the filter that does not apply steps aside instead of contradicting it.
+  const byBond = v === 'bond';
+  wrapBond.hidden = !byBond;
+  wrapWh.hidden = byBond;
+  if (byBond) fWh.value = ''; else fBond.value = '';
+  openGroups.clear(); shopCache = {};
+  load();
+}
+
+function params(){
+  const p = new URLSearchParams({ view });
+  if (fBond.value) p.set('bond', fBond.value);
+  if (fWh.value)   p.set('warehouse', fWh.value);
+  if (FROM) p.set('date_from', FROM);
+  if (TO)   p.set('date_to', TO);
+  if (round.checked) p.set('round_off', '1');
+  return p;
+}
+
+function onPick(from, to){ FROM = from; TO = to; load(); }
+
+function resetAll(){
+  fBond.value = ''; fWh.value = ''; round.checked = false;
+  openGroups.clear();
+  FROM = SPAN.min || ''; TO = SPAN.max || '';
+  Cal.init(FROM, TO, onPick);
+  load();
+}
+
+let SPAN = {min:'', max:''};
+
+async function load(refresh){
+  // A different window or filter means the cached shop rows describe a report
+  // that is no longer on screen.
+  shopCache = {};
+  const p = params();
+  if (refresh) p.set('refresh', '1');
+  foot.textContent = 'Loading…';
+  let d;
+  try {
+    const res = await fetch('/api/reports/brandwise?' + p.toString());
+    d = await res.json();
+  } catch (e) {
+    msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
+    foot.textContent = ''; return;
+  }
+  if (d.error){
+    msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`;
+    grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
+    foot.textContent = ''; return;
+  }
+  msg.innerHTML = d.unmapped && d.unmapped.length
+    ? `<div class="note"><strong>${d.unmapped.length} outlet(s)</strong> dispatched but not found in master
+       data, so they carry no bond: ${d.unmapped.slice(0,6).map(escapeHtml).join(', ')}${d.unmapped.length>6?'…':''}.
+       They are counted in the totals and grouped under “(unmapped)”.</div>`
+    : '';
+
+  SPAN = d.span || SPAN;
+  if (!filled){
+    fill(fBond, d.bonds, 'All bonds');
+    fill(fWh, d.warehouses, 'All warehouses');
+    if (d.span.min && !FROM){ FROM = d.span.min; TO = d.span.max; }
+    filled = true;
+  }
+  // The dots mark days an upload stands behind; every day stays pickable.
+  Cal.setData(d.days_with_data || [], []);
+  Cal.init(FROM, TO, onPick);
+  render(d);
+  foot.textContent =
+    `${d.rows.filter(r=>r.kind==='row').length} ${d.label.toLowerCase()}s · ${d.brands.length} brands · `
+    + `source: ${d.workbook}`;
+}
+
+function fill(sel, values, placeholder){
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+}
+
+let DATA = null;
+function render(d){
+  DATA = d;
+  const head = `<tr><th>${d.label}</th>` +
+    d.brands.map(b => `<th>${escapeHtml(b)}</th>`).join('') + `<th>Total</th></tr>`;
+  grid.querySelector('thead').innerHTML = head;
+
+  const body = d.rows.map(r => {
+    const cells = d.brands.map(b => {
+      const v = r.cells[b] ?? 0;
+      return `<td${(!v && r.kind!=='cluster') ? ' class="zero"' : ''}>${num(v)}</td>`;
+    }).join('');
+
+    if (r.kind === 'cluster')
+      return `<tr class="cluster"><td>${escapeHtml(r.name)}</td>${cells}<td>${num(r.total)}</td></tr>`;
+
+    const open = openGroups.has(r.name);
+    const head = `<tr class="grp${open ? ' open' : ''}" onclick="toggleGroup('${escapeAttr(r.name)}')">`
+      + `<td><span class="nm"><span class="chev">&#9656;</span>${escapeHtml(r.name)}</span></td>${cells}`
+      + `<td>${num(r.total)}</td></tr>`;
+    return head + (open ? shopRows(r.name, d.brands) : '');
+  }).join('');
+  grid.querySelector('tbody').innerHTML = body || '<tr><td>Nothing matches those filters</td></tr>';
+
+  let foot = grid.querySelector('tfoot');
+  if (!foot){ foot = document.createElement('tfoot'); grid.appendChild(foot); }
+  foot.innerHTML = `<tr><td>GRAND TOTAL</td>` +
+    d.brands.map(b => `<td>${num(d.grand.cells[b] ?? 0)}</td>`).join('') +
+    `<td>${num(d.grand.total)}</td></tr>`;
+}
+
+/* Which groups are open, and the shops fetched for them. A bond is a click,
+   not a page load: the rows arrive on demand and stay cached until the window
+   or the grouping changes. */
+let openGroups = new Set(), shopCache = {};
+
+function escapeAttr(s){ return String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function shopRows(name, brands){
+  const got = shopCache[name];
+  if (!got)
+    return `<tr class="note"><td colspan="${brands.length + 2}">Loading shops…</td></tr>`;
+  if (got.error)
+    return `<tr class="note"><td colspan="${brands.length + 2}">${escapeHtml(got.error)}</td></tr>`;
+  if (!got.shops.length)
+    return `<tr class="note"><td colspan="${brands.length + 2}">No shops dispatched here in this period.</td></tr>`;
+  return got.shops.map(sh => {
+    const cells = brands.map(b => {
+      const v = sh.cells[b] ?? 0;
+      return `<td${v ? '' : ' class="zero"'}>${num(v)}</td>`;
+    }).join('');
+    return `<tr class="shop"><td>${escapeHtml(sh.name)}</td>${cells}<td>${num(sh.total)}</td></tr>`;
+  }).join('');
+}
+
+async function toggleGroup(name){
+  if (openGroups.has(name)){ openGroups.delete(name); render(DATA); return; }
+  openGroups.add(name);
+  render(DATA);
+  if (shopCache[name]) return;
+  const p = new URLSearchParams({ view, key: name });
+  if (FROM) p.set('date_from', FROM);
+  if (TO)   p.set('date_to', TO);
+  if (round.checked) p.set('round_off', '1');
+  // Same columns as the table above, in the same order.
+  p.set('brands', (DATA.brands || []).join('\u001f'));
+  try {
+    const res = await fetch('/api/reports/brandwise/shops?' + p.toString());
+    shopCache[name] = res.ok ? await res.json() : {error: 'Could not load those shops.'};
+  } catch (e) {
+    shopCache[name] = {error: 'Could not load those shops.'};
+  }
+  if (openGroups.has(name)) render(DATA);
+}
+
+function num(v){
+  if (!v) return round.checked ? '0' : '0.00';
+  return round.checked
+    ? Math.round(v).toLocaleString('en-IN')
+    : v.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function dl(kind){
+  window.location = '/reports/brandwise/export.xlsx?' + params().toString();
+  closeMenus();
+}
+
+function closeMenus(){
+  document.querySelectorAll('.menu').forEach(m => m.classList.remove('open'));
+}
+
+function grab(url, filename){
+  // A hidden anchor rather than window.location, so three of them can be
+  // fired in a row without each one cancelling the last.
+  const a = document.createElement('a');
+  a.href = url; a.download = filename || '';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function dlPdf(scope){
+  closeMenus();
+  if (scope === 'current'){
+    const p = params(); p.set('scope', 'current');
+    grab('/reports/brandwise/export.pdf?' + p.toString());
+    return;
+  }
+  // All clusters: three separate files. Spaced out because browsers throttle
+  // or block downloads fired in the same tick, and Safari may ask once for
+  // permission to download multiple files.
+  foot.textContent = 'Preparing three cluster PDFs…';
+  [1,2,3].forEach((n, i) => setTimeout(() => {
+    const p = params(); p.set('scope','cluster'); p.set('cluster', n);
+    grab('/reports/brandwise/export.pdf?' + p.toString());
+    if (n === 3) setTimeout(() => foot.textContent = '', 1500);
+  }, i * 900));
+}
+
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+load();
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Page not found{% endblock %}
+{% block heading %}Page not found{% endblock %}
+
+{% block content %}
+<div class="nf">
+  <h2>This page isn't on the running server.</h2>
+  <p>The screens come from templates, which update the moment you refresh. The
+     routes behind them are Python, and those only change when the server is
+     restarted. A link that appears in the sidebar before its route exists lands
+     here.</p>
+  <p class="cmd">Ctrl-C in the terminal, then <code>./run_local.sh</code></p>
+  <p class="small">This server started <b>{{ started_at }}</b>. If that is older than
+     your last restart, the previous process is still holding the port.</p>
+  <a class="btn primary" href="/">Back to Raw Data Upload</a>
+</div>
+
+<style>
+  .nf { max-width:64ch; background:var(--card); border:1px solid var(--line);
+        border-radius:14px; padding:26px 28px; }
+  .nf h2 { margin:0 0 12px; font-size:17px; font-weight:650; }
+  .nf p { color:var(--muted); font-size:13.5px; line-height:1.6; margin:0 0 12px; }
+  .nf .cmd { background:var(--head); border:1px solid var(--line); border-radius:9px;
+             padding:11px 14px; color:var(--ink); font-size:13.5px; }
+  .nf code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .nf .small { font-size:12.5px; }
+  .nf .btn { margin-top:6px; display:inline-block; }
+</style>
+{% endblock %}

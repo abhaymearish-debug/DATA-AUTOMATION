@@ -1,0 +1,251 @@
+{# The date-range picker shared by the cumulative screens.
+
+   Two months side by side, because a window that crosses a month boundary is
+   otherwise two clicks and a page turn. Every date is selectable - the point
+   of a calendar is to ask for any window - and the days that have an upload
+   behind them are marked rather than disabled, so you can see what will answer
+   before you pick and still ask for something that will not.
+
+   It stands on its own: it draws itself on page load with no data at all, and
+   the host feeds it the marked days whenever they arrive. #}
+<style>
+  .calpop { display:none; position:absolute; top:calc(100% + 10px); left:0; z-index:60;
+            background:var(--card); border:1px solid var(--line); border-radius:14px;
+            padding:14px; box-shadow:0 18px 40px rgba(16,24,40,.18); }
+  .calpop.on { display:block; }
+  .cal-top { display:flex; align-items:center; gap:10px; margin-bottom:11px; }
+  .cal-top .arrow { border:1px solid var(--line); background:var(--card); border-radius:8px;
+                    width:27px; height:27px; cursor:pointer; color:var(--ink);
+                    font-size:12px; line-height:1; padding:0; flex:none; }
+  .cal-top .arrow:hover { background:var(--hover); }
+  .cal-top .ttl { flex:1 1 auto; display:flex; gap:26px; }
+  .cal-top .ttl span { flex:1 1 0; text-align:center; font-weight:700; font-size:13.5px; }
+
+  .cal-two { display:flex; gap:26px; }
+  .cal-m { width:224px; }
+  .cal-g { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; }
+  .cal-g .dow { text-align:center; font-size:9px; font-weight:700; letter-spacing:.4px;
+                text-transform:uppercase; color:var(--muted); padding-bottom:5px; }
+  .cal-g .pad { height:30px; }
+  .cal-g button.d { position:relative; height:30px; border:0; background:none;
+                    border-radius:8px; cursor:pointer; font:inherit; font-size:12.5px;
+                    color:var(--ink); padding:0; }
+  .cal-g button.d:hover { background:var(--hover); }
+  .cal-g button.d.out { color:var(--zero); }
+  /* a dot means an upload stands behind that day */
+  .cal-g button.d.has::after { content:''; position:absolute; left:50%; bottom:3px;
+                               transform:translateX(-50%); width:4px; height:4px;
+                               border-radius:50%; background:var(--blue); }
+  .cal-g button.d.in { background:#DBE6FB; border-radius:0; }
+  .cal-g button.d.in.has::after { background:#3B5FA8; }
+  .cal-g button.d.edge { background:var(--blue); color:#fff; border-radius:8px; }
+  .cal-g button.d.edge.has::after { background:#fff; }
+  .cal-g button.d.s-start { border-radius:8px 0 0 8px; }
+  .cal-g button.d.s-end { border-radius:0 8px 8px 0; }
+
+  .cal-quick { display:flex; flex-wrap:wrap; gap:5px; margin-top:12px; padding-top:11px;
+               border-top:1px solid var(--line); max-width:474px; }
+  .cal-quick button { border:1px solid var(--line); background:var(--card); color:var(--ink);
+                      border-radius:20px; padding:5px 11px; font:inherit; font-size:11.5px;
+                      font-weight:650; cursor:pointer; }
+  .cal-quick button:hover { background:var(--hover); }
+  .cal-f { display:flex; align-items:center; margin-top:11px; padding-top:10px;
+           border-top:1px solid var(--line); gap:10px; }
+  .cal-f .say { font-size:12.5px; color:var(--muted); }
+  .cal-f .sp { margin-left:auto; display:flex; gap:10px; align-items:center; }
+  .cal-f button { border:0; background:none; font:inherit; font-size:12.5px;
+                  font-weight:650; color:var(--blue); cursor:pointer; padding:0; }
+  .cal-f button.apply { background:var(--blue); color:#fff; border-radius:8px; padding:7px 15px; }
+  .cal-f button.apply:disabled { opacity:.4; cursor:not-allowed; }
+
+  @media (max-width:720px){
+    .cal-two { flex-direction:column; gap:14px; }
+    .cal-top .ttl { gap:0; }
+    .cal-top .ttl span:last-child { display:none; }
+    .cal-m:last-child { display:none; }
+    .calpop { left:auto; right:0; }
+  }
+</style>
+
+<script>
+const CAL_MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+const CAL_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const calIso    = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+const calPretty = x => { if (!x) return ''; const [y,m,d] = x.split('-').map(Number);
+                         return `${d} ${CAL_SHORT[m-1]} ${y}`; };
+
+const Cal = {
+  days: new Set(), quick: [], from: '', to: '',
+  anchor: '', pick: null, hover: '', onApply: null,
+
+  /* Called once, on page load, before any data exists. */
+  init(from, to, onApply){
+    this.from = from || ''; this.to = to || '';
+    this.onApply = onApply;
+    this.anchor = this.monthOf(this.from) || this.monthOf(new Date().toISOString().slice(0,10));
+    this.label();
+    this.draw();
+  },
+
+  /* Called again whenever the host learns which days have data. */
+  setData(days, quick){
+    this.days = new Set(days || []);
+    this.quick = quick || [];
+    this.draw();
+  },
+
+  monthOf(v){ return v ? v.slice(0,7) : ''; },
+
+  open(ev){
+    ev.stopPropagation();
+    calSeal();
+    const pop = document.getElementById('calPop');
+    if (pop.classList.toggle('on')){
+      this.pick = null; this.hover = '';
+      this.anchor = this.monthOf(this.from) || this.anchor;
+      this.draw();
+    }
+  },
+  close(){ document.getElementById('calPop').classList.remove('on'); },
+
+  step(n){
+    let [y, m] = this.anchor.split('-').map(Number);
+    m += n;
+    while (m < 1){ m += 12; y--; } while (m > 12){ m -= 12; y++; }
+    this.anchor = `${y}-${String(m).padStart(2,'0')}`;
+    this.draw();
+  },
+
+  hit(d){
+    if (!this.pick){ this.pick = d; this.hover = d; this.paint(); return; }
+    // The second click completes the range, so it applies there and then.
+    // Making people reach for Apply afterwards reads as the filter ignoring
+    // them, because clicking away discards the pick silently.
+    const a = this.pick <= d ? this.pick : d, b = this.pick <= d ? d : this.pick;
+    this.from = a; this.to = b; this.pick = null; this.hover = '';
+    this.apply();
+  },
+  /* Hover only ever repaints classes. Re-rendering the popup on mouseenter
+     tore the day you were reaching for out of the DOM between the hover and
+     the click - which reads as the calendar refusing to take the second date. */
+  peek(d){ if (this.pick && this.hover !== d){ this.hover = d; this.paint(); } },
+
+  paint(){
+    const pop = document.getElementById('calPop');
+    if (!pop) return;
+    const [lo, hi] = this.bounds();
+    pop.querySelectorAll('.cal-g button.d').forEach(el => {
+      const key = el.dataset.d;
+      el.classList.toggle('edge', key === lo || key === hi);
+      el.classList.toggle('in', !!(lo && hi && key > lo && key < hi));
+      el.classList.toggle('s-start', !!(lo && hi && lo !== hi && key === lo));
+      el.classList.toggle('s-end', !!(lo && hi && lo !== hi && key === hi));
+    });
+    const say = pop.querySelector('.cal-f .say');
+    if (say) say.textContent = this.pick
+      ? 'Now pick the last day.'
+      : (lo && hi ? calPretty(lo) + ' – ' + calPretty(hi)
+                  : 'Pick the first day, then the last.');
+  },
+
+  use(from, to){ this.from = from; this.to = to; this.pick = null; this.apply(); },
+
+  apply(){
+    this.close();
+    this.label();
+    if (this.onApply) this.onApply(this.from, this.to);
+  },
+
+  label(){
+    const el = document.getElementById('calLabel');
+    if (el) el.textContent = this.from && this.to
+      ? calPretty(this.from) + ' → ' + calPretty(this.to) : 'Pick a period';
+  },
+
+  bounds(){
+    if (this.pick){
+      const h = this.hover || this.pick;
+      return this.pick <= h ? [this.pick, h] : [h, this.pick];
+    }
+    return [this.from, this.to];
+  },
+
+  grid(ym){
+    const [y, m] = ym.split('-').map(Number);
+    const first = new Date(y, m-1, 1).getDay();
+    const last  = new Date(y, m, 0).getDate();
+    const [lo, hi] = this.bounds();
+    const today = new Date().toISOString().slice(0,10);
+
+    let g = ['S','M','T','W','T','F','S'].map(d => `<div class="dow">${d}</div>`).join('');
+    for (let i = 0; i < first; i++) g += '<div class="pad"></div>';
+    for (let d = 1; d <= last; d++){
+      const key = calIso(y, m, d);
+      const cls = [
+        'd',
+        this.days.has(key) ? 'has' : '',
+        key > today ? 'out' : '',
+        (key === lo || key === hi) ? 'edge' : '',
+        (lo && hi && key > lo && key < hi) ? 'in' : '',
+        (lo && hi && lo !== hi && key === lo) ? 's-start' : '',
+        (lo && hi && lo !== hi && key === hi) ? 's-end' : '',
+      ].filter(Boolean).join(' ');
+      g += `<button type="button" class="${cls}" data-d="${key}" onclick="Cal.hit('${key}')"
+              onmouseenter="Cal.peek('${key}')">${d}</button>`;
+    }
+    return `<div class="cal-m"><div class="cal-g">${g}</div></div>`;
+  },
+
+  draw(){
+    const pop = document.getElementById('calPop');
+    if (!pop) return;
+    let [y, m] = this.anchor.split('-').map(Number);
+    let ny = y, nm = m + 1; if (nm > 12){ nm = 1; ny++; }
+    const next = `${ny}-${String(nm).padStart(2,'0')}`;
+
+    const quick = this.quick.map(q =>
+      `<button type="button" onclick="Cal.use('${q.from}','${q.to}')">${q.short}</button>`).join('');
+    const [lo, hi] = this.bounds();
+
+    pop.innerHTML = `
+      <div class="cal-top">
+        <button type="button" class="arrow" onclick="Cal.step(-1)">‹</button>
+        <span class="ttl">
+          <span>${CAL_MONTHS[m-1]} ${y}</span>
+          <span>${CAL_MONTHS[nm-1]} ${ny}</span>
+        </span>
+        <button type="button" class="arrow" onclick="Cal.step(1)">›</button>
+      </div>
+      <div class="cal-two">${this.grid(this.anchor)}${this.grid(next)}</div>
+      ${quick ? `<div class="cal-quick">${quick}</div>` : ''}
+      <div class="cal-f">
+        <span class="say">${this.pick
+          ? 'Now pick the last day.'
+          : (lo && hi ? calPretty(lo) + ' – ' + calPretty(hi) : 'Pick the first day, then the last.')}
+        </span>
+        <span class="sp">
+          <button type="button" onclick="Cal.close()">Close</button>
+        </span>
+      </div>`;
+  },
+};
+/* Closing on an outside click needs care here, because picking a day
+   re-renders the popup mid-event: by the time the click reaches document the
+   button that was clicked has been replaced, e.target is detached, and
+   e.target.closest('#calWrap') answers null - so the picker would shut itself
+   on the FIRST click of every range and look like the filter ignoring you.
+   Stopping the click at #calPop, which survives the re-render, is what keeps
+   that from happening. */
+function calSeal(){
+  const pop = document.getElementById('calPop');
+  if (pop && !pop.dataset.sealed){
+    pop.dataset.sealed = '1';
+    pop.addEventListener('click', e => e.stopPropagation());
+  }
+}
+document.addEventListener('DOMContentLoaded', calSeal);
+document.addEventListener('click', e => {
+  if (!e.target.closest('#calWrap')) Cal.close();
+});
+</script>

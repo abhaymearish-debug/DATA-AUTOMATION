@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% block title %}Warehouse Stock Report{% endblock %}
+{% block heading %}Warehouse Stock Report{% endblock %}
+
+{% block head %}
+<style>
+  /* ---------- controls ---------- */
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg);
+              padding:2px 0 14px; margin:-4px 0 0; }
+  .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar2 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .bar1 .sp, .bar2 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  /* ---------- filter bar ---------- */
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { position:relative; display:flex; flex-direction:column; justify-content:center;
+           gap:1px; padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fi-v { display:flex; align-items:center; gap:7px; border:0; background:none; padding:0;
+          font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+          cursor:pointer; white-space:nowrap; }
+  .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; max-width:180px;
+                 text-overflow:ellipsis; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+  .fitem:focus-within { background:var(--hover); box-shadow:inset 0 0 0 1px #C7D2FE; }
+
+  input[type=search] {
+      border:1px solid var(--line); background:var(--card); border-radius:10px;
+      padding:9px 11px; font:inherit; font-size:13.5px; color:var(--ink); }
+  input[type=search]:focus { outline:2px solid #C7D2FE; outline-offset:-1px; border-color:var(--blue); }
+
+  /* ---------- calendar ---------- */
+  .calpop { display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:50;
+            background:var(--card); border:1px solid var(--line); border-radius:13px;
+            padding:12px; width:266px; box-shadow:0 14px 34px rgba(16,24,40,.16); }
+  .calpop.on { display:block; }
+  .cal-h { display:flex; align-items:center; margin-bottom:9px; }
+  .cal-h .m { font-weight:700; font-size:13.5px; }
+  .cal-h .nav { margin-left:auto; display:flex; gap:4px; }
+  .cal-h .nav button { border:1px solid var(--line); background:var(--card); border-radius:7px;
+                       width:26px; height:26px; cursor:pointer; color:var(--ink);
+                       font-size:11px; line-height:1; padding:0; }
+  .cal-h .nav button:hover:not(:disabled) { background:var(--hover); }
+  .cal-h .nav button:disabled { opacity:.32; cursor:not-allowed; }
+  .cal-g { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-g .dow { text-align:center; font-size:9.5px; font-weight:700; letter-spacing:.4px;
+                text-transform:uppercase; color:var(--muted); padding-bottom:4px; }
+  .cal-g .pad { height:31px; }
+  .cal-g button.d { height:31px; border:0; background:none; border-radius:8px; cursor:default;
+                    font:inherit; font-size:12.5px; color:var(--zero); padding:0; }
+  .cal-g button.d.has { color:var(--ink); font-weight:650; background:var(--hover); cursor:pointer; }
+  .cal-g button.d.has:hover { background:#DBE6FB; }
+  .cal-g button.d.sel { background:var(--blue); color:#fff; }
+  .cal-f { display:flex; align-items:center; margin-top:10px; padding-top:9px;
+           border-top:1px solid var(--line); font-size:11.5px; color:var(--muted); }
+  .cal-f button { margin-left:auto; border:0; background:none; font:inherit; font-size:12px;
+                  font-weight:650; color:var(--blue); cursor:pointer; padding:0; }
+
+  input[type=search].search { min-width:268px; padding-left:36px; padding-right:34px; }
+  .searchwrap { position:relative; }
+  .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
+                    color:var(--muted); font-size:15px; pointer-events:none; }
+  .searchwrap kbd { position:absolute; right:9px; top:50%; transform:translateY(-50%);
+                    font:600 10px/1 ui-monospace,monospace; color:var(--muted);
+                    border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
+                    padding:3px 5px; background:var(--row); }
+
+                color:var(--muted); padding:6px 13px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--card); color:var(--ink); box-shadow:0 1px 2px rgba(16,24,40,.10); }
+
+  .link { border:0; background:none; font:inherit; font-size:13px; color:var(--blue);
+          cursor:pointer; padding:6px 2px; font-weight:600; }
+
+  /* ---------- KPIs ---------- */
+  .kpis { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); margin-bottom:18px; }
+  .kpi { position:relative; background:var(--card); border:1px solid var(--line); border-radius:12px;
+         padding:14px 16px 13px; overflow:hidden; }
+  .kpi::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent,var(--blue)); }
+  .kpi .l { font-size:10.5px; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); font-weight:650; }
+  .kpi .v { font-size:27px; font-weight:700; letter-spacing:-.5px; margin-top:3px;
+            font-variant-numeric:tabular-nums; line-height:1.15; }
+  .kpi .s { font-size:11.5px; color:var(--muted); margin-top:1px; }
+  .kpi .v .of { font-size:15px; font-weight:600; color:var(--muted); letter-spacing:0; }
+  .kpi .meter { height:4px; border-radius:3px; background:var(--line); margin-top:9px; overflow:hidden; }
+  .kpi .meter i { display:block; height:100%; border-radius:3px; background:var(--accent,var(--blue)); }
+
+  /* ---------- shared column geometry ----------
+     The strip above the list, the numbers on each warehouse bar and the
+     columns inside an expanded table all use --numw, so the three figures
+     line up vertically whatever is open. The last column is wider by the
+     card's right padding, and box-sizing keeps its content centred on the
+     same axis as the others. */
+  :root { --numw:130px; }
+
+  .lede { display:flex; align-items:center; border:1px solid transparent;
+          padding:0 15px 8px; color:var(--muted); font-weight:700;
+          font-size:10.5px; letter-spacing:.75px; text-transform:uppercase; }
+  .lede .sp { margin-left:auto; display:flex; }
+  .lede .sp span { width:var(--numw); text-align:center; }
+
+  /* ---------- warehouse cards ---------- */
+  .wh { background:var(--card); border:1px solid var(--line); border-radius:12px;
+        margin-bottom:12px; overflow:hidden; }
+  .wh-h { display:flex; align-items:center; gap:11px; padding:12px 15px 12px 15px; cursor:pointer;
+          background:linear-gradient(180deg,var(--navy-3),var(--navy)); color:#fff; user-select:none; }
+  .wh-h:hover { filter:brightness(1.12); }
+  .wh-h .chev { font-size:10px; opacity:.85; transition:transform .16s; width:10px; }
+  .wh.shut .chev { transform:rotate(-90deg); }
+  .wh.shut .wh-b { display:none; }
+  .wh-h .nm { font-weight:700; font-size:14px; letter-spacing:.35px; color:var(--gold); }
+  .wh-h .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
+              border:1px solid #3A4E8C; color:#AEC0EA; border-radius:20px; padding:2px 8px; }
+  .wh-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
+  .wh-h .mini > div { width:var(--numw); text-align:center; }
+  .wh-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:#94A7D6; }
+  .wh-h .mini .n { font-size:15px; font-weight:700; }
+  .wh-h .mini .n.amber { color:var(--gold); }
+
+  /* fixed layout so the declared column widths are honoured exactly; auto
+     table layout was widening the last column and pushing it off the axis
+     that the strip and the warehouse bars sit on. */
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13.5px;
+          table-layout:fixed; }
+  col.num { width:var(--numw); }
+  col.last { width:calc(var(--numw) + 15px); }
+  tbody td:last-child { width:calc(var(--numw) + 15px); padding-right:15px; }
+
+  tbody td { padding:0; height:31px; border-bottom:1px solid var(--chip);
+             text-align:center; font-variant-numeric:tabular-nums; width:var(--numw); }
+  tbody td:first-child { text-align:left; width:auto; padding-left:15px; }
+  tbody tr:last-child td { border-bottom:0; }
+  tbody tr:hover td { background:var(--hover); }
+  tr.g-start:first-child td { border-top:0; }
+
+  td.item { font-weight:650; color:var(--ink); white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+  td.item .pk { display:inline-block; margin-left:9px; padding:2px 7px; border-radius:20px;
+                background:var(--chip); color:var(--chip-ink); font-size:11px; font-weight:700;
+                letter-spacing:.3px; vertical-align:1px; }
+  td.item .cnt { margin-left:9px; font-size:10.5px; font-weight:700; letter-spacing:.45px;
+                 text-transform:uppercase; color:var(--muted); }
+  td.item .packs { margin-left:9px; font-size:11.5px; font-weight:500; color:var(--zero); }
+
+  /* A brand opens a group. Its packs are indented under it, so the brand name
+     is written once instead of once per pack. */
+  tr.g > td { border-top:1px solid var(--line); }
+  tr.g:first-child > td { border-top:0; }
+  tr.bhead > td { background:var(--head); font-weight:700; }
+  tr.pack > td { border-bottom:1px solid var(--line); }
+  tr.pack > td.item { padding-left:36px; font-size:12.5px; font-weight:600; color:var(--muted); }
+  tr.pack:hover > td { background:var(--hover); }
+  tr.nil > td { color:var(--zero); }
+  tr.nil > td.item { color:var(--zero); font-weight:600; }
+
+  td.z { color:var(--zero); font-weight:400; }
+  td.pend b { color:#B45309; font-weight:700; }
+
+  tr.tot td { background:var(--row); font-weight:700; height:36px; border-top:1px solid var(--line); }
+  tr.tot .pk { display:inline-block; margin-left:9px; padding:2px 7px; border-radius:20px;
+               background:var(--chip); color:var(--chip-ink); font-size:11px; font-weight:700; }
+
+  .empty { padding:26px 16px; text-align:center; color:var(--muted); font-size:13.5px; }
+  .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
+
+  .menu { position:relative; display:inline-block; }
+  .menu .items { display:none; position:absolute; right:0; top:110%; background:var(--card);
+                 border:1px solid var(--line); border-radius:10px; min-width:236px; z-index:40;
+                 box-shadow:0 10px 28px rgba(16,24,40,.14); overflow:hidden; }
+  .menu.open .items { display:block; }
+  .menu .items a { display:block; padding:10px 14px; font-size:13.5px; cursor:pointer; }
+  .menu .items a:hover { background:var(--hover); }
+  .menu .items a .sub { display:block; font-size:11px; color:var(--muted); margin-top:1px; }
+
+  /* On a phone a 4-column table cannot fit, so each item becomes a block:
+     the name on its own line, then the three figures captioned underneath. */
+  @media (max-width:620px){
+    .lede { display:none; }
+    .wh-h .mini { width:100%; }
+    .wh-h .mini > div { width:33.3%; }
+    .wh-h .mini .k { display:block; }
+    tbody tr { display:block; padding:10px 13px; border-bottom:1px solid var(--line); }
+    tbody tr:hover td { background:none; }
+    tbody td { display:inline-block; height:auto; padding:0 !important; width:auto !important;
+               border:0 !important; text-align:left; }
+    td.item { display:block; font-size:13px; line-height:1.35; margin-bottom:7px;
+              white-space:normal; overflow:visible; }
+    td.item .pk { margin-left:7px; }
+    td.num { width:32%; font-size:15px; font-weight:650; font-variant-numeric:tabular-nums; }
+    td.num::before { content:attr(data-l); display:block; font-size:9px; letter-spacing:.5px;
+                     text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:1px; }
+    tr.g { border-top:1px solid var(--line); }
+    tr.tot { background:var(--row); }
+    tr.tot td.item { margin-bottom:6px; }
+  }
+
+  @media (max-width:760px){
+    .kpis { grid-template-columns:repeat(2,1fr); gap:9px; margin-bottom:14px; }
+    .kpi { padding:11px 12px 10px; border-radius:10px; }
+    .kpi .v { font-size:21px; }
+    .kpi .s { font-size:10.5px; }
+    .searchwrap kbd { display:none; }
+    input[type=search].search { padding-right:11px; }
+    .controls { padding-bottom:11px; }
+    .bar1 .sp, .bar2 .sp { margin-left:0; width:100%; }
+    .search { min-width:0; width:100%; }
+    .searchwrap { flex:1 1 150px; }
+    .fbar { width:100%; flex-wrap:wrap; }
+    .fitem { flex:1 1 44%; padding:7px 11px; }
+    .selw select { max-width:none; width:100%; }
+    .fdiv { display:none; }
+    .calpop { left:auto; right:0; }
+    .wh-h { flex-wrap:wrap; }
+    .wh-h .mini { margin-left:0; width:100%; justify-content:space-between; gap:8px; }
+    tbody td, thead th { padding:0 9px; font-size:12.5px; }
+    td.item .pk { margin-left:6px; padding:1px 5px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="bar1">
+    <div class="fbar">
+      <div class="fitem" id="calWrap">
+        <span class="fi-k">As on</span>
+        <button type="button" class="fi-v" id="calBtn" onclick="toggleCal(event)">
+          <span id="calLabel">—</span><i>▾</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Cluster</span>
+        <div class="selw"><select id="fCluster">
+          <option value="">All clusters</option>
+          <option value="1">Cluster 1</option>
+          <option value="2">Cluster 2</option>
+          <option value="3">Cluster 3</option>
+        </select><i>▾</i></div>
+      </div>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Warehouse</span>
+        <div class="selw"><select id="fWh">
+          <option value="">All warehouses</option>
+        </select><i>▾</i></div>
+      </div>
+    </div>
+    <div class="sp">
+      <div class="menu" id="xlMenu">
+        <button class="btn" onclick="toggleMenu('xlMenu')">Download Excel ▾</button>
+        <div class="items"><a onclick="dlXlsx()">Current view</a></div>
+      </div>
+      <div class="menu" id="pdfMenu">
+        <button class="btn gold" onclick="toggleMenu('pdfMenu')">Download PDF ▾</button>
+        <div class="items">
+          <a onclick="dlPdf('clusters')">All clusters<span class="sub">3 files, one per ASM cluster</span></a>
+          <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar2">
+    <div class="searchwrap">
+      <span class="ic">⌕</span>
+      <input id="q" class="search" type="search" placeholder="Search brand, pack or warehouse" autocomplete="off">
+      <kbd>/</kbd>
+    </div>
+    <div class="sp">
+      <button class="link" id="foldBtn" onclick="foldAll()">Collapse all</button>
+      <button class="btn" onclick="load()">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+<div class="kpis" id="kpis"></div>
+<div class="lede" id="lede">
+  <span>Warehouse</span>
+  <div class="sp"><span>Physical</span><span>Allotable</span><span>Pending</span></div>
+</div>
+<div id="list"><div class="wh"><div class="empty">Loading…</div></div></div>
+<div class="status" id="foot"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let DATA = null, filled = false;
+let selDate = '', calMonth = '';
+let DATES = new Set();          // the days a stock file actually exists for
+
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+const SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const iso    = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+const pretty = x => { const [y,m,d] = x.split('-').map(Number);
+                      return `${d} ${SHORT[m-1]} ${y}`; };
+const shut = new Set();
+
+/* ---------------- helpers ---------------- */
+const n  = v => Math.round(v || 0).toLocaleString('en-IN');
+const ml = p => { const m = /(\d+)/.exec(p || ''); return m ? +m[1] : 0; };
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+function toggleMenu(id){
+  document.querySelectorAll('.menu').forEach(m => { if (m.id !== id) m.classList.remove('open'); });
+  document.getElementById(id).classList.toggle('open');
+}
+function closeMenus(){ document.querySelectorAll('.menu').forEach(m => m.classList.remove('open')); }
+document.addEventListener('click', e => { if (!e.target.closest('.menu')) closeMenus(); });
+
+function params(){
+  const p = new URLSearchParams();
+  if (selDate)        p.set('as_of', selDate);
+  if (fCluster.value) p.set('cluster', fCluster.value);
+  if (fWh.value)      p.set('warehouse', fWh.value);
+  return p;
+}
+
+/* ---------------- data ---------------- */
+async function load(){
+  foot.textContent = 'Loading…';
+  let d;
+  try { d = await (await fetch('/api/reports/warehouse-stock?' + params())).json(); }
+  catch { msg.innerHTML = '<div class="banner">Could not reach the server.</div>'; return; }
+
+  if (d.error){
+    msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`;
+    list.innerHTML = '<div class="wh"><div class="empty">No data</div></div>';
+    kpis.innerHTML = ''; foot.textContent = ''; return;
+  }
+  msg.innerHTML = '';
+  DATA = d;
+
+  // Refreshed on EVERY load, not just the first: a day uploaded while this page
+  // was open has to appear in the calendar without a hard reload.
+  DATES = new Set(d.dates);
+  const keepWh = fWh.value;
+  fWh.innerHTML = '<option value="">All warehouses</option>' +
+    d.all_warehouses.map(w => `<option value="${w}">${escapeHtml(w)}</option>`).join('');
+  if ([...fWh.options].some(o => o.value === keepWh)) fWh.value = keepWh;
+
+  if (!filled){
+    selDate = d.date;
+    calMonth = d.date.slice(0, 7);
+    // Open on the warehouse list alone. Brand detail is one click away.
+    d.warehouses.forEach(w => shut.add(w.name));
+    filled = true;
+  }
+  // The API falls back to the newest snapshot when the day asked for has no file.
+  if (selDate !== d.date) selDate = d.date;
+  drawCal();
+  render();
+}
+
+/* ---------------- render ---------------- */
+function visibleRows(wh){
+  const q = q_.value.trim().toLowerCase();
+  const whHit = q && wh.name.toLowerCase().includes(q);
+  let rows = wh.rows.filter(r => {
+    if (!q || whHit) return true;
+    return (r.brand + ' ' + r.pack).toLowerCase().includes(q);
+  });
+  // Brand A-Z, then biggest pack first — the order the trade reads stock in.
+  return rows.slice().sort((a,b) =>
+    a.brand.localeCompare(b.brand) || ml(b.pack) - ml(a.pack));
+}
+
+function render(){
+  if (!DATA) return;
+  const d = DATA;
+  const pct = (a,b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
+  const narrowed = !!q_.value.trim();
+  let shown = 0, items = 0;
+  const g = { physical:0, allotable:0, pending:0 };
+  // A search is a request to see the matches, so it overrides a collapsed card.
+  const forceOpen = !!q_.value.trim();
+  const html = d.warehouses.map(wh => {
+    const rows = visibleRows(wh);
+    if (!rows.length) return '';
+    shown++; items += rows.length;
+
+    const t = rows.reduce((a,r) => ({ physical:a.physical+r.physical,
+                                      allotable:a.allotable+r.allotable,
+                                      pending:a.pending+r.pending }),
+                          { physical:0, allotable:0, pending:0 });
+    for (const k in g) g[k] += t[k];
+    const isShut = !forceOpen && shut.has(wh.name);
+
+    const body = brandGroups(rows);
+
+    return `<section class="wh ${isShut ? 'shut' : ''}">
+      <div class="wh-h" onclick="fold('${wh.name.replace(/'/g,"\\'")}')">
+        <span class="chev">▼</span>
+        <span class="nm">${escapeHtml(wh.name)}</span>
+        ${wh.cluster ? `<span class="cl">Cluster ${wh.cluster}</span>` : ''}
+        <div class="mini">
+          <div><div class="k">Physical</div><div class="n">${n(t.physical)}</div></div>
+          <div><div class="k">Allotable</div><div class="n">${n(t.allotable)}</div></div>
+          <div><div class="k">Pending</div><div class="n ${t.pending?'amber':''}">${n(t.pending)}</div></div>
+        </div>
+      </div>
+      <div class="wh-b">
+        <table>
+          <colgroup><col><col class="num"><col class="num"><col class="last"></colgroup>
+          <tbody>${body}
+          <tr class="tot"><td class="item">TOTAL<span class="cnt">${rows.length} items</span></td>
+            ${cell(t.physical,'Physical')}${cell(t.allotable,'Allotable')}${cell(t.pending,'Pending')}
+          </tr></tbody>
+        </table>
+      </div></section>`;
+  }).join('');
+
+  kpis.innerHTML = [
+    ['Physical',  g.physical,  narrowed ? 'cases in this selection' : 'cases on hand', '#2563EB', 100],
+    ['Allotable', g.allotable, `${pct(g.allotable, g.physical)}% of physical`, '#059669', pct(g.allotable, g.physical)],
+    ['Pending',   g.pending,   `${pct(g.pending, g.physical)}% not yet allotable`, '#D97706', pct(g.pending, g.physical)],
+  ].map(([l,v,sub,c,w]) => `<div class="kpi" style="--accent:${c}">
+        <div class="l">${l}</div><div class="v">${n(v)}</div><div class="s">${sub}</div>
+        <div class="meter"><i style="width:${w}%"></i></div></div>`).join('')
+    + `<div class="kpi" style="--accent:#0D1B4A"><div class="l">Warehouses</div>
+        <div class="v">${shown}${narrowed ? `<span class="of"> of ${d.warehouses.length}</span>` : ''}</div>
+        <div class="s">snapshot ${escapeHtml(d.date)}</div>
+        <div class="meter"><i style="width:${pct(shown, d.warehouses.length)}%"></i></div></div>`;
+
+  list.innerHTML = html || `<div class="wh"><div class="empty">Nothing matches that.</div></div>`;
+  foot.textContent = `${shown} of ${d.warehouses.length} warehouses · ${n(items)} items · snapshot ${d.date}`;
+  foldBtn.textContent = shut.size >= shown && shown > 0 ? 'Expand all' : 'Collapse all';
+}
+
+/* ---------------- rows ----------------
+   Packs belong to a brand, so the table says so: the brand is written once as a
+   group header carrying its subtotal, and its packs sit indented underneath.
+   A brand that is nil everywhere collapses to a single muted line — three rows
+   of zeros tell you nothing the one line does not. */
+const cell = (v, label, amber) =>
+  `<td data-l="${label}" class="num${amber ? ' pend' : ''}${v ? '' : ' z'}">` +
+  `${v && amber ? `<b>${n(v)}</b>` : n(v)}</td>`;
+
+const packOf = r => (r.pack || '').replace(/\s*ML$/i, '');
+
+function brandGroups(rows){
+  const out = [];
+  for (let i = 0; i < rows.length; ){
+    const brand = rows[i].brand;
+    const grp = [];
+    while (i < rows.length && rows[i].brand === brand) grp.push(rows[i++]);
+
+    const t = grp.reduce((a,r) => ({ physical:a.physical + r.physical,
+                                     allotable:a.allotable + r.allotable,
+                                     pending:a.pending + r.pending }),
+                         { physical:0, allotable:0, pending:0 });
+    const figures = cell(t.physical,'Physical') + cell(t.allotable,'Allotable')
+                  + cell(t.pending,'Pending', true);
+
+    if (!t.physical && !t.allotable && !t.pending){
+      out.push(`<tr class="g nil"><td class="item">${escapeHtml(brand)}` +
+               `<span class="packs">${grp.map(packOf).join(' · ')} ml</span></td>${figures}</tr>`);
+      continue;
+    }
+    if (grp.length === 1){
+      out.push(`<tr class="g"><td class="item">${escapeHtml(brand)}` +
+               `<span class="pk">${packOf(grp[0])} ml</span></td>${figures}</tr>`);
+      continue;
+    }
+    out.push(`<tr class="g bhead"><td class="item">${escapeHtml(brand)}` +
+             `<span class="cnt">${grp.length} packs</span></td>${figures}</tr>`);
+    for (const r of grp){
+      out.push(`<tr class="pack"><td class="item">${packOf(r)} ml</td>` +
+               cell(r.physical,'Physical') + cell(r.allotable,'Allotable') +
+               cell(r.pending,'Pending', true) + `</tr>`);
+    }
+  }
+  return out.join('');
+}
+
+/* ---------------- interactions ---------------- */
+function fold(name){ shut.has(name) ? shut.delete(name) : shut.add(name); render(); }
+function foldAll(){
+  if (shut.size) shut.clear();
+  else DATA && DATA.warehouses.forEach(w => shut.add(w.name));
+  render();
+}
+
+let t = null;
+const q_ = document.getElementById('q');
+q_.addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 130); });
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== q_){ e.preventDefault(); q_.focus(); }
+  if (e.key === 'Escape'){ closeCal();
+    if (document.activeElement === q_){ q_.value = ''; render(); q_.blur(); } }
+});
+fCluster.addEventListener('change', load);
+fWh.addEventListener('change', load);
+
+/* ---------------- calendar ----------------
+   A native <input type=date> would offer every day of the year, but stock only
+   exists for the days a Bevco export was actually uploaded. So the grid is drawn
+   here and a day with no file is simply not clickable. */
+function drawCal(){
+  if (!calMonth) return;
+  calLabel.textContent = selDate ? pretty(selDate) : '—';
+
+  const [y, m] = calMonth.split('-').map(Number);
+  const all = [...DATES].sort();
+  const lo = all.length ? all[0].slice(0,7) : calMonth;
+  const hi = all.length ? all[all.length-1].slice(0,7) : calMonth;
+
+  const lead = (new Date(y, m-1, 1).getDay() + 6) % 7;   // weeks start Monday
+  const days = new Date(y, m, 0).getDate();
+
+  let g = ['Mo','Tu','We','Th','Fr','Sa','Su'].map(x => `<span class="dow">${x}</span>`).join('');
+  for (let i = 0; i < lead; i++) g += '<span class="pad"></span>';
+  for (let d = 1; d <= days; d++){
+    const day = iso(y, m, d);
+    const has = DATES.has(day);
+    g += `<button class="d${has ? ' has' : ''}${day === selDate ? ' sel' : ''}"
+            ${has ? `onclick="pickDate('${day}')"` : 'disabled'}>${d}</button>`;
+  }
+
+  calPop.innerHTML = `
+    <div class="cal-h">
+      <span class="m">${MONTHS[m-1]} ${y}</span>
+      <span class="nav">
+        <button onclick="shiftMonth(-1)" ${calMonth <= lo ? 'disabled' : ''}>‹</button>
+        <button onclick="shiftMonth(1)"  ${calMonth >= hi ? 'disabled' : ''}>›</button>
+      </span>
+    </div>
+    <div class="cal-g">${g}</div>
+    <div class="cal-f">Only days with a stock file
+      <button onclick="pickDate('${all[all.length-1] || ''}')">Latest</button></div>`;
+}
+
+function toggleCal(e){
+  e.stopPropagation();
+  if (!calPop.classList.contains('on') && selDate) calMonth = selDate.slice(0, 7);
+  drawCal();
+  calPop.classList.toggle('on');
+  closeMenus();
+}
+function closeCal(){ calPop.classList.remove('on'); }
+function shiftMonth(step){
+  let [y, m] = calMonth.split('-').map(Number);
+  m += step;
+  if (m === 0){ m = 12; y--; }
+  if (m === 13){ m = 1; y++; }
+  calMonth = `${y}-${String(m).padStart(2,'0')}`;
+  drawCal();
+}
+function pickDate(day){
+  if (!day) return;
+  selDate = day; closeCal(); drawCal(); load();
+}
+document.addEventListener('click', e => { if (!e.target.closest('#calWrap')) closeCal(); });
+
+/* ---------------- downloads ---------------- */
+function grab(url){ const a = document.createElement('a'); a.href = url;
+                    document.body.appendChild(a); a.click(); a.remove(); }
+function dlXlsx(){ grab('/reports/warehouse-stock/export.xlsx?' + params()); closeMenus(); }
+function dlPdf(scope){
+  closeMenus();
+  if (scope === 'current'){
+    const p = params(); p.set('scope','current');
+    grab('/reports/warehouse-stock/export.pdf?' + p); return;
+  }
+  foot.textContent = 'Preparing three cluster PDFs…';
+  [1,2,3].forEach((c,i) => setTimeout(() => {
+    const p = params(); p.set('scope','cluster'); p.set('cluster', c);
+    grab('/reports/warehouse-stock/export.pdf?' + p);
+    if (c === 3) setTimeout(render, 1500);
+  }, i * 900));
+}
+
+load();
+</script>
+{% endblock %}

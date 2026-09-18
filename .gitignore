@@ -1,0 +1,13 @@
+# The workspace is state, not source: uploads, built workbooks, job records and
+# password hashes all live here and none of it belongs in a repository.
+workspace/
+_jobs/
+_auth/
+_deleted/
+_to_delete/
+
+__pycache__/
+*.pyc
+.DS_Store
+~$*.xlsx
+*.bak_*

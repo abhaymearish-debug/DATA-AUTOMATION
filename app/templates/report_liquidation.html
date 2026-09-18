@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Liquidation Summary{% endblock %}
+{% block heading %}Liquidation Summary{% endblock %}
+
+{% block head %}
+{% include '_calendar.html' %}
+<style>
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg); padding:2px 0 14px; }
+  .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar1 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fi-v { display:flex; align-items:center; gap:7px; border:0; background:none; padding:0;
+          font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+          cursor:pointer; white-space:nowrap; }
+  .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
+  .vs { font-size:12.5px; color:var(--muted); }
+
+  .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          overflow:auto; }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px;
+          table-layout:fixed; min-width:1120px; }
+  col.bond { width:150px; }
+  col.n { width:62px; }
+
+  thead th { position:sticky; background:var(--navy); color:var(--gold);
+             font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+             padding:7px 5px; text-align:center; white-space:nowrap; }
+  thead tr:first-child th { top:0; z-index:3; font-size:10px; }
+  thead tr:last-child th { top:28px; z-index:3; font-size:9.5px; color:#FFD98A; }
+  thead th.gut { width:8px; padding:0; background:var(--navy);
+                 border-left:1px solid var(--gold); border-right:1px solid var(--gold); }
+  thead th:first-child { left:0; z-index:4; text-align:left; padding-left:14px; }
+
+  tbody td { padding:0 5px; height:30px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); }
+  tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
+                         padding-left:14px; font-weight:600; }
+  tbody td.gut { padding:0; background:var(--navy);
+                 border-left:1px solid var(--gold); border-right:1px solid var(--gold); }
+
+  tr.bond td { background:var(--card); }
+  tr.bond.alt td { background:var(--row); }
+  tr.bond:hover td:not(.gut) { background:var(--hover); }
+  tr.cluster td { background:var(--navy); color:var(--gold); font-weight:700; }
+  tr.total td, tr.average td { background:#2B3440; color:#fff; font-weight:700; }
+  tr.average td { background:#3C4653; }
+
+  .d { display:inline-flex; align-items:center; gap:4px; font-weight:700; }
+  .d .ar { font-size:9px; line-height:1; }
+  tr.bond .up { color:#3F8600; } tr.bond .dn { color:#CF1322; }
+  tr.cluster .up, tr.total .up, tr.average .up { color:#52C41A; }
+  tr.cluster .dn, tr.total .dn, tr.average .dn { color:#FF7875; }
+  .nil { color:var(--zero); }
+
+  .empty { background:var(--card); border:1px solid var(--line); border-radius:12px;
+           padding:34px 22px; text-align:center; color:var(--muted); font-size:13.5px; }
+  .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
+</style>
+{% endblock %}
+
+{% macro fig(v) -%}
+  {% if v|round|int == 0 %}<span class="nil">-</span>{% else %}{{ v|round|int }}{% endif %}
+{%- endmacro %}
+
+{% macro delta(now, was, pct) -%}
+  {% if now|round|int == 0 and was|round|int == 0 %}<span class="nil">-</span>
+  {%- elif pct and was|round(6) == 0 %}<span class="nil">-</span>
+  {%- else %}
+    {% set d = ((now - was) / was * 100) if pct else (now - was) %}
+    {% set up = d >= 0 %}
+    <span class="d {{ 'up' if up else 'dn' }}"><span class="ar">{{ '▲' if up else '▼' }}</span>{{
+      (d|abs)|round|int }}{{ '%' if pct else '' }}</span>
+  {%- endif %}
+{%- endmacro %}
+
+{% block content %}
+{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') %}
+<div class="controls">
+  <form method="get" class="bar1" id="f">
+    <div class="fbar">
+      <div class="fitem" id="calWrap" style="position:relative">
+        <span class="fi-k">Period</span>
+        <button type="button" class="fi-v" onclick="Cal.open(event)">
+          <span id="calLabel">{{ data.period.short if data.period else 'Pick a period' }}</span>
+          <i>▾</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
+    </div>
+    <input type="hidden" name="date_from" id="dFrom" value="{{ data.period.start if data.period else '' }}">
+    <input type="hidden" name="date_to" id="dTo" value="{{ data.period.end if data.period else '' }}">
+    <span class="vs">
+      {% if data.previous %}against {{ data.previous.short }}{% endif %}
+    </span>
+    {% if not error %}
+    <div class="sp">
+      <a class="act" href="/reports/liquidation/export.xlsx?{{ q }}">Download Excel</a>
+      <a class="act primary" href="/reports/liquidation/export.pdf?{{ q }}">Download PDF</a>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+{% if error %}
+  <div class="empty">{{ error }}</div>
+{% else %}
+<div class="wrap">
+  <table>
+    <colgroup>
+      <col class="bond">
+      {% for g in groups %}{% if not loop.first %}<col style="width:8px">{% endif %}
+        <col class="n"><col class="n"><col class="n"><col class="n">{% endfor %}
+    </colgroup>
+    <thead>
+      <tr>
+        <th rowspan="2">Bond</th>
+        {% for g in groups %}
+          {% if not loop.first %}<th class="gut" rowspan="2"></th>{% endif %}
+          <th colspan="4">{{ g }}</th>
+        {% endfor %}
+      </tr>
+      <tr>
+        {% for g in groups %}
+          <th>{{ data.headings[0] }}</th><th>{{ data.headings[1] }}</th>
+          <th>▲ CS</th><th>▲ %</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(stripe=0) %}
+      {% for row in data.rows %}
+      <tr class="{{ row.kind }}{% if row.kind == 'bond' and ns.stripe % 2 == 1 %} alt{% endif %}">
+        <td>{{ row.label }}</td>
+        {% for blk in row.blocks %}
+          {% if not loop.first %}<td class="gut"></td>{% endif %}
+          <td>{{ fig(blk[0]) }}</td>
+          <td>{{ fig(blk[1]) }}</td>
+          <td>{{ delta(blk[0], blk[1], false) }}</td>
+          <td>{{ delta(blk[0], blk[1], true) }}</td>
+        {% endfor %}
+      </tr>
+      {% if row.kind == 'bond' %}{% set ns.stripe = ns.stripe + 1 %}{% else %}{% set ns.stripe = 0 %}{% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="status">
+  Cases. <strong>Total liquidation is shop plus Fed/Bar</strong>, not shop plus secondary — secondary
+  is stock moving down the chain, so adding it would count every case a shop both received and sold.
+  Shop and total average over the {{ data.days.span }} days the window spans; the two dispatch
+  columns average over the {{ data.days.dispatch[0] }} days a dispatch actually went out.
+</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const cal = {{ calendar | tojson }};
+  const days = new Set(cal.days || []);
+  for (const p of cal.periods || []){
+    let d = new Date(p.from + 'T00:00:00'), end = new Date(p.to + 'T00:00:00');
+    while (d <= end){ days.add(d.toISOString().slice(0,10)); d.setDate(d.getDate() + 1); }
+  }
+  Cal.init(dFrom.value, dTo.value, (from, to) => {
+    dFrom.value = from; dTo.value = to; document.getElementById('f').submit();
+  });
+  Cal.setData([...days], cal.periods || []);
+})();
+</script>
+{% endblock %}

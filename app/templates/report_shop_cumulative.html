@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+{% block title %}Shop Sales - Cumulative{% endblock %}
+{% block heading %}Shop Sales - Cumulative{% endblock %}
+
+{% block head %}
+{% include '_calendar.html' %}
+<style>
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg);
+              padding:2px 0 14px; margin:-4px 0 0; }
+  .bar1, .bar2 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar2 { margin-top:10px; }
+  .bar1 .sp, .bar2 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fitem:focus-within { background:var(--hover); box-shadow:inset 0 0 0 1px #C7D2FE; }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+  .fi-v { display:flex; align-items:center; gap:7px; border:0; background:none; padding:0;
+          font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+          cursor:pointer; white-space:nowrap; }
+  .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
+  #srcSay b { font-weight:700; color:var(--ink); }
+  .warn { display:inline-block; font-size:12px; font-weight:650; color:#92400E;
+          background:#FEF3C7; border:1px solid #FDE68A; border-radius:20px;
+          padding:4px 11px; }
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; max-width:196px; text-overflow:ellipsis; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+
+  input[type=search].search { border:1px solid var(--line); background:var(--card);
+      border-radius:10px; padding:9px 11px 9px 36px; font:inherit; font-size:13.5px;
+      color:var(--ink); min-width:268px; }
+  input[type=search].search:focus { outline:2px solid #C7D2FE; outline-offset:-1px;
+      border-color:var(--blue); }
+  .searchwrap { position:relative; }
+  .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
+                    color:var(--muted); font-size:15px; pointer-events:none; }
+  .menu { position:relative; display:inline-block; }
+  .menu .items { display:none; position:absolute; right:0; top:112%; background:var(--card);
+                 border:1px solid var(--line); border-radius:10px; min-width:248px; z-index:40;
+                 box-shadow:0 10px 28px rgba(16,24,40,.14); overflow:hidden; }
+  .menu.open .items { display:block; }
+  .menu .items a { display:block; padding:10px 14px; font-size:13.5px; cursor:pointer;
+                   color:var(--ink); text-decoration:none; }
+  .menu .items a:hover { background:var(--hover); }
+  .menu .items a .sub { display:block; font-size:11px; color:var(--muted); margin-top:1px; }
+  .link { border:0; background:none; font:inherit; font-size:13px; color:var(--blue);
+          cursor:pointer; padding:6px 2px; font-weight:600; }
+
+  /* ---------- shared column geometry ----------
+     The strip, each bond bar and the shop rows inside all use --numw, so the
+     four figures sit on one axis whatever is open. */
+  :root { --numw:118px; }
+
+  /* The strip wears the grand-total theme - gold ground, navy lettering - so
+     the table is book-ended by the same colour at top and bottom. */
+  .lede { display:flex; align-items:center; gap:11px; margin-bottom:9px;
+          padding:9px 15px; border-radius:10px;
+          background:var(--gold); color:#1B2A4A;
+          font-weight:800; font-size:10px; letter-spacing:1.1px;
+          text-transform:uppercase; box-shadow:0 1px 2px rgba(16,24,40,.10); }
+  .lede .grp { color:#1B2A4A; }
+  .lede .sp { margin-left:auto; display:flex; }
+  .lede .sp span { width:var(--numw); text-align:center; }
+
+  /* .fitem sets display:flex, which beats the UA rule behind [hidden] - so
+     say it here, or a hidden filter stays on screen. */
+  .fitem[hidden], .fdiv[hidden], .lede[hidden], .bar2[hidden],
+  .bar1 .sp[hidden] { display:none !important; }
+
+  .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
+  .seg button { border:0; background:none; font:inherit; font-size:12.5px; font-weight:650;
+                color:var(--muted); padding:5px 12px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--card); color:var(--ink);
+                   box-shadow:0 1px 2px rgba(16,24,40,.12); }
+
+  .bd { background:var(--card); border:1px solid var(--line); border-radius:12px;
+        margin-bottom:12px; overflow:hidden; }
+  .bd-h { display:flex; align-items:center; gap:11px; padding:12px 15px; cursor:pointer;
+          background:linear-gradient(180deg,var(--navy-3),var(--navy)); color:#fff;
+          user-select:none; }
+  .bd-h:hover { filter:brightness(1.12); }
+  .bd-h .chev { font-size:10px; opacity:.85; transition:transform .16s; width:10px; }
+  .bd.shut .chev { transform:rotate(-90deg); }
+  .bd.shut .bd-b { display:none; }
+  .bd-h .nm { font-weight:700; font-size:14px; letter-spacing:.35px; color:var(--gold); }
+  .bd-h .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
+              border:1px solid #3A4E8C; color:#AEC0EA; border-radius:20px; padding:2px 8px; }
+  .bd-h .cnt { font-size:11px; color:#94A7D6; }
+  .bd-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
+  .bd-h .mini > div { width:var(--numw); text-align:center; }
+  .bd-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
+                   color:#94A7D6; }
+  .bd-h .mini .n { font-size:15px; font-weight:700; }
+  .bd-h .mini .n.sold { color:var(--gold); }
+
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13.5px;
+          table-layout:fixed; }
+  col.num { width:var(--numw); }
+  col.last { width:calc(var(--numw) + 15px); }
+  tbody td { padding:0; height:33px; border-bottom:1px solid var(--chip);
+             text-align:center; font-variant-numeric:tabular-nums; width:var(--numw); }
+  tbody td:first-child { text-align:left; width:auto; padding-left:15px; }
+  tbody td:last-child { width:calc(var(--numw) + 15px); padding-right:15px; }
+  tbody tr:last-child td { border-bottom:0; }
+  tbody tr:hover td { background:var(--hover); }
+  td.item { font-weight:650; color:var(--ink); white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+  td.item .code { display:inline-block; margin-right:9px; padding:2px 7px; border-radius:20px;
+                  background:var(--chip); color:var(--chip-ink); font-size:11px;
+                  font-weight:700; letter-spacing:.3px; }
+  tr.shop { cursor:pointer; }
+  tr.shop.on > td { background:var(--hover); font-weight:700; }
+  td.item .tw { display:inline-block; width:11px; font-size:9px; color:var(--muted); }
+  tr.lvl2 > td { height:29px; background:var(--row); border-bottom:1px solid var(--chip); }
+  tr.lvl3 > td { height:27px; background:var(--card); border-bottom:1px solid var(--chip); }
+  td.item.sub { padding-left:41px; font-size:12.5px; font-weight:700; color:var(--ink); }
+  td.item.sub2 { padding-left:62px; font-size:12px; font-weight:500; color:var(--muted); }
+  td.z { color:var(--zero); font-weight:400; }
+  tr.tot td { background:var(--row); font-weight:700; height:36px;
+              border-top:1px solid var(--line); }
+
+  .grand { display:flex; align-items:center; gap:11px; padding:13px 15px; border-radius:12px;
+           background:var(--gold); color:#1B2A4A; font-weight:700; margin-top:4px; }
+  .grand .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
+                    opacity:.7; }
+  .grand .nm { font-size:13.5px; letter-spacing:.5px; text-transform:uppercase; }
+  .grand .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
+  .grand .mini > div { width:var(--numw); text-align:center; font-size:15.5px; }
+
+  .empty { padding:26px 16px; text-align:center; color:var(--muted); font-size:13.5px; }
+
+  /* Asking for a window nobody has pulled yet is routine, so it gets a proper
+     screen rather than a red error: what is missing, and the two ways out. */
+  .nodata { padding:46px 24px 42px; text-align:center; }
+  .nodata .ic { width:52px; height:52px; margin:0 auto 15px; border-radius:14px;
+                display:flex; align-items:center; justify-content:center;
+                background:#EEF2FB; color:var(--navy); }
+  .nodata h3 { margin:0 0 7px; font-size:16px; font-weight:750; color:var(--ink);
+               letter-spacing:-.2px; }
+  .nodata p { margin:0 auto; max-width:560px; font-size:13.5px; line-height:1.55;
+              color:var(--muted); }
+  .nodata .acts { display:flex; justify-content:center; flex-wrap:wrap;
+                  gap:9px; margin-top:19px; }
+  .nodata .have { margin-top:17px; font-size:12px; color:var(--muted); }
+  .nodata .have b { color:var(--ink); font-weight:650; }
+  .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
+
+  @media (max-width:760px){
+    .bar1 .sp, .bar2 .sp { margin-left:0; width:100%; }
+    .fbar { width:100%; flex-wrap:wrap; }
+    .fitem { flex:1 1 44%; padding:7px 11px; }
+    .selw select { max-width:none; width:100%; }
+    .fdiv { display:none; }
+    .searchwrap { flex:1 1 150px; }
+    input[type=search].search { min-width:0; width:100%; }
+    .lede { display:none; }
+    .bd-h { flex-wrap:wrap; }
+    .bd-h .mini { margin-left:0; width:100%; justify-content:space-between; }
+    .bd-h .mini > div { width:25%; }
+    .bd-h .mini .k { display:block; }
+    .grand { flex-wrap:wrap; }
+    .grand .mini { margin-left:0; width:100%; }
+    .grand .mini > div { width:25%; }
+    .grand .mini .k { display:block; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="bar1">
+    <div class="fbar">
+      <div class="fitem" id="calWrap" style="position:relative">
+        <span class="fi-k">Period</span>
+        <button type="button" class="fi-v" onclick="Cal.open(event)">
+          <span id="calLabel">{{ chosen.short if chosen else 'Pick a period' }}</span>
+          <i>▾</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Group by</span>
+        <div class="seg" id="seg">
+          <button type="button" class="on" data-g="bond" onclick="setGroup('bond')">Bond</button>
+          <button type="button" data-g="warehouse" onclick="setGroup('warehouse')">Warehouse</button>
+        </div>
+      </div>
+      <span class="fdiv"></span>
+      <label class="fitem" id="wrapCluster">
+        <span class="fi-k">Cluster</span>
+        <div class="selw"><select id="fCluster" onchange="load()">
+          <option value="">All clusters</option>
+          <option value="1">Cluster 1</option>
+          <option value="2">Cluster 2</option>
+          <option value="3">Cluster 3</option>
+        </select><i>▾</i></div>
+      </label>
+      <span class="fdiv" id="divBond"></span>
+      <label class="fitem" id="wrapBond">
+        <span class="fi-k">Bond</span>
+        <div class="selw"><select id="fBond" onchange="load()">
+          <option value="">All bonds</option>
+        </select><i>▾</i></div>
+      </label>
+      <label class="fitem" id="wrapWh" hidden>
+        <span class="fi-k">Warehouse</span>
+        <div class="selw"><select id="fWh" onchange="load()">
+          <option value="">All warehouses</option>
+        </select><i>▾</i></div>
+      </label>
+    </div>
+    <div class="sp" id="dlBar">
+      <a class="act" id="dlXl" href="#">Download Excel</a>
+      <div class="menu" id="pdfMenu">
+        <button type="button" class="act primary" onclick="togglePdf(event)">Download PDF ▾</button>
+        <div class="items">
+          <a id="dlBooks" href="#">All bonds
+            <span class="sub">one file per bond, a page per shop</span></a>
+          <a id="dlView" href="#">Current view
+            <span class="sub">exactly what is on screen</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar2" id="bar2">
+    <div class="searchwrap">
+      <span class="ic">⌕</span>
+      <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
+    </div>
+    <div class="sp">
+      <button class="link" id="foldBtn" onclick="foldAll()">Expand all</button>
+      <button class="act" onclick="load()">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div class="lede" id="lede">
+  <span class="grp" id="ledeGroup">Bond</span>
+  <div class="sp"><span>Opening</span><span>Receipt</span><span>Sales</span><span>Closing</span></div>
+</div>
+<div id="list"><div class="bd"><div class="empty">Loading…</div></div></div>
+<div class="status" id="srcSay"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Bonds start collapsed: fifteen bars read at a glance, and a shop list is
+   something you go looking for rather than something you scroll past. */
+let DATA = null, openBonds = new Set(), filledBonds = false;
+/* Brand and pack lines are fetched a shop at a time - the whole book is five
+   and a half thousand of them, and nobody opens all of them at once. */
+let openShops = new Set(), shopCache = {};
+/* Bond is our mapping; warehouse is the raw file's own column. They cut the
+   same shops differently, so the screen picks a side rather than trying to
+   apply both at once. */
+let groupBy = 'bond';
+
+const num = v => (v || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+
+let FROM = '{{ chosen.start if chosen else "" }}', TO = '{{ chosen.end if chosen else "" }}';
+
+function params(){
+  const p = new URLSearchParams();
+  if (FROM && TO){ p.set('date_from', FROM); p.set('date_to', TO); }
+  p.set('group_by', groupBy);
+  // Cluster cuts the shops, not the grouping, so it rides along either way.
+  if (fCluster.value) p.set('cluster', fCluster.value);
+  if (groupBy === 'bond'){
+    if (fBond.value) p.set('bond', fBond.value);
+  } else if (fWh.value) {
+    p.set('warehouse', fWh.value);
+  }
+  return p;
+}
+
+function setGroup(g){
+  if (groupBy === g) return;
+  groupBy = g;
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.g === g));
+  const byBond = g === 'bond';
+  // Cluster stays on screen in both views; only the bond/warehouse pair swaps.
+  wrapBond.hidden = !byBond;
+  wrapWh.hidden = byBond;
+  ledeGroup.textContent = byBond ? 'Bond' : 'Warehouse';
+  q.placeholder = byBond ? 'Search bond or shop' : 'Search warehouse or shop';
+  openBonds.clear();
+  load();
+}
+
+function mountCal(cal){
+  const days = new Set(cal.days || []);
+  // A whole uploaded period is marked end to end even when the individual days
+  // inside it were never uploaded one by one.
+  for (const p of cal.periods || []){
+    let d = new Date(p.from + 'T00:00:00'), end = new Date(p.to + 'T00:00:00');
+    while (d <= end){ days.add(d.toISOString().slice(0,10)); d.setDate(d.getDate() + 1); }
+  }
+  Cal.setData([...days], cal.periods || []);
+}
+
+// Draw the picker before any data arrives, so a failed load still leaves a
+// working way to ask for a different period.
+Cal.init(FROM, TO, (from, to) => { FROM = from; TO = to; load(); });
+
+function togglePdf(ev){
+  ev.stopPropagation();
+  document.getElementById('pdfMenu').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#pdfMenu')) document.getElementById('pdfMenu').classList.remove('open');
+});
+
+function syncLinks(){
+  const q = params().toString();
+  dlXl.href    = '/reports/shop-cumulative/export.xlsx?' + q;
+  dlBooks.href = '/reports/shop-cumulative/export.pdf?' + q +
+                 (fBond.value ? '' : '&bond=all');
+  dlView.href  = '/reports/shop-cumulative/export.pdf?' + q + '&scope=current';
+}
+
+/* Never leave the screen on "Loading…". A fetch that 404s, times out or comes
+   back as the sign-in page used to hang here for good, with nothing on screen
+   to act on. Every failure now says what happened and what to do about it. */
+function fail(msg){
+  document.getElementById('list').innerHTML =
+    '<div class="bd"><div class="empty">' + msg + '</div></div>';
+  srcSay.textContent = '';
+}
+
+const CAL_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' +
+  'stroke="currentColor" stroke-width="1.7" stroke-linecap="round">' +
+  '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>' +
+  '<path d="M9 15.5l6 3M15 15.5l-6 3"/></svg>';
+
+/* No upload covers the window that was asked for. That is a normal request,
+   not a fault, so the screen says which window is empty, what would fill it,
+   and offers the widest window that can be answered right now. */
+function noData(d){
+  const asked = d.asked ? esc(d.asked.short) : 'that period';
+  const sug = d.suggest;
+  const acts =
+    '<a class="act primary" href="/">Upload raw data</a>' +
+    '<button type="button" class="act" onclick="openCal(event)">Pick another period</button>' +
+    (sug ? '<button type="button" class="act" onclick="useSuggested()">Show ' +
+           esc(sug.short) + ' instead</button>' : '');
+  // What IS on disk, in the office's own terms - more use than repeating the
+  // suggestion, because it says which pull is the one that was never taken.
+  const pulls = ((d.calendar || {}).periods || []).map(p => p.short);
+  const have = pulls.length
+    ? '<div class="have">Uploaded so far: <b>' +
+      pulls.slice(0, 4).map(esc).join('</b>, <b>') + '</b>' +
+      (pulls.length > 4 ? ' and ' + (pulls.length - 4) + ' more' : '') + '</div>'
+    : '';
+
+  document.getElementById('list').innerHTML =
+    '<div class="bd"><div class="nodata">' +
+      '<div class="ic">' + CAL_ICON + '</div>' +
+      '<h3>No raw data for ' + asked + '</h3>' +
+      '<p>' + esc(d.error || '') + '</p>' +
+      '<div class="acts">' + acts + '</div>' + have +
+    '</div></div>';
+  srcSay.textContent = '';
+  lede.hidden = true;
+  bar2.hidden = true;
+  dlBar.hidden = true;
+  SUGGEST = sug || null;
+}
+
+let SUGGEST = null;
+function openCal(ev){ Cal.open(ev); }
+function useSuggested(){
+  if (!SUGGEST) return;
+  FROM = SUGGEST.from; TO = SUGGEST.to;
+  Cal.init(FROM, TO, (from, to) => { FROM = from; TO = to; load(); });
+  load();
+}
+
+async function load(){
+  syncLinks();
+  document.getElementById('list').innerHTML = '<div class="bd"><div class="empty">Loading…</div></div>';
+
+  let res;
+  try {
+    res = await fetch('/api/shop-cumulative?' + params().toString());
+  } catch (e) {
+    fail('Could not reach the server. Check it is still running, then press Refresh.');
+    return;
+  }
+  if (res.status === 404){
+    // no payload, so nothing to feed the picker - it is already drawn
+    // Templates reload on a refresh; routes do not. So the new screen can be
+    // on your browser while the running process has never heard of its API.
+    fail('This screen is newer than the running server — stop the app and start it again ' +
+         '(Ctrl-C, then ./run_local.sh), and this page will fill in.');
+    return;
+  }
+  if (res.status === 401 || res.redirected){
+    fail('Your session has expired. <a href="/login">Sign in again</a>.');
+    return;
+  }
+  if (!res.ok){ fail('The server returned ' + res.status + '. Press Refresh to try again.'); return; }
+
+  try {
+    DATA = await res.json();
+  } catch (e) {
+    fail('The server sent something this page could not read. Press Refresh to try again.');
+    return;
+  }
+  shopCache = {};
+  if (DATA.calendar) mountCal(DATA.calendar);
+  if (DATA.error){ noData(DATA); return; }
+  lede.hidden = false;
+  bar2.hidden = false;
+  dlBar.hidden = false;
+  if (!filledBonds && DATA.all_bonds){
+    filledBonds = true;
+    const fill = (sel, list, chosen) => {
+      for (const v of list || []){
+        const o = document.createElement('option');
+        o.value = v; o.textContent = v.charAt(0) + v.slice(1).toLowerCase();
+        if (v === chosen) o.selected = true;
+        sel.appendChild(o);
+      }
+    };
+    fill(fBond, DATA.all_bonds, DATA.bond);
+    fill(fWh, DATA.all_warehouses, DATA.warehouse);
+  }
+  try { render(); }
+  catch (e) { fail('Could not draw this period: ' + esc(String(e && e.message || e))); }
+}
+
+function render(){
+  const term = (q.value || '').trim().toLowerCase();
+  const bonds = DATA.bonds
+    .map(g => {
+      if (!term) return g;
+      if (g.bond.toLowerCase().includes(term)) return g;
+      const shops = g.shops.filter(s => s.name.toLowerCase().includes(term)
+                                     || s.code.toLowerCase().includes(term));
+      return shops.length ? {...g, shops} : null;
+    })
+    .filter(Boolean);
+
+  const t = DATA.total;
+  let html = '';
+  if (!bonds.length){
+    html += '<div class="bd"><div class="empty">Nothing matches that filter.</div></div>';
+  }
+  for (const g of bonds){
+    const open = openBonds.has(g.bond) || (term && term.length > 1);
+    html += `<div class="bd${open ? '' : ' shut'}" data-bond="${esc(g.bond)}">
+      <div class="bd-h" onclick="toggle('${esc(g.bond)}')">
+        <span class="chev">▼</span>
+        <span class="nm">${esc(g.bond.charAt(0) + g.bond.slice(1).toLowerCase())}</span>
+        ${g.cluster ? `<span class="cl">Cluster ${g.cluster}</span>` : ''}
+        <span class="cnt">${g.shops.length} shop${g.shops.length === 1 ? '' : 's'}</span>
+        <div class="mini">
+          <div><span class="k">Opening</span><div class="n">${num(g.totals[0])}</div></div>
+          <div><span class="k">Receipt</span><div class="n">${num(g.totals[1])}</div></div>
+          <div><span class="k">Sales</span><div class="n sold">${num(g.totals[2])}</div></div>
+          <div><span class="k">Closing</span><div class="n">${num(g.totals[3])}</div></div>
+        </div>
+      </div>
+      <div class="bd-b"><table>
+        <colgroup><col><col class="num"><col class="num"><col class="num"><col class="last"></colgroup>
+        <tbody>`;
+    for (const s of g.shops){
+      const open = openShops.has(s.code);
+      html += `<tr class="shop${open ? ' on' : ''}" onclick="toggleShop('${esc(s.code)}')">` +
+              `<td class="item"><span class="tw">${open ? '▾' : '▸'}</span>` +
+              `<span class="code">${esc(s.code)}</span>${esc(s.name)}</td>` +
+              s.values.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') + '</tr>';
+      if (open) html += detailRows(s.code);
+    }
+    html += `<tr class="tot"><td class="item">Total</td>` +
+            g.totals.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') +
+            `</tr></tbody></table></div></div>`;
+  }
+  if (bonds.length){
+    // Totals what is showing, not the whole book, so a filtered view still ties out.
+    const shown = [0,1,2,3].map(k => bonds.reduce((sum, g) => sum + g.totals[k], 0));
+    const use = (term || fCluster.value || fBond.value || fWh.value) ? shown : t;
+
+    html += `<div class="grand"><span class="nm">Grand total</span><div class="mini">
+        <div><span class="k">Opening</span>${num(use[0])}</div>
+        <div><span class="k">Receipt</span>${num(use[1])}</div>
+        <div><span class="k">Sales</span>${num(use[2])}</div>
+        <div><span class="k">Closing</span>${num(use[3])}</div>
+      </div></div>`;
+  }
+  document.getElementById('list').innerHTML = html;
+  // Say which files answered this window - stitching 1-16 to 17-24 is normal
+  // here, not an edge case, so it should be visible rather than implied.
+  const chain = DATA.chain || [];
+  srcSay.innerHTML = chain.length > 1
+    ? `Stitched from <b>${chain.length} uploads</b>: ` +
+      chain.map(c => esc(c.name.replace(/\.xlsx$/i, ''))).join(' + ') + '.'
+    : (chain.length === 1
+        ? (chain[0].kind === 'cumulative'
+            ? `From <b>${esc(chain[0].name.replace(/\.xlsx$/i, ''))}</b>.`
+            : 'From one daily upload.')
+        : '');
+  foldBtn.textContent = openBonds.size ? 'Collapse all' : 'Expand all';
+}
+
+function detailRows(code){
+  const d = shopCache[code];
+  if (!d) return `<tr class="lvl2"><td class="item sub">Loading…</td>` +
+                 '<td></td><td></td><td></td><td></td></tr>';
+  if (d.error || !d.brands.length)
+    return `<tr class="lvl2"><td class="item sub">${esc(d.error || 'No lines for this shop.')}</td>` +
+           '<td></td><td></td><td></td><td></td></tr>';
+  let out = '';
+  for (const b of d.brands){
+    out += `<tr class="lvl2"><td class="item sub">${esc(b.brand)}</td>` +
+           b.values.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') + '</tr>';
+    for (const p of b.packs){
+      out += `<tr class="lvl3"><td class="item sub2">${esc(p.pack)}</td>` +
+             p.values.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') + '</tr>';
+    }
+  }
+  return out;
+}
+
+async function toggleShop(code){
+  if (openShops.has(code)){ openShops.delete(code); render(); return; }
+  openShops.add(code);
+  render();
+  if (shopCache[code]) return;
+  const q = params(); q.set('code', code);
+  try {
+    const res = await fetch('/api/shop-cumulative/shop?' + q.toString());
+    shopCache[code] = res.ok ? await res.json() : {error: 'Could not load that shop.'};
+  } catch (e) {
+    shopCache[code] = {error: 'Could not load that shop.'};
+  }
+  if (openShops.has(code)) render();
+}
+
+function toggle(bond){
+  openBonds.has(bond) ? openBonds.delete(bond) : openBonds.add(bond);
+  render();
+}
+function foldAll(){
+  if (openBonds.size) openBonds.clear();
+  else DATA.bonds.forEach(g => openBonds.add(g.bond));
+  render();
+}
+
+let timer = null;
+q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 130); });
+load();
+</script>
+{% endblock %}

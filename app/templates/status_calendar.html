@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Status Calendar{% endblock %}
+{% block heading %}Status Calendar{% endblock %}
+
+{% block head %}
+<style>
+  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .controls .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .mnav { display:inline-flex; align-items:center; gap:10px; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:5px 8px; }
+  .mnav button { border:1px solid var(--line); background:var(--card); border-radius:8px;
+                 width:28px; height:28px; cursor:pointer; color:var(--ink); font-size:12px;
+                 line-height:1; padding:0; }
+  .mnav button:hover { background:var(--hover); }
+  .mnav .m { font-size:14px; font-weight:700; min-width:150px; text-align:center; }
+
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend i { width:9px; height:9px; border-radius:50%; display:inline-block; }
+
+  .kpis { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+          margin-bottom:18px; }
+  .kpi { position:relative; background:var(--card); border:1px solid var(--line);
+         border-radius:12px; padding:13px 15px 12px; overflow:hidden; }
+  .kpi::before { content:''; position:absolute; inset:0 auto 0 0; width:3px;
+                 background:var(--accent,var(--blue)); }
+  .kpi .l { font-size:10px; letter-spacing:.7px; text-transform:uppercase;
+            color:var(--muted); font-weight:700; }
+  .kpi .v { font-size:24px; font-weight:700; letter-spacing:-.5px; margin-top:2px;
+            font-variant-numeric:tabular-nums; }
+  .kpi .s { font-size:11.5px; color:var(--muted); margin-top:1px; }
+
+  .cal { background:var(--card); border:1px solid var(--line); border-radius:14px;
+         padding:14px; }
+  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+  .dow { text-align:center; font-size:10px; font-weight:800; letter-spacing:.9px;
+         text-transform:uppercase; color:var(--muted); padding-bottom:4px; }
+  .cell { min-height:88px; border:1px solid var(--line); border-radius:11px; padding:8px 9px;
+          display:flex; flex-direction:column; gap:6px; background:var(--card); }
+  .cell.pad { border:0; background:none; }
+  .cell.none { background:repeating-linear-gradient(135deg,
+               transparent 0 7px, var(--row) 7px 14px); }
+  .cell.full { border-color:#BBD4A8; }
+  .cell.future { opacity:.42; }
+  .cell .n { font-size:12.5px; font-weight:700; color:var(--ink); }
+  .cell .n small { font-weight:600; color:var(--muted); margin-left:5px; font-size:10px; }
+  .dots { display:flex; flex-wrap:wrap; gap:4px; margin-top:auto; }
+  .dots i { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .dots i.off { background:var(--line); }
+  .miss { font-size:10.5px; color:#B45309; font-weight:650; }
+
+  .empty { background:var(--card); border:1px solid var(--line); border-radius:12px;
+           padding:34px 22px; text-align:center; color:var(--muted); font-size:13.5px; }
+  .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="mnav">
+    <button type="button" onclick="step(-1)">‹</button>
+    <span class="m" id="mLabel">—</span>
+    <button type="button" onclick="step(1)">›</button>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="sp"><a class="act" href="/">Upload raw data</a></div>
+</div>
+
+<div class="kpis" id="kpis"></div>
+<div class="cal"><div class="grid" id="grid"></div></div>
+<p class="status" id="foot"></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* What this screen answers: for any given day, can the reports speak for it?
+   A day is "covered" per stream, and the gaps are the point - an amber count
+   on the tile is the thing you act on. */
+const CAL = {{ calendar | tojson }};
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+const iso = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+const today = new Date().toISOString().slice(0,10);
+
+let month = (CAL.span.last || today).slice(0,7);
+
+function step(n){
+  let [y,m] = month.split('-').map(Number);
+  m += n; if (m < 1){ m = 12; y--; } if (m > 12){ m = 1; y++; }
+  month = `${y}-${String(m).padStart(2,'0')}`;
+  draw();
+}
+
+function draw(){
+  const [y,m] = month.split('-').map(Number);
+  mLabel.textContent = `${MONTHS[m-1]} ${y}`;
+  legend.innerHTML = CAL.streams.map(s =>
+    `<span><i style="background:${s.colour}"></i>${s.label}</span>`).join('');
+
+  const first = new Date(y, m-1, 1).getDay();
+  const last  = new Date(y, m, 0).getDate();
+  let html = ['S','M','T','W','T','F','S'].map(d => `<div class="dow">${d}</div>`).join('');
+  for (let i = 0; i < first; i++) html += '<div class="cell pad"></div>';
+
+  const tally = {};
+  CAL.streams.forEach(s => tally[s.key] = 0);
+  let covered = 0, gaps = 0, elapsed = 0;
+
+  for (let d = 1; d <= last; d++){
+    const key = iso(y, m, d);
+    const have = CAL.days[key] || [];
+    const future = key > today;
+    if (!future){
+      elapsed++;
+      if (have.length) covered++;
+      if (have.length && have.length < CAL.streams.length) gaps++;
+      have.forEach(k => tally[k] = (tally[k] || 0) + 1);
+    }
+    const missing = CAL.streams.length - have.length;
+    const cls = ['cell', future ? 'future' : (have.length ? (missing ? '' : 'full') : 'none')]
+                .filter(Boolean).join(' ');
+    html += `<div class="cell ${cls.replace('cell ','')}" title="${key}">
+        <div class="n">${d}${key === today ? '<small>today</small>' : ''}</div>
+        <div class="dots">` +
+        CAL.streams.map(s => `<i class="${have.includes(s.key) ? '' : 'off'}"
+             style="${have.includes(s.key) ? 'background:' + s.colour : ''}"
+             title="${s.label}"></i>`).join('') +
+        `</div>` +
+        (!future && missing && have.length
+          ? `<div class="miss">${missing} missing</div>` : '') +
+      `</div>`;
+  }
+  grid.innerHTML = html;
+
+  kpis.innerHTML = `
+    <div class="kpi" style="--accent:#10B981"><div class="l">Days with data</div>
+      <div class="v">${covered}<span style="font-size:14px;color:var(--muted)"> / ${elapsed}</span></div>
+      <div class="s">of the month so far</div></div>
+    <div class="kpi" style="--accent:#F59E0B"><div class="l">Part days</div>
+      <div class="v">${gaps}</div><div class="s">some streams missing</div></div>` +
+    CAL.streams.map(s => `
+    <div class="kpi" style="--accent:${s.colour}"><div class="l">${s.label}</div>
+      <div class="v">${tally[s.key] || 0}</div><div class="s">days covered</div></div>`).join('');
+
+  foot.textContent = CAL.periods.length
+    ? 'Cumulative periods uploaded: ' + CAL.periods.map(p => p.short).join(' · ')
+    : 'No cumulative period uploaded yet.';
+}
+draw();
+</script>
+{% endblock %}

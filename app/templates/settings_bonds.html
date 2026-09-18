@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Bond Mapping{% endblock %}
+{% block heading %}Bond Mapping{% endblock %}
+
+{% block head %}
+<style>
+  .lead { margin:-4px 0 18px; color:var(--muted); font-size:13.5px; max-width:74ch; }
+  h3.sec { margin:26px 0 4px; font-size:17px; font-weight:650; }
+
+  .clusters { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+              margin-bottom:22px; }
+  .cl { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .cl h4 { margin:0 0 9px; font-size:12px; font-weight:750; letter-spacing:.7px;
+           text-transform:uppercase; color:var(--muted); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; background:var(--chip); color:var(--chip-ink);
+          border-radius:20px; padding:4px 5px 4px 11px; font-size:12.5px; font-weight:600; }
+  .chip button { border:0; background:none; color:var(--muted); font-size:14px; line-height:1;
+                 cursor:pointer; padding:0 4px; }
+  .chip button:hover { color:var(--bad); }
+  .cl .none { font-size:12.5px; color:var(--muted); }
+  .cl select { margin-top:10px; width:100%; border:1px solid var(--line); border-radius:8px;
+               padding:7px 9px; font:inherit; font-size:13px; background:var(--card); color:var(--ink); }
+
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .bar input[type=search], .bar select {
+      border:1px solid var(--line); background:var(--card); border-radius:9px;
+      padding:8px 11px; font:inherit; font-size:13.5px; color:var(--ink); }
+  .bar input[type=search] { min-width:260px; }
+  .bar .sp { margin-left:auto; display:flex; gap:9px; align-items:center; }
+  .bar .count { font-size:12.5px; color:var(--muted); }
+
+  .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          overflow:auto; max-height:62vh; }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13.5px; }
+  thead th { position:sticky; top:0; z-index:2; background:var(--head); text-align:left;
+             font-size:11px; letter-spacing:.45px; text-transform:uppercase; color:var(--muted);
+             font-weight:700; padding:9px 12px; border-bottom:1px solid var(--line);
+             white-space:nowrap; }
+  tbody td { padding:7px 12px; border-bottom:1px solid var(--chip); vertical-align:middle; }
+  tbody tr:hover td { background:var(--hover); }
+  tbody tr.dirty td { background:#FFFBEB; }
+  td.code { font-variant-numeric:tabular-nums; color:var(--muted); width:88px; }
+  td.name { font-weight:600; }
+  td.small { color:var(--muted); font-size:12.5px; }
+  td select { border:1px solid var(--line); border-radius:7px; padding:5px 8px;
+              font:inherit; font-size:13px; background:var(--card); color:var(--ink); min-width:168px; }
+  tr.dirty td select { border-color:var(--gold); }
+  .pillc { font-size:10.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+           border-radius:20px; padding:2px 8px; background:var(--chip); color:var(--chip-ink); }
+  .pillc.closed { background:#FEF2F2; color:#991B1B; }
+  .status { font-size:12.5px; color:var(--muted); margin:12px 2px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<p class="lead">Which shop belongs to which bond, and which bond to which ASM cluster.
+  Shop assignments are written back into <b id="srcName">master data</b> — the same column
+  the build scripts read — so a change here reaches the reports and the workbooks alike.</p>
+
+<div id="msg"></div>
+
+<h3 class="sec">Clusters</h3>
+<p class="lead">Move a bond between clusters. This affects every report that groups by cluster.</p>
+<div class="clusters" id="clusters"></div>
+
+<h3 class="sec">Shops</h3>
+<div class="bar">
+  <input type="search" id="q" placeholder="Search shop, code, warehouse or staff" autocomplete="off">
+  <select id="fBond"><option value="">All bonds</option></select>
+  <select id="fStatus">
+    <option value="">Active and closed</option>
+    <option value="Active">Active only</option>
+    <option value="Closed">Closed only</option>
+  </select>
+  <div class="sp">
+    <span class="count" id="count"></span>
+    <button class="btn" onclick="resetEdits()" id="undoBtn" disabled>Undo changes</button>
+    <button class="btn primary" onclick="save()" id="saveBtn" disabled>Save</button>
+  </div>
+</div>
+
+<div class="wrap"><table id="grid">
+  <thead><tr><th>Code</th><th>Shop</th><th>Warehouse</th><th>Cat</th>
+    <th>Field staff</th><th>Bond</th><th>Status</th></tr></thead>
+  <tbody><tr><td colspan="7">Loading…</td></tr></tbody>
+</table></div>
+<div class="status" id="foot"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let DATA = null;
+const edits = new Map();     // shop code -> new bond
+let clusters = { "1":[], "2":[], "3":[] };
+
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s??''; return d.innerHTML; }
+
+async function load(){
+  let d;
+  try { d = await (await fetch('/api/bond-mapping')).json(); }
+  catch { msg.innerHTML = '<div class="banner">Could not reach the server.</div>'; return; }
+  if (d.error){ msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`; return; }
+  msg.innerHTML = '';
+  DATA = d;
+  clusters = JSON.parse(JSON.stringify(d.clusters));
+  srcName.textContent = d.source;
+  fBond.innerHTML = '<option value="">All bonds</option>'
+    + d.bonds.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('');
+  drawClusters();
+  render();
+}
+
+/* ---------------- clusters ---------------- */
+function drawClusters(){
+  const assigned = new Set(Object.values(clusters).flat());
+  const spare = DATA.bonds.filter(b => !assigned.has(b));
+  clusters_el().innerHTML = ['1','2','3'].map(c => `
+    <div class="cl">
+      <h4>Cluster ${c}</h4>
+      <div class="chips">${
+        (clusters[c] || []).length
+          ? clusters[c].map(b => `<span class="chip">${escapeHtml(b)}
+              <button title="Remove" onclick="dropBond('${c}','${b}')">&times;</button></span>`).join('')
+          : '<span class="none">No bonds in this cluster</span>'}</div>
+      <select onchange="addBond('${c}', this)">
+        <option value="">Add a bond…</option>
+        ${spare.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('')}
+      </select>
+    </div>`).join('');
+}
+function clusters_el(){ return document.getElementById('clusters'); }
+function addBond(c, sel){
+  const b = sel.value; if (!b) return;
+  clusters[c] = [...new Set([...(clusters[c] || []), b])].sort();
+  clustersDirty = true; drawClusters(); markDirty();
+}
+function dropBond(c, b){
+  clusters[c] = (clusters[c] || []).filter(x => x !== b);
+  clustersDirty = true; drawClusters(); markDirty();
+}
+
+/* ---------------- shops ---------------- */
+function visible(){
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  return DATA.shops.filter(s => {
+    if (fBond.value && bondOf(s) !== fBond.value) return false;
+    if (fStatus.value && (s.status || '') !== fStatus.value) return false;
+    if (!q) return true;
+    return [s.code, s.name, s.warehouse, s.staff].join(' ').toLowerCase().includes(q);
+  });
+}
+const bondOf = s => edits.has(s.code) ? edits.get(s.code) : s.bond;
+
+function render(){
+  const rows = visible();
+  const opts = DATA.bonds.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('');
+  grid.querySelector('tbody').innerHTML = rows.length ? rows.map(s => {
+    const b = bondOf(s), moved = edits.has(s.code);
+    return `<tr class="${moved ? 'dirty' : ''}">
+      <td class="code">${escapeHtml(s.code)}</td>
+      <td class="name">${escapeHtml(s.name)}</td>
+      <td class="small">${escapeHtml(s.warehouse.replace(/^WH-/, ''))}</td>
+      <td class="small">${escapeHtml(s.cat)}</td>
+      <td class="small">${escapeHtml(s.staff)}</td>
+      <td><select onchange="setBond('${s.code}', this.value)">
+            <option value=""${b ? '' : ' selected'}>— unmapped —</option>
+            ${opts.replace(`value="${b}"`, `value="${b}" selected`)}
+          </select></td>
+      <td><span class="pillc ${(s.status||'').toLowerCase()==='closed'?'closed':''}">${escapeHtml(s.status || '—')}</span></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7">Nothing matches that.</td></tr>';
+
+  count.textContent = `${rows.length} of ${DATA.shops.length} shops`;
+  foot.textContent = edits.size
+    ? `${edits.size} shop${edits.size === 1 ? '' : 's'} moved — not saved yet.`
+    : `Mapping read from ${DATA.source}.`;
+}
+
+function setBond(code, bond){
+  const shop = DATA.shops.find(s => s.code === code);
+  if (!shop) return;
+  if ((bond || '') === shop.bond) edits.delete(code); else edits.set(code, bond);
+  markDirty(); render();
+}
+// Save must reflect whether anything actually differs — picking a shop's
+// existing bond out of the dropdown is not a change.
+let clustersDirty = false;
+function markDirty(){
+  const any = edits.size > 0 || clustersDirty;
+  saveBtn.disabled = !any;
+  undoBtn.disabled = !any;
+}
+function resetEdits(){
+  edits.clear();
+  clusters = JSON.parse(JSON.stringify(DATA.clusters));
+  clustersDirty = false;
+  drawClusters(); render(); markDirty();
+}
+
+async function save(){
+  saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/bond-mapping', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bonds: Object.fromEntries(edits), clusters }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not save.');
+    edits.clear();
+    clustersDirty = false;
+    await load();
+    foot.textContent = (data.changed ? `${data.changed} shop(s) written to master data. ` : '')
+      + (data.backup ? `Previous copy kept as ${data.backup}. ` : '')
+      + (data.clusters_saved ? 'Cluster split saved.' : '');
+    undoBtn.disabled = true;
+  } catch(e){
+    msg.innerHTML = `<div class="banner">${escapeHtml(e.message)}</div>`;
+    saveBtn.disabled = false;
+  } finally {
+    saveBtn.textContent = 'Save';
+  }
+}
+
+let t = null;
+document.getElementById('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 130); });
+fBond.addEventListener('change', render);
+fStatus.addEventListener('change', render);
+load();
+</script>
+{% endblock %}
