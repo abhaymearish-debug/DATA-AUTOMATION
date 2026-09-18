@@ -46,58 +46,71 @@
             border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
 
   /* ---------- the table ----------
-     Built to read like the workbook the office already circulates: a gold
-     header on navy, plain bond rows, a navy band where the cluster totals up
-     and a gold one for the network. One number per cell: the SHOW switch says
-     whether that number is the achievement or the target, and the percentage
-     on the right answers the comparison without printing it twice. */
+     The shape the office knows: a bond is two lines, Target then Achieved,
+     with the name and the percentage belonging to the pair. Dressed in the
+     house navy and gold - gold on navy for the header, a navy band where a
+     cluster totals up, gold for the network - and ruled both ways, so every
+     figure sits in a cell instead of floating in the row. */
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
-               overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+               overflow:auto; max-height:74vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
 
   thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);
              text-align:center; vertical-align:middle; font-weight:700; font-size:9.5px;
-             letter-spacing:.5px; text-transform:uppercase; line-height:1.28;
-             padding:9px 8px; border-bottom:1px solid #22407F;
-             border-right:1px solid rgba(255,255,255,.07); }
-  thead th:first-child { text-align:left; left:0; z-index:4; min-width:184px; padding-left:16px; }
-  thead th:last-child { right:0; z-index:4; border-right:0; min-width:88px; }
-  thead th .lg { display:block; margin-top:2px; font-size:8.5px; font-weight:600;
-                 letter-spacing:.4px; color:rgba(255,255,255,.52); text-transform:none; }
+             letter-spacing:.5px; text-transform:uppercase; line-height:1.3;
+             padding:10px 8px; white-space:normal;
+             border-bottom:1px solid #22407F;
+             border-right:1px solid rgba(255,255,255,.10); }
+  thead th:first-child { text-align:left; left:0; z-index:4; min-width:150px; padding-left:16px; }
+  thead th.ty { min-width:78px; text-align:left; }
+  thead th:last-child { right:0; z-index:4; border-right:0; min-width:74px; }
 
-  tbody td { height:32px; padding:0 9px; text-align:center; white-space:nowrap;
+  tbody td { height:29px; padding:0 9px; text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; color:var(--ink);
-             border-bottom:1px solid var(--line); }
-  tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
-                         background:var(--card); font-weight:650; font-size:13.5px;
-                         letter-spacing:-.1px; padding-left:16px; }
-  tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card); padding:0 8px; }
-  tbody td:first-child { border-right:1px solid var(--line); }
-  tbody tr.cl td:first-child, tbody tr.gt td:first-child { border-right:0; }
+             border-right:1px solid var(--line); }
+  tbody td.nm { text-align:left; position:sticky; left:0; z-index:2; background:var(--card);
+                font-weight:700; font-size:13px; letter-spacing:-.1px; padding-left:16px;
+                vertical-align:middle; color:var(--navy); }
+  tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card);
+                 border-right:0; vertical-align:middle; font-weight:750; font-size:12.5px; }
+  tbody td.ty { text-align:left; font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+                font-weight:700; }
 
-  tbody tr.b:hover td, tbody tr.b:hover td:first-child { background:var(--hover); }
+  /* The two lines belong together, so the rule falls under the achieved one
+     and never between them. */
+  tbody tr.tgt td.ty { color:#8A94A6; }
+  tbody tr.ach td.ty { color:var(--navy); }
+  tbody tr.ach td { border-bottom:1px solid var(--line); }
+  tbody tr.hot td, tbody tr.hot td.nm, tbody tr.hot td.pct { background:var(--hover); }
 
-  tbody tr.cl td, tbody tr.cl td:first-child { background:var(--navy); color:var(--gold);
-      font-weight:700; border-bottom:1px solid #22407F; }
+  tbody tr.cl td, tbody tr.cl td.nm, tbody tr.cl td.pct {
+      background:var(--navy); color:var(--gold); border-right-color:#22407F; }
+  tbody tr.cl.tgt td { font-weight:600; color:#C8D4EE; }
+  tbody tr.cl.tgt td.ty { color:#8FA3D0; }
+  tbody tr.cl.ach td { font-weight:750; }
+  tbody tr.cl.ach td.ty { color:var(--gold); }
+  tbody tr.cl.ach td { border-bottom:1px solid #22407F; }
+  tbody tr.cl td.nm { color:var(--gold); font-weight:750; }
 
-  tbody tr.gt td, tbody tr.gt td:first-child { background:var(--gold); color:#1B2A4A;
-      font-weight:800; height:38px; letter-spacing:.3px; }
+  tbody tr.gt td, tbody tr.gt td.nm, tbody tr.gt td.pct {
+      background:var(--gold); color:#1B2A4A; border-right-color:rgba(27,42,74,.18); }
+  tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
+  tbody tr.gt.tgt td.ty { color:#6B5520; }
+  tbody tr.gt.ach td { font-weight:800; }
+  tbody tr.gt.ach td.ty { color:#1B2A4A; }
+  tbody tr.gt td.nm { font-weight:800; letter-spacing:.3px; }
 
-  /* The percentage, judged against where the month has got to rather than
-     against 100. On the 18th of August nobody is at 100%, and a column of red
-     that only means 'it is the 18th' teaches you nothing. */
-  .pw { display:flex; justify-content:center; }
-  .pw .v { padding:4px 11px; border-radius:20px;
-           font-size:12px; font-weight:750; letter-spacing:.2px; }
-  .pw.lo  .v { background:#FEE2E2; color:#991B1B; }
-  .pw.mid .v { background:#FEF3C7; color:#92400E; }
-  .pw.hi  .v { background:#D1FAE5; color:#065F46; }
-  .pw.none .v { background:var(--chip); color:var(--muted); font-weight:600; font-size:10.5px;
-                letter-spacing:.4px; text-transform:uppercase; }
-  /* On the two coloured bands the pill would read as a sticker, so it borrows
-     the band's own ink instead of carrying its own. */
-  tr.cl .pw .v { background:rgba(255,255,255,.12); color:var(--gold); }
-  tr.gt .pw .v { background:#1B2A4A; color:var(--gold); }
+  /* The percentage is judged against where the month has got to, not against
+     100. On the 18th of August nobody is at 100%, and a column of red that
+     only means 'it is the 18th' teaches you nothing. */
+  .pct .lo  { color:#B42318; }
+  .pct .mid { color:#B54708; }
+  .pct .hi  { color:#067647; }
+  .pct .none { color:var(--muted); font-size:10px; letter-spacing:.4px;
+               text-transform:uppercase; font-weight:650; }
+  tr.cl .pct .lo, tr.cl .pct .mid, tr.cl .pct .hi, tr.cl .pct .none { color:var(--gold); }
+  tr.gt .pct .lo, tr.gt .pct .mid, tr.gt .pct .hi, tr.gt .pct .none { color:#1B2A4A; }
+
 
   /* ---------- typing the targets ---------- */
   .veil { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
@@ -171,14 +184,6 @@
           <option value="3">Cluster 3</option>
         </select><i>&#9662;</i></div>
       </label>
-      <span class="fdiv"></span>
-      <div class="fitem">
-        <span class="fi-k">Show</span>
-        <div class="seg" id="segShow">
-          <button type="button" class="on" data-m="ach" onclick="setShow('ach')">Achieved</button>
-          <button type="button" data-m="tgt" onclick="setShow('tgt')">Target</button>
-        </div>
-      </div>
       <span class="fdiv"></span>
       <div class="fitem">
         <span class="fi-k">Targets</span>
@@ -294,44 +299,52 @@ function setPace(d){
 
 function meter(pct){
   if (pct === null || pct === undefined)
-    return `<div class="pw none"><span class="v">no target</span></div>`;
+    return `<span class="none">no target</span>`;
   const ratio = pct / (PACE * 100);
   const band = ratio >= 1 ? 'hi' : ratio >= 0.8 ? 'mid' : 'lo';
   const tip = `${pct.toFixed(1)}% of target, against ${(PACE * 100).toFixed(0)}% of the month`;
-  return `<div class="pw ${band}" title="${tip}"><span class="v">${pct.toFixed(1)}%</span></div>`;
+  return `<span class="${band}" title="${tip}">${pct.toFixed(1)}%</span>`;
 }
 
-/* One bond, one row, one number in a cell. Which number is the SHOW switch's
-   business; the percentage on the right is the comparison either way. */
-let SHOW = 'ach';
-
-function setShow(m){
-  SHOW = m;
-  for (const b of segShow.querySelectorAll('button'))
-    b.classList.toggle('on', b.dataset.m === m);
-  if (DATA) render(DATA);
-}
-
-function line(r, cols, cls){
-  const body = cols.map(c => `<td>${num(r[SHOW][c.key] ?? 0)}</td>`).join('')
-             + `<td>${num(r[SHOW + '_total'])}</td>`;
-  return `<tr class="${cls}"><td>${esc(r.label)}</td>${body}`
-       + `<td class="pct">${meter(r.pct)}</td></tr>`;
+/* A bond is two lines that mean one thing: the target it was given and what
+   it did. The name and the percentage span both. */
+function pair(r, cols, cls){
+  const line = which => cols.map(c => `<td>${num(r[which][c.key] ?? 0)}</td>`).join('')
+                      + `<td>${num(r[which + '_total'])}</td>`;
+  const id = (r.kind === 'bond') ? esc(r.label) : '';
+  return `<tr class="${cls} tgt" data-pair="${id}">
+            <td class="nm" rowspan="2">${esc(r.label)}</td>
+            <td class="ty">Target</td>${line('tgt')}
+            <td class="pct" rowspan="2">${meter(r.pct)}</td></tr>
+          <tr class="${cls} ach" data-pair="${id}">
+            <td class="ty">Achieved</td>${line('ach')}</tr>`;
 }
 
 function render(d){
   setPace(d);
   const cols = d.columns;
   grid.querySelector('thead').innerHTML =
-    `<tr><th>Bond</th>` +
+    `<tr><th>Bond</th><th class="ty">Type</th>` +
     cols.map(c => `<th>${esc(c.label)}</th>`).join('') +
-    `<th>Total</th><th>Ach %</th></tr>`;
+    `<th>Total</th><th>%</th></tr>`;
 
   let html = '';
   for (const r of d.rows){
-    html += line(r, cols, r.kind === 'bond' ? 'b' : r.kind === 'cluster' ? 'cl' : 'gt');
+    html += pair(r, cols, r.kind === 'bond' ? 'b' : r.kind === 'cluster' ? 'cl' : 'gt');
   }
   grid.querySelector('tbody').innerHTML = html;
+
+  // Two rows, one bond, so it highlights as one bond.
+  const body = grid.querySelector('tbody');
+  body.onmouseover = e => {
+    const tr = e.target.closest('tr');
+    body.querySelectorAll('tr.hot').forEach(t => t.classList.remove('hot'));
+    if (!tr || !tr.dataset.pair) return;
+    body.querySelectorAll(`tr[data-pair="${tr.dataset.pair}"]`)
+        .forEach(t => t.classList.add('hot'));
+  };
+  body.onmouseleave = () =>
+    body.querySelectorAll('tr.hot').forEach(t => t.classList.remove('hot'));
 }
 
 /* ---------------- typing the targets ----------------
