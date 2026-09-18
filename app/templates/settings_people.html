@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block heading %}People{% endblock %}
+
+{% block head %}
+<style>
+  .wrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:22px 24px; margin-bottom:16px; max-width:720px; }
+  .wrap h3 { margin:0 0 4px; font-size:15px; }
+  .wrap p.sub { margin:0 0 18px; font-size:13px; color:var(--muted); line-height:1.5; }
+  label { display:block; font-size:10px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; margin:14px 0 5px; }
+  input[type=email], input[type=password] {
+      width:100%; max-width:360px; padding:9px 11px; border-radius:9px;
+      border:1px solid var(--line); background:var(--card); color:var(--ink);
+      font:inherit; font-size:13.5px; }
+  input:focus { outline:2px solid #C7D2FE; outline-offset:-1px; border-color:var(--blue); }
+  .row { display:flex; align-items:center; gap:12px; padding:11px 0;
+         border-bottom:1px solid var(--line); font-size:13.5px; }
+  .row:last-child { border-bottom:0; }
+  .row .who { font-weight:650; }
+  .row .me { font-size:10px; letter-spacing:.6px; text-transform:uppercase;
+             color:var(--muted); border:1px solid var(--line); border-radius:20px;
+             padding:2px 9px; }
+  .row .sp { margin-left:auto; }
+  .note { background:#ECFDF5; border:1px solid #A7F3D0; color:#065F46;
+          border-radius:10px; padding:11px 14px; font-size:13.5px; margin-bottom:16px;
+          max-width:720px; }
+  .bad { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
+         border-radius:10px; padding:11px 14px; font-size:13.5px; margin-bottom:16px;
+         max-width:720px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if note %}<div class="note">{{ note }}</div>{% endif %}
+{% if error %}<div class="bad">{{ error }}</div>{% endif %}
+
+<div class="wrap">
+  <h3>Who can sign in</h3>
+  <p class="sub">Anyone listed here can open this app and see every report in it.</p>
+  {% for p in people %}
+    <div class="row">
+      <span class="who">{{ p }}</span>
+      {% if p == user %}<span class="me">you</span>{% endif %}
+      <span class="sp">
+        {% if p != user %}
+        <form method="post" action="/settings/people/remove"
+              onsubmit="return confirm('Remove {{ p }}? They will not be able to sign in again.')">
+          <input type="hidden" name="email" value="{{ p }}">
+          <button class="act danger" type="submit">Remove</button>
+        </form>
+        {% endif %}
+      </span>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="wrap">
+  <h3>Add someone</h3>
+  <p class="sub">
+    You set their first password and tell them what it is — the app never emails
+    it and never shows it again. Twelve characters or more.
+  </p>
+  <form method="post" action="/settings/people/add">
+    <label for="email">Their email</label>
+    <input id="email" name="email" type="email" required autocomplete="off">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" minlength="12" required
+           autocomplete="new-password">
+
+    <label for="confirm">Password again</label>
+    <input id="confirm" name="confirm" type="password" minlength="12" required
+           autocomplete="new-password">
+
+    <div style="margin-top:18px"><button class="act primary" type="submit">Add account</button></div>
+  </form>
+</div>
+{% endblock %}

@@ -49,8 +49,50 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
+def _invited_file() -> Path:
+    return config.WORKSPACE_ROOT / "_auth" / "invited.json"
+
+
+def load_invited() -> list[str]:
+    """Addresses a signed-in user has invited from inside the app.
+
+    The env allowlist is set at deploy time and needs a redeploy to change,
+    which is no way to add a colleague on a Tuesday. This file is the same
+    allowlist, editable by somebody who is already signed in - a deliberate act
+    by a person with an account, not a way for a stranger to get one.
+    """
+    f = _invited_file()
+    if not f.is_file():
+        return []
+    try:
+        got = json.loads(f.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    return [str(e).strip().lower() for e in got if str(e).strip()]
+
+
+def save_invited(emails: list[str]) -> None:
+    f = _invited_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(sorted(set(emails)), indent=2))
+    try:
+        os.chmod(f, 0o600)
+    except OSError:
+        pass
+
+
+def invite(email: str) -> None:
+    """Let this address hold an account. Does not create one."""
+    email = (email or "").strip().lower()
+    if "@" not in email:
+        raise ValueError("That does not look like an email address.")
+    save_invited(load_invited() + [email])
+
+
 def email_is_allowed(email: str) -> bool:
     email = email.strip().lower()
+    if email in load_invited():
+        return True
     if config.ALLOWED_EMAILS:
         if email in config.ALLOWED_EMAILS:
             return True

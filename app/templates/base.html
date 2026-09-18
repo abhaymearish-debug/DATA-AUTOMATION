@@ -199,6 +199,7 @@
 {%- set d = {
   "upload":   '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
   "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  "users":    '<path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="3"/><path d="M22 19v-1a4 4 0 0 0-3-3.87"/><path d="M16 4.1a4 4 0 0 1 0 7.75"/>',
   "warehouse":'<path d="M3 9.5 12 4l9 5.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M8 21v-6h8v6"/>',
   "shop":     '<path d="M4 7h16l-1 3.2a3 3 0 0 1-5.8.3 3 3 0 0 1-4.4 0 3 3 0 0 1-5.8-.3z"/><path d="M5 12.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7.5"/>',
   "truck":    '<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18.5" r="1.7"/><circle cx="17" cy="18.5" r="1.7"/>',
@@ -256,6 +257,8 @@
     <div class="sect">Settings</div>
     <a class="item {% if page == 'bonds' %}active{% endif %}" href="/settings/bond-mapping">
       {{ nav_icon('map') }}Bond Mapping</a>
+    <a class="item {% if page == 'people' %}active{% endif %}" href="/settings/people">
+      {{ nav_icon('users') }}People</a>
     <a class="item soon">{{ nav_icon('gear') }}General<span class="tag">soon</span></a>
   </nav>
 

@@ -6,6 +6,7 @@ import re
 import shutil
 import threading
 from datetime import date, datetime
+from urllib.parse import urlencode
 import subprocess
 import sys
 from pathlib import Path
@@ -233,6 +234,65 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         max_age=config.SESSION_MAX_AGE_SECONDS,
     )
     return response
+
+
+# ---------------------------------------------------------------------------
+# People
+# ---------------------------------------------------------------------------
+#
+# Adding a colleague used to mean editing render.yaml and redeploying. It is a
+# normal Tuesday thing to do, so it belongs in the app: anybody already signed
+# in can add an account, and the address is allowed from that moment.
+
+
+@app.get("/settings/people", response_class=HTMLResponse)
+def people_page(request: Request, note: str = "", error: str = ""):
+    user = require_user(request)
+    return templates.TemplateResponse(
+        request, "settings_people.html",
+        {"user": user, "page": "people", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", []),
+         "people": sorted(auth.load_users()), "note": note, "error": error},
+    )
+
+
+@app.post("/settings/people/add")
+def people_add(request: Request, email: str = Form(...), password: str = Form(...),
+               confirm: str = Form("")):
+    require_user(request)
+    email = (email or "").strip().lower()
+
+    def back(**kw):
+        return RedirectResponse("/settings/people?" + urlencode(kw), status_code=303)
+
+    if password != confirm:
+        return back(error="Those two passwords are not the same.")
+    if email in auth.load_users():
+        return back(error=f"{email} already has an account.")
+    try:
+        auth.invite(email)          # allowed from now on
+        auth.set_password(email, password)
+    except ValueError as exc:
+        return back(error=str(exc))
+    return back(note=f"{email} can sign in now. Send them the password yourself — "
+                     "it is not stored anywhere readable.")
+
+
+@app.post("/settings/people/remove")
+def people_remove(request: Request, email: str = Form(...)):
+    me = require_user(request)
+    email = (email or "").strip().lower()
+    if email == me:
+        return RedirectResponse(
+            "/settings/people?" + urlencode({"error": "You cannot remove your own account."}),
+            status_code=303)
+    users = auth.load_users()
+    users.pop(email, None)
+    auth.save_users(users)
+    auth.save_invited([e for e in auth.load_invited() if e != email])
+    return RedirectResponse(
+        "/settings/people?" + urlencode({"note": f"{email} can no longer sign in."}),
+        status_code=303)
 
 
 @app.post("/logout")
