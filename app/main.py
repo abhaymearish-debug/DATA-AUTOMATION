@@ -2159,16 +2159,6 @@ def target_achievement_data(request: Request, date_from: str = "", date_to: str 
     return JSONResponse(data)
 
 
-@app.get("/api/target-achievement/shops")
-def target_achievement_shops(request: Request, bond: str = "",
-                             date_from: str = "", date_to: str = ""):
-    require_user(request)
-    window = _tva_window(date_from, date_to)
-    if window is None:
-        return JSONResponse({"shops": [], "columns": []})
-    return JSONResponse(reports_api.tva_shops(bond, window[0], window[1]))
-
-
 @app.get("/api/targets")
 def targets_read(request: Request, month: str = ""):
     require_user(request)

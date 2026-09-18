@@ -87,8 +87,6 @@
   tbody tr.tgt td.nm, tbody tr.tgt td.pct { border-bottom:0; }
   tbody tr.band td { background:var(--row); }
   tbody tr.band td.nm, tbody tr.band td.pct { background:var(--row); }
-  tbody tr.open td { background:#EEF3FD; }
-  tbody tr.open td.nm, tbody tr.open td.pct { background:#EEF3FD; }
   tbody td.zero { color:var(--zero); font-weight:400; }
 
   tbody tr.cl td { background:var(--navy); color:var(--gold); font-weight:700;
@@ -103,20 +101,6 @@
                                           letter-spacing:.4px; }
   tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
   tbody tr.gt.tgt td.ty { color:#6B5520; }
-
-  /* The name cell opens the shops inside the bond. */
-  td.nm .opener { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
-                  user-select:none; }
-  td.nm .chev { width:9px; font-size:9px; color:var(--muted); transition:transform .16s;
-                flex:none; }
-  tr.open td.nm .chev { transform:rotate(90deg); color:var(--blue); }
-
-  tbody tr.shop td { background:#F7F9FC; font-size:12.5px; height:31px; color:#3F4A5E;
-                     border-bottom:1px solid #EEF1F6; font-weight:500; }
-  tbody tr.shop td.nm { background:#F7F9FC; padding-left:40px; font-weight:500; }
-  tbody tr.shop td.pct { background:#F7F9FC; }
-  tbody tr.shop:hover td, tbody tr.shop:hover td.nm, tbody tr.shop:hover td.pct {
-      background:#EDF1F8; }
 
   /* The percentage, with the bar doing the comparing. */
   .pw { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding:3px 0; }
@@ -253,8 +237,6 @@
 {% block scripts %}
 <script>
 let FROM = '', TO = '', DATA = null;
-const openBonds = new Set();
-let shopCache = {};
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -269,11 +251,10 @@ function params(){
   return p;
 }
 
-function onPick(from, to){ FROM = from; TO = to; openBonds.clear(); shopCache = {}; load(); }
+function onPick(from, to){ FROM = from; TO = to; load(); }
 
 async function load(){
   foot.textContent = 'Loading…';
-  shopCache = {};
   let d;
   try {
     const res = await fetch('/api/target-achievement?' + params().toString());
@@ -329,10 +310,7 @@ function meter(pct){
 }
 
 function pair(r, cols, cls, band){
-  const nameCell = r.kind === 'bond'
-    ? `<td class="nm" rowspan="2"><span class="opener" onclick="toggleBond('${esc(r.bond)}')">
-         <span class="chev">&#9654;</span>${esc(r.label)}</span></td>`
-    : `<td class="nm" rowspan="2">${esc(r.label)}</td>`;
+  const nameCell = `<td class="nm" rowspan="2">${esc(r.label)}</td>`;
   const line = (which) => cols.map(c => {
     const v = r[which][c.key] ?? 0;
     return `<td${v ? '' : ' class="zero"'}>${num(v)}</td>`;
@@ -359,7 +337,6 @@ function render(d){
     else { html += pair(r, cols, 'gt', false); }
   }
   grid.querySelector('tbody').innerHTML = html;
-  for (const bond of openBonds) paintShops(bond);
 
   const bonds = d.rows.filter(r => r.kind === 'bond').length;
   const m = d.target_meta || {};
@@ -370,61 +347,6 @@ function render(d){
                      (m.by ? ` by ${m.by}` : '') : '') : ' · no targets set')
     + (d.sources.tertiary.length ? ` · shop sales from ${d.sources.tertiary.join(' + ')}` : '')
     + (d.sources.invoice.length ? ` · invoices from ${d.sources.invoice.join(' + ')}` : '');
-}
-
-/* ---------------- the shops inside a bond ---------------- */
-
-async function toggleBond(bond){
-  if (!bond) return;
-  if (openBonds.has(bond)){
-    openBonds.delete(bond);
-    document.querySelectorAll(`tr.shop[data-of="${CSS.escape(bond)}"]`).forEach(t => t.remove());
-    document.querySelectorAll(`tr[data-bond="${CSS.escape(bond)}"]`)
-      .forEach(t => t.classList.remove('open'));
-    return;
-  }
-  openBonds.add(bond);
-  if (!shopCache[bond]){
-    const p = params(); p.set('bond', bond);
-    try {
-      const res = await fetch('/api/target-achievement/shops?' + p.toString());
-      shopCache[bond] = await res.json();
-    } catch (e) { shopCache[bond] = {shops: [], columns: []}; }
-  }
-  paintShops(bond);
-}
-
-function paintShops(bond){
-  const got = shopCache[bond];
-  if (!got || !DATA) return;
-  const rows = document.querySelectorAll(`tr[data-bond="${CSS.escape(bond)}"]`);
-  if (!rows.length) return;
-  rows.forEach(t => t.classList.add('open'));
-  const anchor = rows[rows.length - 1];
-  const cols = DATA.columns;
-  const span = cols.length + 3;
-
-  const html = got.shops.length
-    ? got.shops.map(s =>
-        `<tr class="shop" data-of="${esc(bond)}">
-           <td class="nm">${esc(s.name)}</td><td class="ty"></td>` +
-        cols.map(c => {
-          const v = s.cells[c.key] ?? 0;
-          return `<td${v ? '' : ' class="zero"'}>${num(v)}</td>`;
-        }).join('') +
-        `<td>${num(s.total)}</td><td class="pct"></td></tr>`).join('')
-    : `<tr class="shop" data-of="${esc(bond)}"><td class="nm" colspan="${span}">
-         Nothing sold in ${esc(bond)} in this period.</td></tr>`;
-
-  // Every figure on this page is the true number rounded once, so a column of
-  // rounded shop totals can land a case either side of the rounded bond total.
-  // Printing the exact figure here is cheaper than an argument about it.
-  const exact = got.shops.reduce((n, s) => n + s.exact, 0);
-  const tail = got.shops.length
-    ? `<tr class="shop" data-of="${esc(bond)}"><td class="nm" colspan="${span}">
-         ${got.shops.length} shops &middot; ${exact.toFixed(2)} cases in ${esc(bond)}</td></tr>`
-    : '';
-  anchor.insertAdjacentHTML('afterend', html + tail);
 }
 
 /* ---------------- typing the targets ----------------

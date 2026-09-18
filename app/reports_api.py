@@ -1726,8 +1726,6 @@ def _tva_legs(start: date, end: date) -> dict:
     from . import targets as targets_mod
 
     grid: dict = defaultdict(lambda: defaultdict(float))
-    shops: dict = defaultdict(lambda: defaultdict(float))
-    names: dict = {}
     legs = {"tertiary": 0.0, "fed": 0.0, "bar": 0.0}
     sources: dict = {"tertiary": [], "invoice": []}
 
@@ -1735,7 +1733,6 @@ def _tva_legs(start: date, end: date) -> dict:
     if "error" in win:
         return {"error": win["error"]}
     sources["tertiary"] = [seg["name"] for seg in win.get("chain", [])]
-    names.update(win.get("names", {}))
     for key, cell in win["lines"].items():
         sold = cell[2]
         if not sold:
@@ -1744,9 +1741,7 @@ def _tva_legs(start: date, end: date) -> dict:
         bond = master.get(code, {}).get("bond", "")
         if not bond:
             continue
-        fam = targets_mod.family_of(brand)
-        grid[bond][fam] += sold
-        shops[(bond, code)][fam] += sold
+        grid[bond][targets_mod.family_of(brand)] += sold
         legs["tertiary"] += sold
 
     lines, sec_sources = secondary_lines()
@@ -1761,18 +1756,13 @@ def _tva_legs(start: date, end: date) -> dict:
         bond = line.get("bond") or ""
         if not bond:
             continue
-        fam = targets_mod.family_of(line.get("brand", ""))
-        grid[bond][fam] += line["cases"]
-        code = line.get("shop_code") or ""
-        shops[(bond, code)][fam] += line["cases"]
-        names.setdefault(code, (line.get("shop") or code).upper())
+        grid[bond][targets_mod.family_of(line.get("brand", ""))] += line["cases"]
         legs["fed" if cat == "FED" else "bar"] += line["cases"]
         used = True
     if used:
         sources["invoice"] = sec_sources
 
-    return {"grid": grid, "shops": shops, "names": names,
-            "legs": legs, "sources": sources}
+    return {"grid": grid, "legs": legs, "sources": sources}
 
 
 def _tva_row(label: str, kind: str, cluster: int | None,
@@ -1855,34 +1845,3 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
         "target_meta": targets_mod.meta(month),
         "cluster": cluster or 0,
     }
-
-
-def tva_shops(bond: str, start: date, end: date) -> dict:
-    """The shops inside one bond, family by family, on the same two legs."""
-    from . import targets as targets_mod
-
-    got = _tva_legs(start, end)
-    if "error" in got:
-        return got
-    want = (bond or "").strip().upper()
-
-    grid = got["grid"]
-    other_sold = any(cells.get(targets_mod.OTHER, 0.0) for cells in grid.values())
-    cols = targets_mod.FAMILY_KEYS + ([targets_mod.OTHER] if other_sold else [])
-
-    out = []
-    for (b, code), cells in got["shops"].items():
-        if b != want:
-            continue
-        total = sum(cells.values())
-        if not total:
-            continue
-        out.append({
-            "code": code,
-            "name": got["names"].get(code, code),
-            "cells": {k: round(cells.get(k, 0.0)) for k in cols},
-            "total": round(total),
-            "exact": round(total, 3),
-        })
-    out.sort(key=lambda s: (-s["exact"], s["name"]))
-    return {"shops": out, "columns": cols}
