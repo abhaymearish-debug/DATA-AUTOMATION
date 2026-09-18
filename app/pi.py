@@ -345,7 +345,9 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
         was = prior_mq.get(d["shop_code"], 0)
         shop = {
             "code": d["shop_code"],
-            "name": d["shop_name"] or d["shop_code"],
+            # KSBC writes the shop as '4024-THRIKKUNNAPUZHA' and every sheet in
+            # the office reads it that way, so the code travels with the name.
+            "name": f'{d["shop_code"]}-{d["shop_name"]}' if d["shop_name"] else d["shop_code"],
             "bond": master.get(d["shop_code"], {}).get("bond", ""),
             "capacity": d["capacity"],
             "blank": blank,

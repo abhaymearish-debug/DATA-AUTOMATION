@@ -2355,6 +2355,13 @@ def pi_data(request: Request, month: str = "", prior: str = "",
 @app.get("/reports/pi-variance/export.xlsx")
 def pi_xlsx(request: Request, month: str = "", prior: str = "",
             view: str = "bond", cluster: int = 0):
+    """The workbook the office already circulates, cell for cell.
+
+    Bond, then its shops, then the next bond; eight brands four columns wide;
+    a zero prints as a dash. No cluster bands and no totals column - this is
+    the shape people already read, and a better one they have to re-learn is
+    not better.
+    """
     require_user(request)
     cur, prev = _pi_months(month, prior)
     if not cur:
@@ -2365,69 +2372,105 @@ def pi_xlsx(request: Request, month: str = "", prior: str = "",
 
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
-    navy, gold, ink = "FF0A294F", "FFFFBD30", "FF1B2A4A"
-    brands = data["brands"]
+    NAVY, GOLD, INK, ROW, TOTAL, DASH = ("FF0B2C52", "FFFAAF19", "FF0F192D",
+                                         "FFF5F7FC", "FF2C3540", "FF8C8C8C")
+    thin, medium = Side(style="thin", color="FFE3E8F0"), Side(style="medium", color="FFC9D2E2")
+    # Brands in the workbook's own order: alphabetical by the full KSBC name.
+    brands = sorted(data["brands"], key=lambda b: b["full"])
+    span = 1 + len(brands) * 4
+    last = get_column_letter(span)
+
     wb = Workbook()
     ws = wb.active
-    ws.title = "PI " + data["month"]
+    ws.title = "PI Variance"
+    ws.sheet_view.showGridLines = False
 
-    top = [data["view"].title(), "Shops", "Blank"]
-    for b in brands:
-        top += [b["short"], "", "", ""]
-    top += ["L3MS", "RL", "RQ", "MQ"]
-    ws.append(top)
-    ws.append(["", "", ""] + ["L3MS", "RL", "RQ", "MQ"] * len(brands)
-              + ["Total", "Total", "Total", "Total"])
-    for r in (1, 2):
-        for cell in ws[r]:
-            cell.fill = PatternFill("solid", fgColor=navy)
-            cell.font = Font(bold=True, color=gold, size=9)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-    # One merged heading per brand, so four columns read as one brand's block.
-    col = 4
-    for _b in brands:
-        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 3)
-        col += 4
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 3)
+    def band(row, text, fill, colour, size, align="center"):
+        ws.cell(row=row, column=1, value=text)
+        ws.merge_cells(f"A{row}:{last}{row}")
+        for col in range(1, span + 1):
+            c = ws.cell(row=row, column=col)
+            c.fill = PatternFill("solid", fgColor=fill)
+            c.font = Font(bold=True, size=size, color=colour)
+            c.alignment = Alignment(horizontal=align, vertical="center")
+
+    band(1, "K.S DISTILLERY", NAVY, GOLD, 18)
+    band(2, f"PURCHASE INSTRUCTION \u00b7 1 {data['month_label'].upper()}", GOLD, NAVY, 12)
+    ws.row_dimensions[1].height = 36
+    ws.row_dimensions[2].height = 24
+
+    ws.cell(row=3, column=1, value="Row Labels")
+    ws.merge_cells("A3:A4")
+    for i, b in enumerate(brands):
+        col = 2 + i * 4
+        ws.cell(row=3, column=col, value=b["full"])
+        ws.merge_cells(start_row=3, start_column=col, end_row=3, end_column=col + 3)
+        for j, m in enumerate(("L3MS", "RL", "RQ", "MQ")):
+            ws.cell(row=4, column=col + j, value=m)
+    for r in (3, 4):
+        ws.row_dimensions[r].height = 20
+        for col in range(1, span + 1):
+            c = ws.cell(row=r, column=col)
+            c.fill = PatternFill("solid", fgColor=NAVY)
+            c.font = Font(bold=True, size=9.5, color=GOLD)
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def line(label, cellset, fill, colour, bold, zero_colour=None):
+        r = ws.max_row + 1
+        ws.row_dimensions[r].height = 20
+        ws.cell(row=r, column=1, value=label)
+        for i, b in enumerate(brands):
+            cell = cellset.get(b["code"], {})
+            for j, m in enumerate(("l3ms", "rl", "rq", "mq")):
+                v = cell.get(m, 0)
+                ws.cell(row=r, column=2 + i * 4 + j, value=v if v else "-")
+        for col in range(1, span + 1):
+            c = ws.cell(row=r, column=col)
+            c.fill = PatternFill("solid", fgColor=fill)
+            blank = col > 1 and c.value == "-"
+            c.font = Font(bold=bold, size=9.5,
+                          color=(zero_colour if (blank and zero_colour) else colour))
+            c.alignment = Alignment(horizontal="left" if col == 1 else "center",
+                                    vertical="center")
+            c.number_format = "#,##0"
+            c.border = Border(bottom=thin, left=medium if (col - 2) % 4 == 0 or col == 1 else thin)
+        return r
 
     for row in data["rows"]:
-        line = [row["label"], row["shops"], row["blank"] or ""]
-        for b in brands:
-            c = row["cells"][b["code"]]
-            line += [c["l3ms"], c["rl"], c["rq"], c["mq"]]
-        t = row["total"]
-        line += [t["l3ms"], t["rl"], t["rq"], t["mq"]]
-        ws.append(line)
-        if row["kind"] in ("cluster", "grand"):
-            fill = PatternFill("solid", fgColor=gold if row["kind"] == "grand" else navy)
-            font = Font(bold=True, size=10, color=ink if row["kind"] == "grand" else gold)
-            for cell in ws[ws.max_row]:
-                cell.fill = fill
-                cell.font = font
+        if row["kind"] != "group":
+            continue
+        line(row["label"], row["cells"], NAVY, GOLD, True)
+        for shop in (data["shops"].get(row["key"]) or []):
+            line(shop["name"], shop["cells"], ROW, INK, False, zero_colour=DASH)
 
-    for r in range(3, ws.max_row + 1):
-        for c in range(2, len(top) + 1):
-            ws.cell(row=r, column=c).alignment = Alignment(horizontal="center")
-    ws.column_dimensions["A"].width = 24
-    for i in range(2, len(top) + 1):
-        ws.column_dimensions[get_column_letter(i)].width = 10
-    ws.freeze_panes = ws.cell(row=3, column=2)
+    grand = next((r for r in data["rows"] if r["kind"] == "grand"), None)
+    if grand:
+        r = line("Grand Total", grand["cells"], TOTAL, "FFFFFFFF", True)
+        ws.cell(row=r, column=1).font = Font(bold=True, size=9.5, color=GOLD)
 
+    ws.column_dimensions["A"].width = 32
+    ws.column_dimensions["B"].width = 12
+    for i in range(3, span + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 13
+    ws.freeze_panes = "B5"
+
+    # The blank-PI list rides along on its own sheet: it changes nothing about
+    # the sheet above, and it is the one thing the figures cannot tell you.
     if data["blanks"]:
         b = wb.create_sheet("No instruction")
-        b.append(["Bond", "Shop", "Last month MQ"])
+        b.append(["Bond", "Shop", f"{data['prior_label'] or 'Last month'} MQ"])
         for cell in b[1]:
-            cell.fill = PatternFill("solid", fgColor=navy)
-            cell.font = Font(bold=True, color=gold, size=10)
+            cell.fill = PatternFill("solid", fgColor=NAVY)
+            cell.font = Font(bold=True, color=GOLD, size=10)
         for x in data["blanks"]:
             b.append([x["bond"], x["name"], x["prior_mq"] or ""])
         b.column_dimensions["A"].width = 20
         b.column_dimensions["B"].width = 38
-        b.column_dimensions["C"].width = 15
+        b.column_dimensions["C"].width = 16
 
-    tmp = Path(tempfile.mkdtemp()) / f"PURCHASE INSTRUCTION ({data['month_label']}).xlsx"
+    tmp = Path(tempfile.mkdtemp()) / f"pi_variance_report_{data['month']}.xlsx"
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
