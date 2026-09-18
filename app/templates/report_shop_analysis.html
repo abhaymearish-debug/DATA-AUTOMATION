@@ -55,18 +55,27 @@
   thead th.grp { color:var(--gold); border-bottom:1px solid rgba(255,189,48,.45); }
   thead th:first-child { left:0; z-index:4; text-align:left; padding-left:15px; }
 
+  /* Ruled both ways, and the bond column casts an edge so a half-scrolled
+     column passes beneath it rather than printing its digits down the middle. */
+  thead th + th { border-left:1px solid rgba(255,255,255,.12); }
+  thead th:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
   tbody td { padding:0 6px; height:36px; text-align:center; white-space:nowrap;
-             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); }
+             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line);
+             border-left:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
                          padding-left:15px; font-weight:600; overflow:hidden;
-                         text-overflow:ellipsis; }
+                         text-overflow:ellipsis; border-left:0;
+                         border-right:1px solid var(--line);
+                         box-shadow:7px 0 9px -7px rgba(16,24,40,.28); }
 
   tr.bond td { background:var(--card); }
   tr.bond.alt td { background:var(--row); }
   tr.bond:hover td { background:var(--hover); }
   tr.cluster td { background:var(--navy); color:var(--gold); font-weight:700;
-                  border-top:2px solid var(--gold); border-bottom:2px solid var(--gold); }
-  tr.grand td { background:var(--gold); color:#1B2A4A; font-weight:700; }
+                  border-top:2px solid var(--gold); border-bottom:2px solid var(--gold);
+                  border-left-color:#22407F; }
+  tr.grand td { background:var(--gold); color:#1B2A4A; font-weight:700;
+                border-left-color:rgba(27,42,74,.22); }
 
   /* Sell-through is the column the office reads first, so it keeps its own
      wash: amber from 40 per cent, pink below. */
@@ -226,7 +235,7 @@
         <td>{{ r.lm }}</td>
         <td>
           <span class="tr {{ 'up' if r.up else 'dn' }}">
-            <span class="ar">{{ '▲' if r.up else '▼' }}</span>{{ '+' if r.up else '-' }}{{ r.trend }}
+            <span class="ar">{{ '▲' if r.up else '▼' }}</span>{{ r.trend }}
           </span>
         </td>
       </tr>

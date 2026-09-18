@@ -216,10 +216,14 @@ function render(d){
   }).join('');
 
   const missing = d.days.filter((x, i) => nc[i]).map(x => x.dom);
-  const what = (d.group_label || 'Bond').toLowerCase() + 's';
-  foot.textContent = `${bonds.length} ${what} · ${d.days.length} days · ${d.period.label} · from ${d.source}`
-    + (missing.length ? ` · no raw uploaded for ${missing.join(', ')} — shown as zero` : '')
-    + (d.unmapped.length ? ` · ${d.unmapped.length} outlet(s) with no bond in master data` : '');
+  // The count, the period and the source file are all already on the page, so
+  // the line only speaks when it has something the table cannot say itself.
+  const notes = [];
+  if (missing.length)
+    notes.push(`No raw uploaded for ${missing.join(', ')} — shown as zero.`);
+  if (d.unmapped.length)
+    notes.push(`${d.unmapped.length} outlet(s) with no bond in master data.`);
+  foot.textContent = notes.join(' ');
 }
 
 function grab(url){ const a=document.createElement('a'); a.href=url;

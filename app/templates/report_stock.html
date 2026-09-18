@@ -421,7 +421,7 @@ function render(){
 
   list.innerHTML = (html && html + grand) ||
     `<tr><td class="item" colspan="4"><div class="empty">Nothing matches that.</div></td></tr>`;
-  foot.textContent = `${shown} of ${d.warehouses.length} warehouses · ${n(items)} items · snapshot ${d.date}`;
+  foot.textContent = '';
   foldBtn.textContent = shut.size >= shown && shown > 0 ? 'Expand all' : 'Collapse all';
 }
 

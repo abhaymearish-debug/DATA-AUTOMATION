@@ -101,6 +101,7 @@
      sheet does, so the eye can tell at a glance which of the two it is on.
      The name and the percentage span the pair, so they keep the pair's own
      colour rather than half of each. */
+  tbody tr.tgt td { font-weight:700; }
   tbody tr.b.tgt td:not(.nm):not(.pct) { background:var(--row); }
   tbody tr.cl.tgt td:not(.nm):not(.pct) { background:var(--navy-3); }
   tbody tr.gt.tgt td:not(.nm):not(.pct) { background:#F2A81A; }
@@ -109,7 +110,7 @@
 
   tbody tr.cl td, tbody tr.cl td.nm, tbody tr.cl td.pct {
       background:var(--navy); color:var(--gold); border-right-color:#22407F; }
-  tbody tr.cl.tgt td { font-weight:600; color:#C8D4EE; }
+  tbody tr.cl.tgt td { font-weight:700; color:#C8D4EE; }
   tbody tr.cl.tgt td.ty { color:var(--gold); }
   tbody tr.cl.ach td { font-weight:750; }
   tbody tr.cl.ach td.ty { color:var(--gold); }
@@ -119,7 +120,7 @@
 
   tbody tr.gt td, tbody tr.gt td.nm, tbody tr.gt td.pct {
       background:var(--gold); color:#1B2A4A; border-right-color:rgba(27,42,74,.18); }
-  tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
+  tbody tr.gt.tgt td { font-weight:750; color:#4A3A16; }
   tbody tr.gt.tgt td.ty { color:#1B2A4A; }
   tbody tr.gt.tgt td { border-bottom:1px solid rgba(27,42,74,.16); }
   tbody tr.gt.ach td { font-weight:800; }
