@@ -89,7 +89,7 @@
      line up vertically whatever is open. The last column is wider by the
      card's right padding, and box-sizing keeps its content centred on the
      same axis as the others. */
-  :root { --numw:168px; }
+  :root { --numw:152px; }
 
   /* ---------- one table ----------
      The warehouses used to be a stack of cards, each with its own table, so
@@ -100,8 +100,8 @@
                overflow:auto; max-height:calc(100vh - 210px);
                box-shadow:0 1px 2px rgba(16,24,40,.05); }
   thead th { position:sticky; top:0; z-index:5; background:var(--navy); color:var(--gold);
-             font-size:10.5px; letter-spacing:.7px; text-transform:uppercase; font-weight:700;
-             text-align:center; padding:12px 8px; border-bottom:1px solid #22407F; }
+             font-size:10px; letter-spacing:.7px; text-transform:uppercase; font-weight:700;
+             text-align:center; padding:11px 8px; border-bottom:1px solid #22407F; }
   thead th:first-child { text-align:left; padding-left:15px; }
   thead th + th { border-left:1px solid rgba(255,255,255,.12); }
 
@@ -109,10 +109,10 @@
      row, its name in ink, and a gold rail down the one you opened - rather
      than twenty-eight navy bars competing with the header. */
   tbody tr.wh-r > td { background:var(--card); color:var(--ink); cursor:pointer;
-                       user-select:none; height:56px; font-size:17px; font-weight:700;
+                       user-select:none; height:50px; font-size:15.5px; font-weight:700;
                        font-variant-numeric:tabular-nums;
                        border-bottom:1px solid var(--line); }
-  tbody tr.wh-r > td.item { position:relative; font-size:15.5px; letter-spacing:-.1px;
+  tbody tr.wh-r > td.item { position:relative; font-size:14.5px; letter-spacing:-.1px;
                             font-weight:700; }
   tbody tr.wh-r > td.item::before { content:''; position:absolute; left:0; top:0; bottom:0;
                                     width:3px; background:transparent; }
@@ -127,10 +127,10 @@
   tbody tr.wh-r > td.amber { color:#B45309; }
 
   tbody tr.grand > td { position:sticky; bottom:0; z-index:4; background:var(--gold);
-                        color:#1B2A4A; font-weight:800; height:48px; letter-spacing:.3px;
-                        font-size:17px; font-variant-numeric:tabular-nums;
+                        color:#1B2A4A; font-weight:800; height:44px; letter-spacing:.3px;
+                        font-size:15.5px; font-variant-numeric:tabular-nums;
                         border-top:1px solid rgba(27,42,74,.25); border-bottom:0; }
-  tbody tr.grand > td.item { font-size:14.5px; }
+  tbody tr.grand > td.item { font-size:13.8px; }
   tbody tr.grand .cnt { margin-left:10px; font-size:10.5px; font-weight:700;
                         letter-spacing:.45px; text-transform:uppercase;
                         color:rgba(27,42,74,.62); }
@@ -141,13 +141,13 @@
   /* fixed layout so the declared column widths are honoured exactly; auto
      table layout was widening the last column and pushing it off the axis
      that the strip and the warehouse bars sit on. */
-  table { border-collapse:separate; border-spacing:0; width:100%; font-size:14.5px;
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13.8px;
           table-layout:fixed; }
   col.num { width:var(--numw); }
   col.last { width:calc(var(--numw) + 15px); }
   tbody td:last-child { width:calc(var(--numw) + 15px); padding-right:15px; }
 
-  tbody td { padding:0; height:36px; border-bottom:1px solid var(--chip);
+  tbody td { padding:0; height:33px; border-bottom:1px solid var(--chip);
              text-align:center; font-variant-numeric:tabular-nums; width:var(--numw);
              border-left:1px solid var(--line); }
   tbody td:first-child { text-align:left; width:auto; padding-left:15px; border-left:0; }
@@ -168,9 +168,9 @@
      is written once instead of once per pack. */
   tr.g > td { border-top:1px solid var(--line); }
   tr.g:first-child > td { border-top:0; }
-  tr.bhead > td { background:var(--head); font-weight:700; font-size:14.5px; }
+  tr.bhead > td { background:var(--head); font-weight:700; font-size:13.8px; }
   tr.pack > td { border-bottom:1px solid var(--line); }
-  tr.pack > td.item { padding-left:40px; font-size:13.5px; font-weight:600; color:var(--muted); }
+  tr.pack > td.item { padding-left:38px; font-size:12.8px; font-weight:600; color:var(--muted); }
   tr.pack:hover > td { background:var(--hover); }
   tr.nil > td { color:var(--zero); }
   tr.nil > td.item { color:var(--zero); font-weight:600; }
