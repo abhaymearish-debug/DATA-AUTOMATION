@@ -134,11 +134,11 @@
       <div class="fitem">
         <span class="fi-k">Show</span>
         <div class="seg" id="segCols">
-          <button type="button" class="on" data-m="mq" onclick="setMeasure('mq')">MQ</button>
+          <button type="button" data-m="mq" onclick="setMeasure('mq')">MQ</button>
           <button type="button" data-m="rq" onclick="setMeasure('rq')">RQ</button>
           <button type="button" data-m="rl" onclick="setMeasure('rl')">RL</button>
           <button type="button" data-m="l3ms" onclick="setMeasure('l3ms')">L3MS</button>
-          <button type="button" data-m="all" onclick="setMeasure('all')">All</button>
+          <button type="button" class="on" data-m="all" onclick="setMeasure('all')">All</button>
         </div>
       </div>
       <span class="fdiv"></span>
@@ -172,7 +172,8 @@
 
 {% block scripts %}
 <script>
-let view = 'bond', measure = 'mq', DATA = null;
+// Opens the way the workbook prints: all four measures for every brand.
+let view = 'bond', measure = 'all', DATA = null;
 const open = new Set();
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>

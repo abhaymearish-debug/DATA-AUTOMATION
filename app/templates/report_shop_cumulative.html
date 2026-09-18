@@ -62,21 +62,22 @@
      four figures sit on one axis whatever is open. */
   :root { --numw:128px; --namew:240px; }
 
-  /* The strip wears the grand-total theme - gold ground, navy lettering - so
-     the table is book-ended by the same colour at top and bottom. */
+  /* Gold on navy, the way every other report's header reads, with the grand
+     total in gold at the foot - the house pair, top and bottom. */
   .lede { position:sticky; top:0; z-index:20;
           display:flex; align-items:center; gap:11px; margin-bottom:0;
-          padding:10px 15px 10px 17px; border-radius:10px 10px 0 0;
-          background:var(--gold); color:#1B2A4A;
-          font-weight:800; font-size:10px; letter-spacing:1.1px;
+          padding:11px 15px 11px 17px; border-radius:10px 10px 0 0;
+          background:var(--navy); color:var(--gold);
+          font-weight:700; font-size:9.5px; letter-spacing:.9px;
           text-transform:uppercase; box-shadow:0 2px 10px rgba(16,24,40,.13); }
   /* The left of the row is three columns, not three things in a row. A chip
      that starts wherever the bond name happens to end draws a ragged diagonal
      down fifteen rows, which is most of what read as mess. */
   .lede .pad { width:10px; flex:none; }
-  .lede .grp { width:var(--namew); flex:none; color:#1B2A4A; }
+  .lede .grp { width:var(--namew); flex:none; color:var(--gold); }
   .lede .sp { margin-left:auto; display:flex; }
-  .lede .sp span { width:var(--numw); text-align:center; }
+  .lede .sp span { width:var(--numw); text-align:center;
+                   border-left:1px solid rgba(255,255,255,.12); }
 
   /* .fitem sets display:flex, which beats the UA rule behind [hidden] - so
      say it here, or a hidden filter stays on screen. */
@@ -107,6 +108,7 @@
                   background:transparent; }
   .bd:not(.shut) .bd-h::before { background:var(--gold); }
   .bd:not(.shut) .bd-h { background:var(--hover); }
+  .bd-h .nm, .grand .nm, .lede .grp { position:relative; }
   .bd-h .chev { font-size:9px; color:var(--muted); transition:transform .16s; width:10px; }
   .bd.shut .chev { transform:rotate(-90deg); }
   .bd:not(.shut) .chev { color:var(--blue); }
@@ -115,7 +117,8 @@
               letter-spacing:-.1px; color:var(--ink); white-space:nowrap;
               overflow:hidden; text-overflow:ellipsis; }
   .bd-h .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
-  .bd-h .mini > div { width:var(--numw); text-align:center; }
+  .bd-h .mini > div { width:var(--numw); text-align:center;
+                      border-left:1px solid var(--line); padding:2px 0; }
   .bd-h .mini .k { display:none; font-size:9px; letter-spacing:.6px; text-transform:uppercase;
                    color:var(--muted); }
   .bd-h .mini .n { font-size:15px; font-weight:700; color:var(--ink); }
@@ -128,7 +131,8 @@
   col.last { width:calc(var(--numw) + 15px); }
   tbody td { padding:0; height:33px; border-bottom:1px solid var(--chip);
              text-align:center; font-variant-numeric:tabular-nums; width:var(--numw); }
-  tbody td:first-child { text-align:left; width:auto; padding-left:15px; }
+  tbody td { border-left:1px solid var(--line); }
+  tbody td:first-child { text-align:left; width:auto; padding-left:15px; border-left:0; }
   tbody td:last-child { width:calc(var(--numw) + 15px); padding-right:15px; }
   tbody tr:last-child td { border-bottom:0; }
   tbody tr:hover td { background:var(--hover); }
@@ -157,7 +161,8 @@
                     opacity:.7; }
   .grand .nm { font-size:13px; letter-spacing:.5px; text-transform:uppercase; }
   .grand .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
-  .grand .mini > div { width:var(--numw); text-align:center; font-size:15.5px; }
+  .grand .mini > div { width:var(--numw); text-align:center; font-size:15.5px;
+                       border-left:1px solid rgba(27,42,74,.22); padding:2px 0; }
 
   .empty { padding:26px 16px; text-align:center; color:var(--muted); font-size:13.5px; }
 
