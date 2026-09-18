@@ -86,17 +86,21 @@
      glows into the navy rather than being cut out of it. The rule below fades
      at both ends instead of running wall to wall, which is the whole
      difference between a panel and a form. */
-  .sb-top { position:relative; display:flex; align-items:center; gap:14px;
-            padding:22px 18px 20px; }
+  .sb-top { position:relative; display:flex; align-items:center; gap:13px;
+            padding:22px 16px 20px;
+            background:linear-gradient(180deg, rgba(0,0,0,.20), transparent 78%); }
+  /* Gold, not white: the rule under the mark belongs to the mark. */
   .sb-top::after { content:''; position:absolute; left:14px; right:14px; bottom:0; height:1px;
                    background:linear-gradient(90deg, transparent,
-                              rgba(255,255,255,.14) 22%, rgba(255,255,255,.14) 78%, transparent); }
+                              rgba(255,189,48,.34) 18%, rgba(255,189,48,.34) 82%, transparent); }
   .sb-top .mark { flex:none; display:grid; place-items:center; }
-  .sb-top .mark img { width:46px; height:46px; display:block;
-                      filter:drop-shadow(0 2px 5px rgba(0,0,0,.50))
-                             drop-shadow(0 0 16px rgba(255,189,48,.26)); }
-  .sb-top .n { font-size:17.5px; font-weight:700; color:#fff; letter-spacing:-.25px;
-               line-height:1.15; }
+  /* One tight dark shadow, and nothing else. The gold bloom that used to sit
+     under this spread the mark's own colour back over its edges, which is a
+     halo when you want an edge. */
+  .sb-top .mark img { width:54px; height:54px; display:block;
+                      filter:drop-shadow(0 3px 7px rgba(0,0,0,.55)); }
+  .sb-top .n { font-size:19px; font-weight:750; color:#fff; letter-spacing:-.4px;
+               line-height:1.1; text-shadow:0 1px 3px rgba(0,0,0,.35); }
 
   /* A section label, not something you can click. */
   .sb .sect { padding:17px 11px 7px; font-size:9px; font-weight:800;
