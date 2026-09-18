@@ -6,12 +6,13 @@ Two things to know before you start.
 (every shop code, name and bond) and the 81 build scripts. Neither belongs on
 the public internet.
 
-**Right now this deploys on the FREE plan, which has no disk.** The workbooks
-*are* the data, so on free every deploy, restart or wake-from-sleep starts the
-workspace empty and the raws have to go in again. Free instances also sleep
-after 15 minutes idle and take about a minute to wake. Good enough to prove the
-app works and to show someone; not what to run the month on. `render.yaml`
-says how to switch to Starter with a 5 GB disk — three lines and a push.
+**The disk is what keeps your data.** The workbooks *are* the data — a month's
+earlier days exist only inside them — so the workspace lives on a 5 GB disk
+mounted at `/data`. Uploads and built workbooks survive restarts, deploys and
+code changes. The free plan has no disk and starts empty every time; that is
+why this blueprint asks for Starter (~$7/month) plus the disk (~$1.25/month).
+
+The disk is not a backup. Keep downloading the workbooks you care about.
 
 ---
 

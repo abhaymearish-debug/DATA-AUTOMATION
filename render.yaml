@@ -1,30 +1,25 @@
 # Render blueprint for the KSD Report Transformer.
 #
-# CURRENTLY ON THE FREE PLAN, WHICH HAS NO DISK.
+# Starter instance with a persistent disk. The disk is the point: the workbooks
+# ARE the data - a month's earlier days exist only inside them - so the
+# workspace lives on /data, which survives restarts, deploys and code changes.
+# Without it every deploy starts empty, which is what the free plan does.
 #
-# That matters more here than in most apps: the workbooks ARE the data, and on
-# free the whole workspace lives inside the container. Every deploy, restart or
-# wake-from-sleep starts it empty, so raws have to be uploaded again. Free
-# instances also sleep after 15 minutes idle and take about a minute to wake.
-#
-# To make it permanent later, change three things and push:
-#   plan: free      -> plan: starter
-#   KSD_WORKSPACE_ROOT: /srv/workspace -> /data/workspace
-#   and uncomment the disk block below.
+# Cost: ~$7/month for the instance, ~$0.25/GB/month for the disk.
 services:
   - type: web
     name: ksd-report-transformer
     runtime: docker
-    plan: free
+    plan: starter
     region: singapore        # nearest to Kerala of Render's regions
     healthCheckPath: /login
-    # disk:                  # <- uncomment together with plan: starter
-    #   name: ksd-data
-    #   mountPath: /data
-    #   sizeGB: 5
+    disk:
+      name: ksd-data
+      mountPath: /data       # matches KSD_WORKSPACE_ROOT below
+      sizeGB: 5
     envVars:
       - key: KSD_WORKSPACE_ROOT
-        value: /srv/workspace   # inside the container: wiped on every restart
+        value: /data/workspace  # on the disk, so uploads outlive the container
       - key: KSD_SESSION_SECRET
         generateValue: true  # Render makes one and keeps it; never in the repo
       - key: KSD_ALLOWED_EMAILS
