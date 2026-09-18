@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+{% block title %}Target vs Achievement{% endblock %}
+{% block heading %}Target vs Achievement{% endblock %}
+
+{% block head %}
+{% include '_calendar.html' %}
+<style>
+  /* The same control bar the other reports use. */
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg);
+              padding:2px 0 12px; margin:-4px 0 0; }
+  .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar1 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fitem:focus-within { background:var(--hover); box-shadow:inset 0 0 0 1px #C7D2FE; }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+  .fi-v { display:flex; align-items:center; gap:7px; border:0; background:none; padding:0;
+          font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+          cursor:pointer; white-space:nowrap; }
+  .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+
+  /* What the achievement figure is actually made of. A target report that
+     does not say where 'achieved' came from is a number to argue with. */
+  .legs { display:flex; align-items:center; gap:11px; flex-wrap:wrap;
+          margin-bottom:10px; padding:9px 15px; border-radius:10px;
+          background:var(--gold); color:#1B2A4A; font-weight:800; font-size:10px;
+          letter-spacing:1.1px; text-transform:uppercase;
+          box-shadow:0 1px 2px rgba(16,24,40,.10); }
+  .legs b { font-size:11.5px; letter-spacing:.4px; }
+  .legs .sep { opacity:.45; font-weight:700; }
+  .legs .why { margin-left:auto; text-transform:none; letter-spacing:0;
+               font-weight:600; font-size:11px; opacity:.72; }
+  /* display:flex beats the hidden attribute, so say it again louder. */
+  .legs[hidden] { display:none !important; }
+
+  .warn { background:#FEF3C7; border:1px solid #FDE68A; color:#92400E;
+          border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px;
+          display:flex; align-items:center; gap:12px; }
+  .warn .act { margin-left:auto; flex:none; }
+  .banner { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
+            border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
+
+  /* ---------- the table ----------
+     Every bond is two lines that belong together, so the name and the
+     percentage span both and the pair is banded as one block. */
+  .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
+               overflow:auto; max-height:70vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
+
+  thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);
+             text-align:center; vertical-align:middle; font-weight:700; font-size:10px;
+             letter-spacing:.5px; text-transform:uppercase; line-height:1.32;
+             padding:12px 10px; border-bottom:1px solid #22407F;
+             border-right:1px solid rgba(255,255,255,.07); }
+  thead th:first-child { text-align:left; left:0; z-index:4; min-width:176px; padding-left:16px; }
+  thead th.ty { min-width:74px; }
+  thead th:last-child { right:0; z-index:4; border-right:0; min-width:92px; }
+
+  tbody td { height:34px; padding:0 10px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; color:var(--ink); }
+  tbody td.nm { text-align:left; position:sticky; left:0; z-index:2; background:var(--card);
+                font-weight:650; padding-left:16px; vertical-align:middle; }
+  tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card);
+                 vertical-align:middle; }
+
+  /* Target on top in muted ink, achieved under it in full ink: the eye reads
+     down the pair rather than across two unrelated rows. */
+  tbody tr.tgt td { color:var(--muted); border-bottom:1px dashed #EDF0F5; }
+  tbody tr.ach td { font-weight:650; border-bottom:1px solid var(--line); }
+  tbody td.ty { font-size:10px; letter-spacing:.7px; text-transform:uppercase;
+                font-weight:700; color:var(--muted); text-align:left; }
+  tbody tr.ach td.ty { color:var(--blue); }
+  tbody tr.tgt td.nm, tbody tr.tgt td.pct { border-bottom:0; }
+  tbody tr.band td { background:var(--row); }
+  tbody tr.band td.nm, tbody tr.band td.pct { background:var(--row); }
+  tbody tr.open td { background:#EEF3FD; }
+  tbody tr.open td.nm, tbody tr.open td.pct { background:#EEF3FD; }
+  tbody td.zero { color:var(--zero); font-weight:400; }
+
+  tbody tr.cl td { background:var(--navy); color:var(--gold); font-weight:700;
+                   border-bottom:1px solid #22407F; }
+  tbody tr.cl td.nm, tbody tr.cl td.pct { background:var(--navy); color:var(--gold); }
+  tbody tr.cl.tgt td { color:#C3D0EE; font-weight:600; border-bottom:0; }
+  tbody tr.cl.tgt td.ty { color:#8FA3D0; }
+  tbody tr.cl.ach td.ty { color:var(--gold); }
+
+  tbody tr.gt td { background:var(--gold); color:#1B2A4A; font-weight:800; height:40px; }
+  tbody tr.gt td.nm, tbody tr.gt td.pct { background:var(--gold); color:#1B2A4A;
+                                          letter-spacing:.4px; }
+  tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
+  tbody tr.gt.tgt td.ty { color:#6B5520; }
+
+  /* The name cell opens the shops inside the bond. */
+  td.nm .opener { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+                  user-select:none; }
+  td.nm .chev { width:9px; font-size:9px; color:var(--muted); transition:transform .16s;
+                flex:none; }
+  tr.open td.nm .chev { transform:rotate(90deg); color:var(--blue); }
+
+  tbody tr.shop td { background:#F7F9FC; font-size:12.5px; height:31px; color:#3F4A5E;
+                     border-bottom:1px solid #EEF1F6; font-weight:500; }
+  tbody tr.shop td.nm { background:#F7F9FC; padding-left:40px; font-weight:500; }
+  tbody tr.shop td.pct { background:#F7F9FC; }
+  tbody tr.shop:hover td, tbody tr.shop:hover td.nm, tbody tr.shop:hover td.pct {
+      background:#EDF1F8; }
+
+  /* The percentage, with the bar doing the comparing. */
+  .pw { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding:3px 0; }
+  .pw .v { font-size:12.5px; font-weight:750; text-align:center; }
+  .pw .m { height:4px; border-radius:3px; background:rgba(16,24,40,.10); overflow:hidden; }
+  .pw .m i { display:block; height:100%; border-radius:3px; background:var(--blue); }
+  .pw.done .m i { background:var(--ok); }
+  .pw.none .v { color:var(--zero); font-weight:500; }
+  tr.cl .pw .m { background:rgba(255,255,255,.16); }
+  tr.cl .pw .m i { background:var(--gold); }
+  tr.gt .pw .m { background:rgba(27,42,74,.18); }
+  tr.gt .pw .m i { background:#1B2A4A; }
+
+  .status { font-size:12.5px; color:var(--muted); margin:11px 2px; }
+
+  /* ---------- typing the targets ---------- */
+  .veil { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
+          align-items:center; justify-content:center; z-index:60; padding:20px; }
+  .veil.on { display:flex; }
+  .sheet { background:var(--card); border-radius:14px; width:100%; max-width:1020px;
+           max-height:88vh; display:flex; flex-direction:column;
+           box-shadow:0 24px 60px rgba(16,24,40,.28); }
+  .sheet header { display:flex; align-items:center; gap:12px; padding:16px 20px 13px;
+                  border-bottom:1px solid var(--line); }
+  .sheet header h4 { margin:0; font-size:15.5px; font-weight:700; }
+  .sheet header .sub { font-size:12px; color:var(--muted); }
+  .sheet header .x { margin-left:auto; background:none; border:0; font-size:20px;
+                     color:var(--muted); cursor:pointer; line-height:1; }
+  .sheet .body { padding:0; overflow:auto; flex:1 1 auto; }
+  .sheet footer { display:flex; align-items:center; gap:10px; padding:13px 20px;
+                  border-top:1px solid var(--line); }
+  .sheet footer .sp { margin-left:auto; display:flex; gap:8px; }
+  .sheet .err { color:var(--bad); font-size:12.5px; }
+
+  table.edit { width:100%; font-size:13px; }
+  table.edit thead th { position:sticky; top:0; background:var(--head); color:var(--ink);
+                        font-size:9.5px; letter-spacing:.5px; text-transform:uppercase;
+                        font-weight:700; padding:11px 8px; text-align:center;
+                        border-bottom:1px solid var(--line); z-index:2; }
+  table.edit thead th:first-child { text-align:left; padding-left:20px; left:0; z-index:3;
+                                    min-width:168px; }
+  table.edit thead th:last-child { right:0; z-index:3; }
+  table.edit td { padding:0 4px; height:38px; text-align:center;
+                  border-bottom:1px solid var(--line); }
+  table.edit td.b { text-align:left; padding-left:20px; font-weight:600; position:sticky;
+                    left:0; background:var(--card); z-index:1; }
+  table.edit td.t { position:sticky; right:0; background:var(--card); font-weight:750;
+                    font-variant-numeric:tabular-nums; }
+  table.edit input { width:72px; border:1px solid transparent; border-radius:8px;
+                     background:var(--row); padding:7px 8px; font:inherit; font-size:13px;
+                     text-align:center; color:var(--ink); font-variant-numeric:tabular-nums; }
+  table.edit input:hover { border-color:var(--line); }
+  table.edit input:focus { outline:none; border-color:var(--blue); background:var(--card);
+                           box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  table.edit tr.sub td { background:var(--navy); color:var(--gold); font-weight:700;
+                         font-size:12px; }
+  table.edit tr.sub td.b, table.edit tr.sub td.t { background:var(--navy); color:var(--gold); }
+  table.edit tr.all td { background:var(--gold); color:#1B2A4A; font-weight:800; }
+  table.edit tr.all td.b, table.edit tr.all td.t { background:var(--gold); color:#1B2A4A; }
+
+  @media (max-width:900px){
+    .bar1 .sp { margin-left:0; width:100%; }
+    .fbar { width:100%; flex-wrap:wrap; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="bar1">
+    <div class="fbar">
+      <div class="fitem" id="calWrap" style="position:relative">
+        <span class="fi-k">Period</span>
+        <button type="button" class="fi-v" onclick="Cal.open(event)">
+          <span id="calLabel">Pick a period</span><i>&#9662;</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Cluster</span>
+        <div class="selw"><select id="fCluster" onchange="load()">
+          <option value="0">All clusters</option>
+          <option value="1">Cluster 1</option>
+          <option value="2">Cluster 2</option>
+          <option value="3">Cluster 3</option>
+        </select><i>&#9662;</i></div>
+      </label>
+      <span class="fdiv"></span>
+      <div class="fitem">
+        <span class="fi-k">Targets</span>
+        <span class="fi-v" style="cursor:default" id="tgtMonth">—</span>
+      </div>
+    </div>
+    <div class="sp">
+      <button type="button" class="act" onclick="openEditor()">Edit targets</button>
+      <a class="act primary" id="xl" href="#">Download Excel</a>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+<div class="legs" id="legs" hidden></div>
+<div class="tablewrap"><table id="grid">
+  <thead><tr><th>Bond</th></tr></thead>
+  <tbody><tr><td class="nm">Loading…</td></tr></tbody>
+</table></div>
+<div class="status" id="foot"></div>
+
+<!-- typing the month's targets -->
+<div class="veil" id="edVeil" onclick="if(event.target===this)closeEditor()">
+  <div class="sheet">
+    <header>
+      <div>
+        <h4>Targets</h4>
+        <div class="sub" id="edSub">Cases, by bond and brand</div>
+      </div>
+      <div class="selw" style="margin-left:14px">
+        <select id="edMonth" onchange="loadTargets()"></select><i>&#9662;</i>
+      </div>
+      <button type="button" class="x" onclick="closeEditor()">&times;</button>
+    </header>
+    <div class="body"><table class="edit" id="edGrid"><thead></thead><tbody></tbody></table></div>
+    <footer>
+      <span class="err" id="edErr"></span>
+      <div class="sp">
+        <button type="button" class="act" onclick="closeEditor()">Cancel</button>
+        <button type="button" class="act primary" id="edSave" onclick="saveTargets()">Save targets</button>
+      </div>
+    </footer>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let FROM = '', TO = '', DATA = null;
+const openBonds = new Set();
+let shopCache = {};
+
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = n => (n === 0 || n === null || n === undefined)
+  ? '0' : Number(n).toLocaleString('en-IN');
+
+function params(){
+  const p = new URLSearchParams();
+  if (FROM) p.set('date_from', FROM);
+  if (TO)   p.set('date_to', TO);
+  if (+fCluster.value) p.set('cluster', fCluster.value);
+  return p;
+}
+
+function onPick(from, to){ FROM = from; TO = to; openBonds.clear(); shopCache = {}; load(); }
+
+async function load(){
+  foot.textContent = 'Loading…';
+  shopCache = {};
+  let d;
+  try {
+    const res = await fetch('/api/target-achievement?' + params().toString());
+    d = await res.json();
+  } catch (e) {
+    msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
+    foot.textContent = ''; return;
+  }
+  if (d.error){
+    msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
+    legs.hidden = true;
+    grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
+    grid.querySelector('tbody').innerHTML = '<tr><td class="nm">No data</td></tr>';
+    foot.textContent = ''; return;
+  }
+
+  DATA = d;
+  FROM = d.period.from; TO = d.period.to;
+  const cal = d.calendar || {days:[], periods:[]};
+  const days = new Set(cal.days || []);
+  for (const p of cal.periods || []){
+    let x = new Date(p.from + 'T00:00:00'), end = new Date(p.to + 'T00:00:00');
+    while (x <= end){ days.add(x.toISOString().slice(0,10)); x.setDate(x.getDate() + 1); }
+  }
+  Cal.setData([...days], cal.periods || []);
+  Cal.init(FROM, TO, onPick);
+
+  tgtMonth.textContent = d.month_label || '—';
+  msg.innerHTML = d.targets_set ? '' :
+    `<div class="warn"><div><strong>No targets set for ${esc(d.month_label)}.</strong>
+       The achievement below is real; there is just nothing to measure it against yet.</div>
+     <button type="button" class="act" onclick="openEditor('${esc(d.month)}')">Set them now</button></div>`;
+
+  const L = d.legs || {};
+  legs.hidden = false;
+  legs.innerHTML =
+    `<span>Total liquidation</span><b>${num(Math.round(d.liquidation))} cs</b>
+     <span class="sep">=</span><span>Shop sales</span><b>${num(Math.round(L.tertiary))}</b>
+     <span class="sep">+</span><span>FED</span><b>${num(Math.round(L.fed))}</b>
+     <span class="sep">+</span><span>BAR</span><b>${num(Math.round(L.bar))}</b>
+     <span class="why">KSBC dispatches are excluded — those cases are counted where the shops sold them.</span>`;
+
+  xl.href = '/reports/target-achievement/export.xlsx?' + params().toString();
+  render(d);
+}
+
+function meter(pct){
+  if (pct === null || pct === undefined)
+    return `<div class="pw none"><span class="v">—</span></div>`;
+  const w = Math.max(0, Math.min(100, pct));
+  return `<div class="pw${pct >= 100 ? ' done' : ''}"><span class="v">${pct.toFixed(1)}%</span>
+          <span class="m"><i style="width:${w}%"></i></span></div>`;
+}
+
+function pair(r, cols, cls, band){
+  const nameCell = r.kind === 'bond'
+    ? `<td class="nm" rowspan="2"><span class="opener" onclick="toggleBond('${esc(r.bond)}')">
+         <span class="chev">&#9654;</span>${esc(r.label)}</span></td>`
+    : `<td class="nm" rowspan="2">${esc(r.label)}</td>`;
+  const line = (which) => cols.map(c => {
+    const v = r[which][c.key] ?? 0;
+    return `<td${v ? '' : ' class="zero"'}>${num(v)}</td>`;
+  }).join('') + `<td>${num(r[which + '_total'])}</td>`;
+
+  return `<tr class="${cls} tgt${band ? ' band' : ''}" data-bond="${esc(r.bond)}">
+            ${nameCell}<td class="ty">Target</td>${line('tgt')}
+            <td class="pct" rowspan="2">${meter(r.pct)}</td></tr>
+          <tr class="${cls} ach${band ? ' band' : ''}" data-bond="${esc(r.bond)}">
+            <td class="ty">Achieved</td>${line('ach')}</tr>`;
+}
+
+function render(d){
+  const cols = d.columns;
+  grid.querySelector('thead').innerHTML =
+    `<tr><th>Bond</th><th class="ty"></th>` +
+    cols.map(c => `<th>${esc(c.label)}</th>`).join('') +
+    `<th>Total</th><th>Ach %</th></tr>`;
+
+  let band = false, html = '';
+  for (const r of d.rows){
+    if (r.kind === 'bond'){ html += pair(r, cols, 'b', band); band = !band; }
+    else if (r.kind === 'cluster'){ html += pair(r, cols, 'cl', false); band = false; }
+    else { html += pair(r, cols, 'gt', false); }
+  }
+  grid.querySelector('tbody').innerHTML = html;
+  for (const bond of openBonds) paintShops(bond);
+
+  const bonds = d.rows.filter(r => r.kind === 'bond').length;
+  const m = d.target_meta || {};
+  foot.textContent =
+    `${d.period.short} · ${bonds} bonds · ${cols.length} brands`
+    + (d.targets_set ? ` · targets for ${d.month_label}` +
+        (m.updated ? ` set ${m.updated.slice(0,10).split('-').reverse().join('-')}` +
+                     (m.by ? ` by ${m.by}` : '') : '') : ' · no targets set')
+    + (d.sources.tertiary.length ? ` · shop sales from ${d.sources.tertiary.join(' + ')}` : '')
+    + (d.sources.invoice.length ? ` · invoices from ${d.sources.invoice.join(' + ')}` : '');
+}
+
+/* ---------------- the shops inside a bond ---------------- */
+
+async function toggleBond(bond){
+  if (!bond) return;
+  if (openBonds.has(bond)){
+    openBonds.delete(bond);
+    document.querySelectorAll(`tr.shop[data-of="${CSS.escape(bond)}"]`).forEach(t => t.remove());
+    document.querySelectorAll(`tr[data-bond="${CSS.escape(bond)}"]`)
+      .forEach(t => t.classList.remove('open'));
+    return;
+  }
+  openBonds.add(bond);
+  if (!shopCache[bond]){
+    const p = params(); p.set('bond', bond);
+    try {
+      const res = await fetch('/api/target-achievement/shops?' + p.toString());
+      shopCache[bond] = await res.json();
+    } catch (e) { shopCache[bond] = {shops: [], columns: []}; }
+  }
+  paintShops(bond);
+}
+
+function paintShops(bond){
+  const got = shopCache[bond];
+  if (!got || !DATA) return;
+  const rows = document.querySelectorAll(`tr[data-bond="${CSS.escape(bond)}"]`);
+  if (!rows.length) return;
+  rows.forEach(t => t.classList.add('open'));
+  const anchor = rows[rows.length - 1];
+  const cols = DATA.columns;
+  const span = cols.length + 3;
+
+  const html = got.shops.length
+    ? got.shops.map(s =>
+        `<tr class="shop" data-of="${esc(bond)}">
+           <td class="nm">${esc(s.name)}</td><td class="ty"></td>` +
+        cols.map(c => {
+          const v = s.cells[c.key] ?? 0;
+          return `<td${v ? '' : ' class="zero"'}>${num(v)}</td>`;
+        }).join('') +
+        `<td>${num(s.total)}</td><td class="pct"></td></tr>`).join('')
+    : `<tr class="shop" data-of="${esc(bond)}"><td class="nm" colspan="${span}">
+         Nothing sold in ${esc(bond)} in this period.</td></tr>`;
+
+  // Every figure on this page is the true number rounded once, so a column of
+  // rounded shop totals can land a case either side of the rounded bond total.
+  // Printing the exact figure here is cheaper than an argument about it.
+  const exact = got.shops.reduce((n, s) => n + s.exact, 0);
+  const tail = got.shops.length
+    ? `<tr class="shop" data-of="${esc(bond)}"><td class="nm" colspan="${span}">
+         ${got.shops.length} shops &middot; ${exact.toFixed(2)} cases in ${esc(bond)}</td></tr>`
+    : '';
+  anchor.insertAdjacentHTML('afterend', html + tail);
+}
+
+/* ---------------- typing the targets ----------------
+   Cluster and network rows are never typed. They are the bonds added up, and
+   they update as you type, so the sheet can never disagree with itself. */
+
+let ED = null;
+
+function openEditor(month){
+  edVeil.classList.add('on');
+  edErr.textContent = '';
+  loadTargets(month || (DATA ? DATA.month : ''));
+}
+function closeEditor(){ edVeil.classList.remove('on'); }
+
+async function loadTargets(month){
+  const want = typeof month === 'string' && month ? month
+             : (edMonth.value || (DATA ? DATA.month : ''));
+  const res = await fetch('/api/targets?month=' + encodeURIComponent(want));
+  ED = await res.json();
+
+  const months = new Set([ED.month, ...(ED.months || [])]);
+  const now = new Date();
+  for (let i = -2; i <= 2; i++){
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  edMonth.innerHTML = [...months].sort().reverse()
+    .map(m => `<option value="${m}"${m === ED.month ? ' selected' : ''}>${monthName(m)}</option>`).join('');
+
+  const m = ED.meta || {};
+  edSub.textContent = m.updated
+    ? `Cases, by bond and brand · last saved ${m.updated.slice(0,10).split('-').reverse().join('-')}`
+      + (m.by ? ` by ${m.by}` : '')
+    : 'Cases, by bond and brand · not set yet';
+
+  edGrid.querySelector('thead').innerHTML =
+    `<tr><th>Bond</th>` + ED.families.map(f => `<th>${esc(f.label)}</th>`).join('')
+    + `<th>Target</th></tr>`;
+
+  let body = '';
+  for (const cid of Object.keys(ED.clusters).sort()){
+    for (const bond of ED.clusters[cid]){
+      const cells = ED.bonds[bond] || {};
+      body += `<tr data-bond="${esc(bond)}" data-cl="${cid}"><td class="b">${esc(bond)}</td>` +
+        ED.families.map(f =>
+          `<td><input type="number" min="0" step="1" data-k="${f.key}"
+             value="${cells[f.key] ?? ''}" placeholder="0" oninput="sumUp()"></td>`).join('') +
+        `<td class="t" data-row-total>0</td></tr>`;
+    }
+    body += `<tr class="sub" data-sub="${cid}"><td class="b">Cluster ${cid}</td>` +
+      ED.families.map(f => `<td data-k="${f.key}">0</td>`).join('') +
+      `<td class="t">0</td></tr>`;
+  }
+  body += `<tr class="all"><td class="b">Grand total</td>` +
+    ED.families.map(f => `<td data-k="${f.key}">0</td>`).join('') + `<td class="t">0</td></tr>`;
+  edGrid.querySelector('tbody').innerHTML = body;
+  sumUp();
+}
+
+function monthName(m){
+  const N = ['January','February','March','April','May','June','July',
+             'August','September','October','November','December'];
+  return `${N[+m.slice(5,7) - 1]} ${m.slice(0,4)}`;
+}
+
+function sumUp(){
+  const totals = {}, grand = {};
+  edGrid.querySelectorAll('tbody tr[data-bond]').forEach(tr => {
+    const cid = tr.dataset.cl;
+    totals[cid] = totals[cid] || {};
+    let row = 0;
+    tr.querySelectorAll('input[data-k]').forEach(inp => {
+      const v = Math.max(0, +inp.value || 0);
+      row += v;
+      totals[cid][inp.dataset.k] = (totals[cid][inp.dataset.k] || 0) + v;
+      grand[inp.dataset.k] = (grand[inp.dataset.k] || 0) + v;
+    });
+    tr.querySelector('[data-row-total]').textContent = row.toLocaleString('en-IN');
+  });
+  edGrid.querySelectorAll('tbody tr.sub').forEach(tr => {
+    const t = totals[tr.dataset.sub] || {};
+    let sum = 0;
+    tr.querySelectorAll('td[data-k]').forEach(td => {
+      const v = t[td.dataset.k] || 0; sum += v;
+      td.textContent = v.toLocaleString('en-IN');
+    });
+    tr.querySelector('td.t').textContent = sum.toLocaleString('en-IN');
+  });
+  const all = edGrid.querySelector('tbody tr.all');
+  let sum = 0;
+  all.querySelectorAll('td[data-k]').forEach(td => {
+    const v = grand[td.dataset.k] || 0; sum += v;
+    td.textContent = v.toLocaleString('en-IN');
+  });
+  all.querySelector('td.t').textContent = sum.toLocaleString('en-IN');
+}
+
+async function saveTargets(){
+  const bonds = {};
+  edGrid.querySelectorAll('tbody tr[data-bond]').forEach(tr => {
+    const cells = {};
+    tr.querySelectorAll('input[data-k]').forEach(inp => {
+      const v = +inp.value || 0;
+      if (v) cells[inp.dataset.k] = v;
+    });
+    if (Object.keys(cells).length) bonds[tr.dataset.bond] = cells;
+  });
+
+  edSave.disabled = true; edSave.textContent = 'Saving…'; edErr.textContent = '';
+  try {
+    const res = await fetch('/api/targets', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({month: edMonth.value, bonds}),
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.detail || 'Could not save.');
+    closeEditor();
+    load();
+  } catch (e){
+    edErr.textContent = e.message;
+  } finally {
+    edSave.disabled = false; edSave.textContent = 'Save targets';
+  }
+}
+
+Cal.init('', '', onPick);
+load();
+</script>
+{% endblock %}

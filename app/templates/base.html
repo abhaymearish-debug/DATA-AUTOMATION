@@ -58,88 +58,122 @@
   .act.danger { border-color:#FCA5A5; color:#991B1B; }
   .act.danger:hover { background:#FEF2F2; }
 
-  /* ---------- sidebar ---------- */
-  .sb { position:fixed; inset:0 auto 0 0; width:var(--sb);
-        background:linear-gradient(180deg,#0D1B4A 0%,#0A1538 100%);
-        color:#AEBCDE; display:flex; flex-direction:column;
-        scrollbar-width:thin; scrollbar-color:#2A3E78 transparent; }
-  .sb nav { flex:1 1 auto; overflow-y:auto; }
-  .sb::-webkit-scrollbar { width:7px; }
-  .sb::-webkit-scrollbar-thumb { background:#243768; border-radius:4px; }
+  /* ---------- sidebar ----------
+     One dark column that has to hold twenty destinations without any of them
+     shouting. The rules below spend their contrast carefully: the surface is
+     almost flat, hover is barely there, and the only saturated colour in the
+     whole panel is the gold on the page you are actually looking at. */
+  .sb { position:fixed; inset:0 auto 0 0; width:var(--sb); display:flex;
+        flex-direction:column; color:#9FB0D6; isolation:isolate;
+        background:
+          radial-gradient(120% 52% at 50% -8%, rgba(255,179,0,.09), transparent 62%),
+          linear-gradient(180deg,#0E1C4D 0%,#0B1639 52%,#080F2A 100%);
+        box-shadow:inset -1px 0 0 rgba(255,255,255,.06), 1px 0 22px rgba(4,8,22,.35); }
+
+  .sb nav { flex:1 1 auto; overflow-y:auto; padding:11px 12px 16px;
+            scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.14) transparent; }
+  .sb nav::-webkit-scrollbar { width:8px; }
+  .sb nav::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12);
+                                     border:2px solid transparent; background-clip:padding-box;
+                                     border-radius:6px; }
+  .sb nav::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.22);
+                                           background-clip:padding-box; }
 
   /* The brand plate. The house logo is gold on black, so it sits on a faint
-     gold-tinted plaque rather than straight on the navy — otherwise the
-     shield's dark interior reads as a hole in the sidebar. */
-  .sb-top { display:flex; align-items:center; gap:13px; padding:20px 16px 18px;
-            border-bottom:1px solid rgba(255,255,255,.07);
-            background:linear-gradient(180deg,rgba(255,189,48,.05),transparent); }
-  .sb-top .mark { flex:none; width:52px; height:52px; border-radius:14px;
-                  display:grid; place-items:center;
-                  background:radial-gradient(120% 120% at 30% 18%,
-                             rgba(255,189,48,.18), rgba(255,189,48,.04) 62%, transparent);
-                  border:1px solid rgba(255,189,48,.26);
-                  box-shadow:inset 0 1px 0 rgba(255,255,255,.07); }
-  .sb-top .mark img { width:44px; height:44px; display:block;
-                      filter:drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
-  .sb-top .n { font-size:14px; font-weight:700; color:#fff; letter-spacing:.2px; }
-  .sb-top .t { font-size:9px; letter-spacing:1.5px; text-transform:uppercase;
-               color:var(--gold); margin-top:3px; }
-
-  .sb nav { padding:12px 10px 10px; }
+     gold-tinted plaque rather than straight on the navy - otherwise the
+     shield's dark interior reads as a hole in the sidebar. The rule under it
+     fades at both ends instead of running wall to wall, which is the whole
+     difference between a panel and a form. */
+  .sb-top { position:relative; display:flex; align-items:center; gap:13px;
+            padding:19px 16px 17px; }
+  .sb-top::after { content:''; position:absolute; left:14px; right:14px; bottom:0; height:1px;
+                   background:linear-gradient(90deg, transparent,
+                              rgba(255,255,255,.14) 22%, rgba(255,255,255,.14) 78%, transparent); }
+  .sb-top .mark { flex:none; width:50px; height:50px; border-radius:15px;
+                  display:grid; place-items:center; position:relative;
+                  background:radial-gradient(120% 120% at 30% 16%,
+                             rgba(255,189,48,.20), rgba(255,189,48,.05) 60%, rgba(255,255,255,.02));
+                  border:1px solid rgba(255,189,48,.30);
+                  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),
+                             0 4px 14px rgba(0,0,0,.30); }
+  .sb-top .mark img { width:42px; height:42px; display:block;
+                      filter:drop-shadow(0 1px 3px rgba(0,0,0,.55)); }
+  .sb-top .n { font-size:14.5px; font-weight:700; color:#fff; letter-spacing:.1px; }
+  .sb-top .t { font-size:8.5px; letter-spacing:1.9px; text-transform:uppercase;
+               color:var(--gold); margin-top:4px; opacity:.92; }
 
   /* A section label, not something you can click. */
-  .sb .sect { padding:16px 10px 6px; font-size:9.5px; font-weight:800;
-              letter-spacing:1.3px; text-transform:uppercase; color:#6C7FB0; }
-  .sb nav > .sect:first-child { padding-top:4px; }
+  .sb .sect { padding:17px 11px 7px; font-size:9px; font-weight:800;
+              letter-spacing:1.6px; text-transform:uppercase; color:#5F719F; }
+  .sb nav > .sect:first-child { padding-top:3px; }
 
   .sb a.item, .sb button.group {
-        display:flex; align-items:center; gap:10px; width:100%; text-align:left;
-        background:none; border:0; color:#AEBCDE; font:inherit; font-size:13.5px;
-        cursor:pointer; padding:8px 10px; border-radius:9px; margin-bottom:1px;
-        line-height:1.3; }
-  .sb a.item:hover, .sb button.group:hover { background:rgba(255,255,255,.06); color:#fff; }
+        position:relative; display:flex; align-items:center; gap:11px; width:100%;
+        text-align:left; background:none; border:0; color:#9FB0D6; font:inherit;
+        font-size:13.5px; cursor:pointer; padding:8px 11px; border-radius:10px;
+        margin-bottom:2px; line-height:1.32;
+        transition:background .14s ease, color .14s ease; }
+  .sb a.item:hover, .sb button.group:hover { background:rgba(255,255,255,.055); color:#EAF0FE; }
+  .sb a.item:hover .ico, .sb button.group:hover .ico { color:#CBD8F6; }
 
-  .sb .ico { flex:none; width:17px; height:17px; }
+  .sb .ico { flex:none; width:17px; height:17px; color:#8697C2;
+             transition:color .14s ease; }
   .sb .ico svg { width:17px; height:17px; fill:none; stroke:currentColor;
                  stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 
-  .sb a.item.active { background:rgba(255,255,255,.10); color:#fff; font-weight:600;
-                      box-shadow:inset 2px 0 0 var(--gold); }
+  /* The page you are on. A gold rail that stops short of the corners, a wash
+     that fades out to the right, and the only white text in the list. */
+  .sb a.item.active { color:#fff; font-weight:650;
+        background:linear-gradient(90deg, rgba(255,179,0,.15), rgba(255,255,255,.085) 26%,
+                   rgba(255,255,255,.045) 68%, rgba(255,255,255,.015) 100%);
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.09); }
+  .sb a.item.active::before { content:''; position:absolute; left:0; top:7px; bottom:7px;
+        width:3px; border-radius:0 3px 3px 0; background:var(--gold);
+        box-shadow:0 0 10px rgba(255,179,0,.55); }
   .sb a.item.active .ico { color:var(--gold); }
 
   /* Not built yet: dimmed, inert, and labelled without a heavy chip. */
-  .sb a.item.soon { color:#64769F; cursor:default; }
-  .sb a.item.soon:hover { background:none; color:#64769F; }
-  .sb .tag { margin-left:auto; font-size:9px; letter-spacing:.7px; text-transform:uppercase;
-             color:#5E6F97; font-weight:700; }
+  .sb a.item.soon { color:#5C6D97; cursor:default; }
+  .sb a.item.soon .ico { color:#4E5E86; }
+  .sb a.item.soon:hover { background:none; color:#5C6D97; }
+  .sb a.item.soon:hover .ico { color:#4E5E86; }
+  .sb .tag { margin-left:auto; flex:none; font-size:8.5px; letter-spacing:1.1px;
+             text-transform:uppercase; color:#55658C; font-weight:700; }
 
   /* A collapsible group, and the guide line its children hang from. */
-  .sb button.group { font-weight:600; color:#C6D2EC; }
-  .sb .chev { margin-left:auto; font-size:9px; opacity:.55; transition:transform .16s; }
+  .sb button.group { font-weight:650; color:#C2CFEC; }
+  .sb .chev { margin-left:auto; font-size:9px; opacity:.5; transition:transform .18s ease; }
   .sb .collapsed .chev { transform:rotate(-90deg); }
-  .sb .kids { position:relative; margin:1px 0 2px 19px;
-              border-left:1px solid rgba(255,255,255,.10); padding-left:8px; }
+  .sb .kids { position:relative; margin:2px 0 4px 20px; padding-left:10px; }
+  .sb .kids::before { content:''; position:absolute; left:0; top:2px; bottom:2px; width:1px;
+                      background:linear-gradient(180deg, rgba(255,255,255,.16),
+                                 rgba(255,255,255,.05)); }
   .sb .kids.hidden { display:none; }
-  .sb .kids a.item { font-size:13px; padding:7px 10px; }
+  .sb .kids a.item { font-size:13px; padding:7px 11px; }
+  .sb .kids a.item.active::before { left:-10px; border-radius:3px; }
 
-  .sb .rule { height:1px; background:rgba(255,255,255,.07); margin:14px 10px 2px; }
+  .sb .rule { height:1px; margin:14px 11px 2px;
+              background:linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent); }
 
   /* ---------- who is signed in ---------- */
   .sb-foot { flex:none; display:flex; align-items:center; gap:10px; padding:11px 13px;
-             border-top:1px solid rgba(255,255,255,.09); background:rgba(0,0,0,.18); }
+             background:rgba(3,7,20,.42);
+             box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
   .sb-foot .me { display:flex; align-items:center; gap:10px; min-width:0; }
-  .sb-foot .av { flex:none; width:31px; height:31px; border-radius:50%;
-                 background:linear-gradient(145deg,#2E4585,#1B2B5C); color:#fff;
+  .sb-foot .av { flex:none; width:32px; height:32px; border-radius:50%;
+                 background:linear-gradient(145deg,#31498C,#1A2A5C); color:#fff;
                  display:grid; place-items:center; font-weight:700; font-size:13px;
-                 border:1px solid rgba(255,255,255,.14); }
+                 border:1px solid rgba(255,189,48,.34);
+                 box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 2px 8px rgba(0,0,0,.30); }
   .sb-foot .who { min-width:0; }
   .sb-foot .nm { font-size:12.5px; font-weight:650; color:#fff; line-height:1.25;
                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .sb-foot .em { font-size:10.5px; color:#7E8FBB; line-height:1.3;
+  .sb-foot .em { font-size:10.5px; color:#788AB8; line-height:1.3;
                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:118px; }
   .sb-foot .acts { margin-left:auto; display:flex; gap:5px; }
-  .sb-foot .sbtn { border:0; background:none; color:#93A3CB; border-radius:7px;
-                   width:28px; height:28px; display:grid; place-items:center; cursor:pointer; padding:0; }
+  .sb-foot .sbtn { border:0; background:none; color:#8D9EC8; border-radius:8px;
+                   width:29px; height:29px; display:grid; place-items:center; cursor:pointer;
+                   padding:0; transition:background .14s ease, color .14s ease; }
   .sb-foot .sbtn:hover { background:rgba(255,255,255,.10); color:#fff; }
   .sb-foot .sbtn svg { width:15px; height:15px; fill:none; stroke:currentColor;
                        stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
@@ -249,7 +283,8 @@
 
     <a class="item {% if page == 'liquidation' %}active{% endif %}" href="/reports/liquidation">
       {{ nav_icon('drop') }}Liquidation Summary</a>
-    <a class="item soon">{{ nav_icon('target') }}Target vs Achievement<span class="tag">soon</span></a>
+    <a class="item {% if page == 'target' %}active{% endif %}" href="/reports/target-achievement">
+      {{ nav_icon('target') }}Target vs Achievement</a>
     <a class="item soon">{{ nav_icon('clipboard') }}Purchase Instruction<span class="tag">soon</span></a>
     <a class="item soon">{{ nav_icon('badge') }}Permit Status<span class="tag">soon</span></a>
     <a class="item soon">{{ nav_icon('layers') }}WH Monthly Stock &amp; Sales<span class="tag">soon</span></a>

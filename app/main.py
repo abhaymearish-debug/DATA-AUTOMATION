@@ -16,7 +16,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import bootstrap, auth, bondmap, config, promote as promote_mod, reports_api, reports_pdf
+from . import (bootstrap, auth, bondmap, config, promote as promote_mod,
+               reports_api, reports_pdf, targets as targets_mod)
 from .jobs import STORE, Job, JobContext, JobStatus, run_pipeline
 from .pipelines import (
     MONTH_NAMES,
@@ -2099,3 +2100,190 @@ async def bond_mapping_save(request: Request):
         # the new mapping up on its own.
 
     return JSONResponse({"ok": True, **result})
+
+
+# ---------------------------------------------------------------------------
+# Target vs achievement
+# ---------------------------------------------------------------------------
+#
+# The targets are typed here rather than uploaded, because they are not KSBC
+# data: nobody exports them, they are a decision taken in a meeting and revised
+# mid-month. The achievement beside them is total liquidation - shop sales plus
+# the FED and BAR invoices - which reports_api assembles from the raws already
+# in the workspace.
+
+
+def _tva_window(date_from: str, date_to: str):
+    """The window to report on: what was asked, or the current month so far."""
+    asked = _asked_dates(date_from, date_to)
+    if asked:
+        return asked
+    widest = reports_api.widest_window()
+    if not widest:
+        return None
+    start, end = widest
+    return (max(start, end.replace(day=1)), end)
+
+
+@app.get("/reports/target-achievement", response_class=HTMLResponse)
+def target_achievement_page(request: Request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        request, "report_target.html",
+        {"user": user, "page": "target", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", [])},
+    )
+
+
+@app.get("/api/target-achievement")
+def target_achievement_data(request: Request, date_from: str = "", date_to: str = "",
+                            cluster: int = 0, month: str = ""):
+    require_user(request)
+    window = _tva_window(date_from, date_to)
+    if window is None:
+        return JSONResponse({"error": "No shop sales have been uploaded yet, so there is "
+                                      "nothing to measure a target against."})
+    data = reports_api.target_vs_achievement(
+        window[0], window[1], cluster=cluster or None, month=month)
+    data.setdefault("bonds", sorted({b for members in reports_api.bond_clusters().values()
+                                     for b in members}))
+    data["calendar"] = _calendar_days()
+    data["suggest"] = _suggested_window()
+    return JSONResponse(data)
+
+
+@app.get("/api/target-achievement/shops")
+def target_achievement_shops(request: Request, bond: str = "",
+                             date_from: str = "", date_to: str = ""):
+    require_user(request)
+    window = _tva_window(date_from, date_to)
+    if window is None:
+        return JSONResponse({"shops": [], "columns": []})
+    return JSONResponse(reports_api.tva_shops(bond, window[0], window[1]))
+
+
+@app.get("/api/targets")
+def targets_read(request: Request, month: str = ""):
+    require_user(request)
+    month = month or date.today().strftime("%Y-%m")
+    try:
+        cells = targets_mod.load(month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return JSONResponse({
+        "month": month,
+        "bonds": cells,
+        "families": [{"key": k, "label": l} for k, l in targets_mod.FAMILIES],
+        "all_bonds": sorted({b for members in reports_api.bond_clusters().values()
+                             for b in members}),
+        "clusters": {str(c): sorted(m) for c, m in reports_api.bond_clusters().items()},
+        "months": targets_mod.months(),
+        "meta": targets_mod.meta(month),
+    })
+
+
+@app.post("/api/targets")
+async def targets_write(request: Request):
+    user = require_user(request)
+    body = await request.json()
+    month = str(body.get("month") or "")
+    try:
+        saved = targets_mod.save(month, body.get("bonds") or {}, by=user)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return JSONResponse({"ok": True, **saved})
+
+
+@app.get("/reports/target-achievement/export.xlsx")
+def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str = "",
+                            cluster: int = 0, month: str = ""):
+    """The sheet as it prints, in the shape the office already circulates."""
+    require_user(request)
+    window = _tva_window(date_from, date_to)
+    if window is None:
+        raise HTTPException(404, "No shop sales have been uploaded yet.")
+    data = reports_api.target_vs_achievement(
+        window[0], window[1], cluster=cluster or None, month=month)
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+
+    import tempfile
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    navy, gold, ink = "FF0A294F", "FFFFBD30", "FF1B2A4A"
+    cols = data["columns"]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"TGT vs ACH {data['month'][:4]}"[:31]
+
+    ws.append(["K.S DISTILLERY"])
+    ws["A1"].font = Font(bold=True, size=13, color=navy)
+    ws.append(["TARGET VS ACHIEVEMENT", "", "", "",
+               f"AS ON {window[1].strftime('%-d-%-m-%Y')}"])
+    ws["A2"].font = Font(bold=True, size=11)
+    ws["E2"].font = Font(bold=True, size=11, color="FF6B7280")
+    ws.append([])
+
+    head = ["BOND", "CAT"] + [c["label"].upper() for c in cols] + ["GRAND TOTAL", "ACH %"]
+    ws.append(head)
+    for cell in ws[ws.max_row]:
+        cell.fill = PatternFill("solid", fgColor=navy)
+        cell.font = Font(bold=True, color=gold, size=9.5)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[ws.max_row].height = 30
+    head_row = ws.max_row
+
+    for row in data["rows"]:
+        for which, tag in (("tgt", "TGT"), ("ach", "ACH")):
+            line = [row["label"] if which == "tgt" else "", tag]
+            line += [row[which][c["key"]] for c in cols]
+            line.append(row[which + "_total"])
+            # The percentage belongs to the pair, so it is written once, on the
+            # target line, and the merge below makes it read as one cell.
+            line.append((row["pct"] / 100) if (which == "tgt" and row["pct"] is not None) else None)
+            ws.append(line)
+
+        top, bottom = ws.max_row - 1, ws.max_row
+        last = len(head)
+        ws.merge_cells(start_row=top, start_column=1, end_row=bottom, end_column=1)
+        ws.merge_cells(start_row=top, start_column=last, end_row=bottom, end_column=last)
+        ws.cell(row=top, column=1).alignment = Alignment(vertical="center")
+        pct_cell = ws.cell(row=top, column=last)
+        pct_cell.number_format = "0.0%"
+        pct_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        if row["kind"] in ("cluster", "grand"):
+            fill = PatternFill("solid", fgColor=gold if row["kind"] == "grand" else navy)
+            font = Font(bold=True, size=10,
+                        color=ink if row["kind"] == "grand" else gold)
+            for r in (top, bottom):
+                for cell in ws[r]:
+                    cell.fill = fill
+                    cell.font = font
+            pct_cell.number_format = "0.0%"
+
+    for r in range(head_row + 1, ws.max_row + 1):
+        for c in range(2, len(head)):
+            ws.cell(row=r, column=c).alignment = Alignment(horizontal="center")
+
+    ws.append([])
+    ws.append([f"All figures in cases. Achievement is total liquidation: shop sales "
+               f"{data['legs']['tertiary']:,.0f} + FED {data['legs']['fed']:,.0f} + BAR "
+               f"{data['legs']['bar']:,.0f} = {data['liquidation']:,.0f}. "
+               f"KSBC dispatches are excluded."])
+    ws.cell(row=ws.max_row, column=1).font = Font(size=9, color="FF6B7280")
+
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 7
+    for i in range(3, len(head) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 14
+    ws.freeze_panes = ws.cell(row=head_row + 1, column=3)
+
+    label = data["period"]["short"].replace(" to ", " - ")
+    tmp = Path(tempfile.mkdtemp()) / f"TARGET vs ACHIEVEMENT ({label}).xlsx"
+    wb.save(tmp)
+    return FileResponse(tmp, filename=tmp.name)

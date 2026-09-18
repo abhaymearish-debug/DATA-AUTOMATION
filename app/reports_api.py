@@ -1667,3 +1667,197 @@ def upload_calendar() -> dict:
         ],
         "span": {"first": min(days) if days else "", "last": max(days) if days else ""},
     }
+
+
+# ---------------------------------------------------------------------------
+# Target vs achievement
+# ---------------------------------------------------------------------------
+#
+# ACHIEVEMENT IS TOTAL LIQUIDATION, AND IT HAS TWO LEGS
+# ----------------------------------------------------
+# A case leaves this company through one of two doors, and the target is set
+# against both:
+#
+#   * the tertiary leg - what KSBC shops actually sold (Shop Out on the
+#     cumulative raws, cases plus loose bottles over the pack size);
+#   * the invoice leg  - what was invoiced straight to FED and BAR outlets,
+#     which never passes through a KSBC shop and so appears nowhere in the
+#     first leg.
+#
+# KSBC-category dispatch rows are deliberately NOT counted. Those are stock
+# moving into the shops whose sales the tertiary leg already counts, so adding
+# them would count the same case twice - in August that would have inflated
+# the network by 4,213 cases against a true 4,989.
+#
+# Every figure is carried unrounded to the very last step. The August 2026
+# workbook rounded each brand cell first and then added the rounded cells in
+# some places and the true total in others, which left nine cluster cells
+# that did not equal the column added up by hand. Round once, for display.
+
+
+def _tva_legs(start: date, end: date) -> dict:
+    """Achievement per (bond, family), and what each leg contributed."""
+    master = load_master()
+    from . import targets as targets_mod
+
+    grid: dict = defaultdict(lambda: defaultdict(float))
+    shops: dict = defaultdict(lambda: defaultdict(float))
+    names: dict = {}
+    legs = {"tertiary": 0.0, "fed": 0.0, "bar": 0.0}
+    sources: dict = {"tertiary": [], "invoice": []}
+
+    win = window_lines(start, end)
+    if "error" in win:
+        return {"error": win["error"]}
+    sources["tertiary"] = [seg["name"] for seg in win.get("chain", [])]
+    names.update(win.get("names", {}))
+    for key, cell in win["lines"].items():
+        sold = cell[2]
+        if not sold:
+            continue
+        code, brand, _pack = key.split("|", 2)
+        bond = master.get(code, {}).get("bond", "")
+        if not bond:
+            continue
+        fam = targets_mod.family_of(brand)
+        grid[bond][fam] += sold
+        shops[(bond, code)][fam] += sold
+        legs["tertiary"] += sold
+
+    lines, sec_sources = secondary_lines()
+    used = False
+    for line in lines:
+        day = line.get("date")
+        if day is None or not (start <= day <= end):
+            continue
+        cat = (line.get("cat") or "").upper()
+        if cat not in ("FED", "BAR"):
+            continue
+        bond = line.get("bond") or ""
+        if not bond:
+            continue
+        fam = targets_mod.family_of(line.get("brand", ""))
+        grid[bond][fam] += line["cases"]
+        code = line.get("shop_code") or ""
+        shops[(bond, code)][fam] += line["cases"]
+        names.setdefault(code, (line.get("shop") or code).upper())
+        legs["fed" if cat == "FED" else "bar"] += line["cases"]
+        used = True
+    if used:
+        sources["invoice"] = sec_sources
+
+    return {"grid": grid, "shops": shops, "names": names,
+            "legs": legs, "sources": sources}
+
+
+def _tva_row(label: str, kind: str, cluster: int | None,
+             bonds: list, grid: dict, tgt: dict, cols: list) -> dict:
+    """One printed line. Every cell is the true sum, rounded only here."""
+    ach_true = {k: sum(grid.get(b, {}).get(k, 0.0) for b in bonds) for k in cols}
+    tgt_true = {k: sum(tgt.get(b, {}).get(k, 0.0) for b in bonds) for k in cols}
+    ach_total = sum(ach_true.values())
+    tgt_total = sum(tgt_true.values())
+    return {
+        "kind": kind,
+        "label": label,
+        "cluster": cluster,
+        "bond": bonds[0] if kind == "bond" else "",
+        "ach": {k: round(v) for k, v in ach_true.items()},
+        "tgt": {k: round(v) for k, v in tgt_true.items()},
+        "ach_total": round(ach_total),
+        "tgt_total": round(tgt_total),
+        "ach_exact": round(ach_total, 3),
+        "pct": round(ach_total / tgt_total * 100, 2) if tgt_total else None,
+    }
+
+
+def target_vs_achievement(start: date, end: date, cluster: int | None = None,
+                          month: str = "") -> dict:
+    """The bond x brand grid, in target-and-achieved pairs, by cluster."""
+    from . import targets as targets_mod
+
+    got = _tva_legs(start, end)
+    if "error" in got:
+        return got
+    grid = got["grid"]
+
+    month = month or start.strftime("%Y-%m")
+    tgt = targets_mod.load(month)
+
+    # Other earns a column only by selling something. A dead brand that comes
+    # back shows up here rather than quietly leaving the total short.
+    other_sold = any(cells.get(targets_mod.OTHER, 0.0) for cells in grid.values())
+    cols = targets_mod.FAMILY_KEYS + ([targets_mod.OTHER] if other_sold else [])
+
+    clusters = bond_clusters()
+    known = {b for members in clusters.values() for b in members}
+    # A bond that sold or was targeted but sits in no cluster still has to
+    # appear, or the grand total stops being the network.
+    loose = sorted((set(grid) | set(tgt)) - known)
+
+    rows: list = []
+    shown: list = []
+    for cid in sorted(clusters):
+        if cluster in (1, 2, 3) and cid != cluster:
+            continue
+        members = sorted(clusters[cid])
+        if not members:
+            continue
+        for bond in members:
+            rows.append(_tva_row(bond, "bond", cid, [bond], grid, tgt, cols))
+        rows.append(_tva_row(f"CLUSTER {cid}", "cluster", cid, members, grid, tgt, cols))
+        shown += members
+
+    if cluster in (None, 0):
+        for bond in loose:
+            rows.append(_tva_row(bond, "bond", None, [bond], grid, tgt, cols))
+        shown += loose
+        rows.append(_tva_row("GRAND TOTAL", "grand", None, shown, grid, tgt, cols))
+
+    legs = got["legs"]
+    return {
+        "period": {"from": start.isoformat(), "to": end.isoformat(),
+                   "short": f"{start.day} {start.strftime('%b')} {start.year} to "
+                            f"{end.day} {end.strftime('%b')} {end.year}"},
+        "month": month,
+        "month_label": f"{_MONTHS_UP[int(month[5:7]) - 1].title()} {month[:4]}",
+        "columns": [{"key": k, "label": targets_mod.FAMILY_LABEL[k]} for k in cols],
+        "rows": rows,
+        "legs": {k: round(v, 3) for k, v in legs.items()},
+        "liquidation": round(sum(legs.values()), 3),
+        "sources": got["sources"],
+        "targets_set": bool(tgt),
+        "target_meta": targets_mod.meta(month),
+        "cluster": cluster or 0,
+    }
+
+
+def tva_shops(bond: str, start: date, end: date) -> dict:
+    """The shops inside one bond, family by family, on the same two legs."""
+    from . import targets as targets_mod
+
+    got = _tva_legs(start, end)
+    if "error" in got:
+        return got
+    want = (bond or "").strip().upper()
+
+    grid = got["grid"]
+    other_sold = any(cells.get(targets_mod.OTHER, 0.0) for cells in grid.values())
+    cols = targets_mod.FAMILY_KEYS + ([targets_mod.OTHER] if other_sold else [])
+
+    out = []
+    for (b, code), cells in got["shops"].items():
+        if b != want:
+            continue
+        total = sum(cells.values())
+        if not total:
+            continue
+        out.append({
+            "code": code,
+            "name": got["names"].get(code, code),
+            "cells": {k: round(cells.get(k, 0.0)) for k in cols},
+            "total": round(total),
+            "exact": round(total, 3),
+        })
+    out.sort(key=lambda s: (-s["exact"], s["name"]))
+    return {"shops": out, "columns": cols}
