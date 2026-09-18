@@ -12,6 +12,41 @@
   .calbtn:hover { background:var(--hover); }
   .calbtn i { font-style:normal; font-size:10px; color:var(--muted); }
   #upWhen .calpop { top:calc(100% + 8px); }
+
+  /* The file field. A bare <input type=file> is the one control on the page
+     the browser draws itself, in its own font, with 'no files selected' as
+     the only feedback. This is a drop target that also opens the picker. */
+  .drop { display:block; box-sizing:border-box; width:100%; cursor:pointer;
+          border:1.5px dashed var(--line); border-radius:12px; background:var(--row);
+          padding:22px 16px; text-align:center;
+          transition:border-color .15s ease, background .15s ease; }
+  .drop:hover { border-color:var(--blue); background:var(--hover); }
+  .drop.over { border-color:var(--blue); background:var(--hover); border-style:solid; }
+  .drop input { display:none; }
+  .drop .ic { display:grid; place-items:center; width:38px; height:38px; margin:0 auto 10px;
+              border-radius:11px; background:var(--chip); color:var(--navy); }
+  .drop .ic svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7;
+                  stroke-linecap:round; stroke-linejoin:round; }
+  .drop .t { display:block; font-size:13.5px; font-weight:650; color:var(--ink); }
+  .drop .t em { font-style:normal; color:var(--blue); }
+  .drop .h { display:block; font-size:12px; color:var(--muted); margin-top:4px; }
+
+  /* Once something is chosen the box stops advertising and starts reporting. */
+  .drop.has { padding:10px 10px 8px; text-align:left; border-style:solid;
+              border-color:var(--line); background:var(--card); }
+  .drop.has:hover { border-color:var(--blue); background:var(--card); }
+  .drop .list { display:flex; flex-direction:column; gap:6px; }
+  .drop .f { display:flex; align-items:center; gap:9px; min-width:0;
+             padding:9px 11px; border-radius:9px; background:var(--row); }
+  .drop .f svg { flex:none; width:16px; height:16px; color:var(--navy); fill:none;
+                 stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .drop .f .n { font-size:12.5px; font-weight:600; color:var(--ink); min-width:0;
+                overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .drop .f .s { margin-left:auto; flex:none; font-size:11.5px; color:var(--muted); }
+  .drop .swap { display:block; margin-top:8px; font-size:11.5px; color:var(--muted);
+                text-align:center; }
+  /* display: on these beats the hidden attribute, so say it again louder. */
+  .drop [hidden] { display:none !important; }
 </style>
 <style>
   .lead { margin:-4px 0 18px; color:var(--muted); font-size:13.5px; }
@@ -216,7 +251,21 @@
       </div>
 
       <label id="upFilesLabel">File</label>
-      <input type="file" id="upFiles">
+      <label class="drop" id="upDrop">
+        <input type="file" id="upFiles" accept=".xlsx,.xls">
+        <span class="blank" id="upBlank">
+          <span class="ic">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="M7 9l5-5 5 5"></path><path d="M12 4v12"></path>
+            </svg>
+          </span>
+          <span class="t"><em>Choose</em> or drop files here</span>
+          <span class="h" id="upHint">Excel export from KSBC</span>
+        </span>
+        <span class="list" id="upList" hidden></span>
+        <span class="swap" id="upSwap" hidden>Click or drop to replace</span>
+      </label>
       <div class="err" id="upErr"></div>
     </div>
     <footer>
@@ -266,6 +315,11 @@ function openUpload(c){
   upFiles.value = '';
   upFiles.multiple = (c.mode === 'files');
   upFilesLabel.textContent = c.mode === 'files' ? 'Files' : 'File';
+  upHint.textContent = c.mode === 'files'
+      ? 'One or more Bevco exports (.xlsx)'
+      : c.mode === 'range' ? 'One KSBC export covering this window (.xlsx)'
+                           : 'One KSBC export for this date (.xlsx)';
+  showPicked();
 
   const today = iso(new Date());
   // Warehouse stock reads its date out of the Bevco filename, but a date you
@@ -359,10 +413,62 @@ function dateFromFilename(name){
   return `${m[3]}-${String(mm + 1).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
 }
 upFiles.addEventListener('change', () => {
+  showPicked();
   if (!card || card.mode !== 'files' || !upFiles.files.length) return;
   const found = dateFromFilename(upFiles.files[0].name);
   if (found && !upDate.value) setDay(found);
   refreshName();
+});
+
+/* ---------------- the file box ---------------- */
+
+const FILE_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+    <path d="M14 2v6h6"></path></svg>`;
+
+function esc(t){ return t.replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function niceSize(n){
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function showPicked(){
+  const files = [...upFiles.files];
+  const any = files.length > 0;
+  upDrop.classList.toggle('has', any);
+  upBlank.hidden = any; upList.hidden = !any; upSwap.hidden = !any;
+  upList.innerHTML = files.map(f =>
+    `<span class="f">${FILE_SVG}<span class="n">${esc(f.name)}</span>` +
+    `<span class="s">${niceSize(f.size)}</span></span>`).join('');
+}
+
+/* Dropping a file anywhere but the box would have the browser navigate away
+   from the app and open it, losing whatever was typed. */
+['dragover','drop'].forEach(k =>
+  upVeil.addEventListener(k, e => e.preventDefault()));
+
+['dragenter','dragover'].forEach(k => upDrop.addEventListener(k, e => {
+  e.preventDefault(); upDrop.classList.add('over');
+}));
+['dragleave','dragend','drop'].forEach(k => upDrop.addEventListener(k, () => {
+  upDrop.classList.remove('over');
+}));
+upDrop.addEventListener('drop', e => {
+  e.preventDefault();
+  const files = [...(e.dataTransfer ? e.dataTransfer.files : [])];
+  if (!files.length) return;
+  if (!upFiles.multiple && files.length > 1){
+    upErr.textContent = 'This upload takes one file at a time.';
+    return;
+  }
+  const dt = new DataTransfer();
+  files.forEach(f => dt.items.add(f));
+  upFiles.files = dt.files;
+  upErr.textContent = '';
+  upFiles.dispatchEvent(new Event('change'));
 });
 
 async function submitUpload(ev){
