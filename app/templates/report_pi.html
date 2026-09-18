@@ -68,14 +68,27 @@
              border-bottom:1px solid #22407F; border-right:1px solid rgba(255,255,255,.07); }
   thead tr:first-child th { top:0; z-index:3; }
   thead tr:nth-child(2) th { top:31px; z-index:3; }
-  thead th:first-child { text-align:left; left:0; z-index:4; min-width:190px; padding-left:16px; }
+  /* Only the first header row has a name cell - "Row Labels" spans both rows -
+     so the second row's first cell is a measure. Pinning "th:first-child"
+     stuck that measure to the left edge as well, which is the stray column
+     that appeared beside the bond names when the grid was scrolled across. */
+  thead tr:first-child th:first-child { text-align:left; left:0; z-index:4;
+                                        min-width:190px; padding-left:16px; }
   thead th.grp { border-right:1px solid rgba(255,255,255,.22); }
 
-  tbody td { height:31px; padding:0 9px; text-align:center; white-space:nowrap;
+  /* Ruled both ways, the way Shop Sales Cumulative reads. */
+  tbody td { height:38px; padding:0 9px; text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; color:var(--ink);
-             border-bottom:1px solid var(--line); }
+             border-bottom:1px solid var(--line);
+             border-left:1px solid var(--line); }
+  /* The name column is fixed while the rest scrolls beneath it, so it needs an
+     edge to hide behind - without one, a half-scrolled column printed its
+     digits sliced down the middle and read as a rendering fault. */
   tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
-                         background:var(--card); font-weight:650; padding-left:16px; }
+                         background:var(--card); font-weight:650; padding-left:16px;
+                         border-left:0; border-right:1px solid var(--line);
+                         box-shadow:7px 0 9px -7px rgba(16,24,40,.30); }
+  thead tr:first-child th:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
   tbody td.mq { font-weight:700; }
   tbody td.edge { border-right:1px solid var(--line); }
   tbody tr.g:nth-of-type(even) td, tbody tr.g:nth-of-type(even) td:first-child {
@@ -83,9 +96,10 @@
   tbody tr.g:hover td, tbody tr.g:hover td:first-child { background:var(--hover); }
   tbody tr.cl td, tbody tr.cl td:first-child { background:var(--navy); color:var(--gold);
       font-weight:700; border-bottom:1px solid #22407F; }
-  tbody tr.gt td, tbody tr.gt td:first-child { background:#2C3540; color:#FFFFFF;
-      font-weight:800; height:38px; }
-  tbody tr.gt td:first-child { color:var(--gold); }
+  tbody tr.gt td, tbody tr.gt td:first-child { background:var(--gold); color:#1B2A4A;
+      font-weight:800; height:46px; letter-spacing:.3px;
+      border-left-color:rgba(27,42,74,.20); }
+  tbody tr.cl td { border-left-color:#22407F; }
 
   td.nm .opener { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
                   user-select:none; }
@@ -102,7 +116,8 @@
       color:#92400E; background:#FEF3C7; border-radius:20px; padding:2px 7px; }
 
   .nil { color:#9AA3B2; font-weight:500; }
-  tr.cl .nil, tr.gt .nil { color:rgba(255,255,255,.45); }
+  tr.cl .nil { color:rgba(255,255,255,.45); }
+  tr.gt .nil { color:rgba(27,42,74,.45); }
   .d-up { color:var(--ok); font-weight:700; }
   .d-dn { color:var(--bad); font-weight:700; }
   .status { font-size:12.5px; color:var(--muted); margin:11px 2px; }

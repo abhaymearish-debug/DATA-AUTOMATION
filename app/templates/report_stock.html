@@ -103,19 +103,28 @@
              font-size:9.5px; letter-spacing:.7px; text-transform:uppercase; font-weight:700;
              text-align:center; padding:10px 8px; border-bottom:1px solid #22407F; }
   thead th:first-child { text-align:left; padding-left:15px; }
+  thead th + th { border-left:1px solid rgba(255,255,255,.12); }
 
-  tbody tr.wh-r > td { background:linear-gradient(180deg,var(--navy-3),var(--navy)); color:#fff;
-                 cursor:pointer; user-select:none; height:38px; border-bottom:0;
-                 font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
-  tbody tr.wh-r:hover > td { filter:brightness(1.12); }
-  tbody tr.wh-r > td.item { color:var(--gold); font-size:14px; letter-spacing:.35px; }
-  tr.wh-r .chev { display:inline-block; font-size:10px; opacity:.85; width:12px;
-                  transition:transform .16s; color:#fff; }
-  tr.wh-r.shut .chev { transform:rotate(-90deg); }
-  tr.wh-r .cl { font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
-                border:1px solid #3A4E8C; color:#AEC0EA; border-radius:20px; padding:2px 8px;
-                margin-left:9px; vertical-align:2px; }
-  tbody tr.wh-r > td.amber { color:var(--gold); }
+  /* A warehouse reads the way a bond reads on Shop Sales Cumulative: a plain
+     row, its name in ink, and a gold rail down the one you opened - rather
+     than twenty-eight navy bars competing with the header. */
+  tbody tr.wh-r > td { background:var(--card); color:var(--ink); cursor:pointer;
+                       user-select:none; height:50px; font-size:15px; font-weight:700;
+                       font-variant-numeric:tabular-nums;
+                       border-bottom:1px solid var(--line); }
+  tbody tr.wh-r > td.item { position:relative; font-size:14px; letter-spacing:-.1px;
+                            font-weight:700; }
+  tbody tr.wh-r > td.item::before { content:''; position:absolute; left:0; top:0; bottom:0;
+                                    width:3px; background:transparent; }
+  tbody tr.wh-r.open > td.item::before { background:var(--gold); }
+  tbody tr.wh-r.open > td { background:var(--hover); }
+  tbody tr.wh-r:hover > td { background:var(--hover); }
+  tbody tr.wh-r .chev { display:inline-block; font-size:9px; width:12px;
+                        color:var(--muted); transition:transform .16s; }
+  tbody tr.wh-r.shut .chev { transform:rotate(-90deg); }
+  tbody tr.wh-r.open .chev { color:var(--blue); }
+  /* Pending is the column people came for, so it is the one that is coloured. */
+  tbody tr.wh-r > td.amber { color:#B45309; }
 
   tbody tr.grand > td { position:sticky; bottom:0; z-index:4; background:var(--gold);
                         color:#1B2A4A; font-weight:800; height:40px; letter-spacing:.3px;
@@ -126,6 +135,8 @@
                         letter-spacing:.45px; text-transform:uppercase;
                         color:rgba(27,42,74,.62); }
   tbody tr.grand > td.amber { color:#7A3E00; }
+  tbody tr.grand > td { border-left-color:rgba(27,42,74,.22); }
+  tbody tr.grand > td:first-child { border-left:0; }
 
   /* fixed layout so the declared column widths are honoured exactly; auto
      table layout was widening the last column and pushing it off the axis
@@ -137,8 +148,9 @@
   tbody td:last-child { width:calc(var(--numw) + 15px); padding-right:15px; }
 
   tbody td { padding:0; height:31px; border-bottom:1px solid var(--chip);
-             text-align:center; font-variant-numeric:tabular-nums; width:var(--numw); }
-  tbody td:first-child { text-align:left; width:auto; padding-left:15px; }
+             text-align:center; font-variant-numeric:tabular-nums; width:var(--numw);
+             border-left:1px solid var(--line); }
+  tbody td:first-child { text-align:left; width:auto; padding-left:15px; border-left:0; }
   tbody tr:last-child td { border-bottom:0; }
   tbody tr:not(.wh-r):hover td { background:var(--hover); }
   tr.g-start:first-child td { border-top:0; }
@@ -390,7 +402,7 @@ function render(){
     const body = brandGroups(rows);
 
     const safe = wh.name.replace(/'/g, "\\'");
-    return `<tr class="wh-r ${isShut ? 'shut' : ''}" onclick="fold('${safe}')">
+    return `<tr class="wh-r ${isShut ? 'shut' : 'open'}" onclick="fold('${safe}')">
         <td class="item"><span class="chev">&#9660;</span>${escapeHtml(wh.name)}</td>
         <td>${n(t.physical)}</td><td>${n(t.allotable)}</td>
         <td class="${t.pending ? 'amber' : ''}">${n(t.pending)}</td></tr>`
