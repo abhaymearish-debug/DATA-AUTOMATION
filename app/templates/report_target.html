@@ -41,67 +41,67 @@
             border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
 
   /* ---------- the table ----------
-     Every bond is two lines that belong together, so the name and the
-     percentage span both and the pair is banded as one block. */
+     Built to read like the workbook the office already circulates: a gold
+     header on navy, plain bond rows, a navy band where the cluster totals up
+     and a gold one for the network. A bond is one row, not two - the achieved
+     figure is the news and sits at full size, with its target underneath it in
+     the same cell so the comparison is where your eye already is. */
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
-               overflow:auto; max-height:70vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+               overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
 
   thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);
              text-align:center; vertical-align:middle; font-weight:700; font-size:9.5px;
              letter-spacing:.5px; text-transform:uppercase; line-height:1.28;
-             padding:10px 9px; border-bottom:1px solid #22407F;
+             padding:9px 8px; border-bottom:1px solid #22407F;
              border-right:1px solid rgba(255,255,255,.07); }
-  thead th:first-child { text-align:left; left:0; z-index:4; min-width:176px; padding-left:16px; }
-  thead th.ty { min-width:74px; }
-  thead th:last-child { right:0; z-index:4; border-right:0; min-width:92px; }
+  thead th:first-child { text-align:left; left:0; z-index:4; min-width:184px; padding-left:16px; }
+  thead th:last-child { right:0; z-index:4; border-right:0; min-width:88px; }
+  thead th .lg { display:block; margin-top:2px; font-size:8.5px; font-weight:600;
+                 letter-spacing:.4px; color:rgba(255,255,255,.52); text-transform:none; }
 
-  tbody td { height:30px; padding:0 10px; text-align:center; white-space:nowrap;
-             font-variant-numeric:tabular-nums; color:var(--ink); }
-  tbody td.nm { text-align:left; position:sticky; left:0; z-index:2; background:var(--card);
-                font-weight:650; padding-left:16px; vertical-align:middle; }
-  tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card);
-                 vertical-align:middle; }
+  tbody td { height:42px; padding:4px 9px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; color:var(--ink);
+             border-bottom:1px solid var(--line); }
+  tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
+                         background:var(--card); font-weight:650; font-size:13.5px;
+                         letter-spacing:-.1px; padding-left:16px; }
+  tbody td.pct { position:sticky; right:0; z-index:2; background:var(--card); padding:0 8px; }
+  tbody td:first-child { border-right:1px solid var(--line); }
+  tbody tr.cl td:first-child, tbody tr.gt td:first-child { border-right:0; }
 
-  /* The target is the reference and the achievement is the news, so they are
-     not printed at the same volume: small and grey above, full ink below. */
-  tbody tr.tgt td { height:25px; font-size:11.5px; color:#98A1B0; border-bottom:0; }
-  tbody tr.ach td { height:32px; font-weight:650; border-bottom:1px solid var(--line); }
-  tbody td.ty { font-size:9px; letter-spacing:.8px; text-transform:uppercase;
-                font-weight:700; color:#A8B0BE; text-align:left; }
-  tbody tr.ach td.ty { color:var(--blue); }
-  tbody tr.hot td, tbody tr.hot td.nm, tbody tr.hot td.pct { background:var(--hover); }
-  tbody td.nm { font-size:13.5px; letter-spacing:-.1px; }
-  tbody tr.tgt td.nm, tbody tr.tgt td.pct { border-bottom:0; }
-  tbody tr.band td { background:var(--row); }
-  tbody tr.band td.nm, tbody tr.band td.pct { background:var(--row); }
+  /* Achieved on top at full strength, target beneath it, quiet. No figure is
+     greyed for being a zero - a zero is a number somebody still has to read. */
+  td .a { display:block; font-weight:700; font-size:13px; line-height:1.18; }
+  td .t { display:block; font-size:10.5px; line-height:1.3; color:#9AA3B2;
+          font-weight:600; }
 
-  tbody tr.cl td { background:var(--navy); color:var(--gold); font-weight:700;
-                   border-bottom:1px solid #22407F; }
-  tbody tr.cl td.nm, tbody tr.cl td.pct { background:var(--navy); color:var(--gold); }
-  tbody tr.cl.tgt td { color:#C3D0EE; font-weight:600; border-bottom:0; }
-  tbody tr.cl.tgt td.ty { color:#8FA3D0; }
-  tbody tr.cl.ach td.ty { color:var(--gold); }
+  tbody tr.b:hover td, tbody tr.b:hover td:first-child { background:var(--hover); }
 
-  tbody tr.gt td { background:var(--gold); color:#1B2A4A; font-weight:800; height:40px; }
-  tbody tr.gt td.nm, tbody tr.gt td.pct { background:var(--gold); color:#1B2A4A;
-                                          letter-spacing:.4px; }
-  tbody tr.gt.tgt td { font-weight:650; color:#4A3A16; }
-  tbody tr.gt.tgt td.ty { color:#6B5520; }
+  tbody tr.cl td, tbody tr.cl td:first-child { background:var(--navy); color:var(--gold);
+      font-weight:700; border-bottom:1px solid #22407F; }
+  tbody tr.cl td .t { color:#93A6CC; }
+
+  tbody tr.gt td, tbody tr.gt td:first-child { background:var(--gold); color:#1B2A4A;
+      font-weight:800; height:46px; letter-spacing:.3px; }
+  tbody tr.gt td .a { font-weight:800; font-size:13.5px; }
+  tbody tr.gt td .t { color:#7A6222; font-weight:650; }
 
   /* The percentage, judged against where the month has got to rather than
      against 100. On the 18th of August nobody is at 100%, and a column of red
-     that only means 'it is the 18th' teaches you nothing. The tick on the bar
-     is the pace; the colour is how the bond sits against it. */
-  .pw { display:flex; justify-content:center; padding:4px 0; }
-  .pw .v { padding:3px 11px; border-radius:20px;
+     that only means 'it is the 18th' teaches you nothing. */
+  .pw { display:flex; justify-content:center; }
+  .pw .v { padding:4px 11px; border-radius:20px;
            font-size:12px; font-weight:750; letter-spacing:.2px; }
   .pw.lo  .v { background:#FEE2E2; color:#991B1B; }
   .pw.mid .v { background:#FEF3C7; color:#92400E; }
   .pw.hi  .v { background:#D1FAE5; color:#065F46; }
   .pw.none .v { background:var(--chip); color:var(--muted); font-weight:600; font-size:10.5px;
                 letter-spacing:.4px; text-transform:uppercase; }
-
+  /* On the two coloured bands the pill would read as a sticker, so it borrows
+     the band's own ink instead of carrying its own. */
+  tr.cl .pw .v { background:rgba(255,255,255,.12); color:var(--gold); }
+  tr.gt .pw .v { background:#1B2A4A; color:var(--gold); }
 
   /* ---------- typing the targets ---------- */
   .veil { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
@@ -191,7 +191,7 @@
 <div id="msg"></div>
 <div class="tablewrap"><table id="grid">
   <thead><tr><th>Bond</th></tr></thead>
-  <tbody><tr><td class="nm">Loading…</td></tr></tbody>
+  <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
 
 <!-- typing the month's targets -->
@@ -250,7 +250,7 @@ async function load(){
   if (d.error){
     msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
     grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
-    grid.querySelector('tbody').innerHTML = '<tr><td class="nm">No data</td></tr>';
+    grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
     return;
   }
 
@@ -297,48 +297,33 @@ function meter(pct){
   return `<div class="pw ${band}" title="${tip}"><span class="v">${pct.toFixed(1)}%</span></div>`;
 }
 
-function pair(r, cols, cls, band){
-  const nameCell = `<td class="nm" rowspan="2">${esc(r.label)}</td>`;
-  // Every figure reads at full strength. A greyed zero is still a number
-  // somebody has to read, and half a grid of them looked switched off.
-  const line = (which) => cols.map(c => `<td>${num(r[which][c.key] ?? 0)}</td>`).join('')
-                        + `<td>${num(r[which + '_total'])}</td>`;
+/* One bond, one row. The achieved figure carries the row; the target sits
+   under it in the same cell, so you compare without moving your eye. */
+function cell(a, t, cls){
+  return `<td${cls ? ' class="' + cls + '"' : ''}>`
+       + `<span class="a">${num(a)}</span><span class="t">${num(t)}</span></td>`;
+}
 
-  const id = (r.kind === 'bond') ? esc(r.label) : '';
-  return `<tr class="${cls} tgt${band ? ' band' : ''}" data-pair="${id}">
-            ${nameCell}<td class="ty">Target</td>${line('tgt')}
-            <td class="pct" rowspan="2">${meter(r.pct)}</td></tr>
-          <tr class="${cls} ach${band ? ' band' : ''}" data-pair="${id}">
-            <td class="ty">Achieved</td>${line('ach')}</tr>`;
+function line(r, cols, cls){
+  const body = cols.map(c => cell(r.ach[c.key] ?? 0, r.tgt[c.key] ?? 0)).join('')
+             + cell(r.ach_total, r.tgt_total);
+  return `<tr class="${cls}"><td>${esc(r.label)}</td>${body}`
+       + `<td class="pct">${meter(r.pct)}</td></tr>`;
 }
 
 function render(d){
   setPace(d);
   const cols = d.columns;
   grid.querySelector('thead').innerHTML =
-    `<tr><th>Bond</th><th class="ty"></th>` +
+    `<tr><th>Bond<span class="lg">achieved &middot; target</span></th>` +
     cols.map(c => `<th>${esc(c.label)}</th>`).join('') +
     `<th>Total</th><th>Ach %</th></tr>`;
 
-  let band = false, html = '';
+  let html = '';
   for (const r of d.rows){
-    if (r.kind === 'bond'){ html += pair(r, cols, 'b', band); band = !band; }
-    else if (r.kind === 'cluster'){ html += pair(r, cols, 'cl', false); band = false; }
-    else { html += pair(r, cols, 'gt', false); }
+    html += line(r, cols, r.kind === 'bond' ? 'b' : r.kind === 'cluster' ? 'cl' : 'gt');
   }
   grid.querySelector('tbody').innerHTML = html;
-
-  // A bond is two rows that mean one thing, so it highlights as one thing.
-  const body = grid.querySelector('tbody');
-  body.onmouseover = e => {
-    const tr = e.target.closest('tr');
-    body.querySelectorAll('tr.hot').forEach(t => t.classList.remove('hot'));
-    if (!tr || !tr.dataset.pair) return;
-    body.querySelectorAll(`tr[data-pair="${tr.dataset.pair}"]`)
-        .forEach(t => t.classList.add('hot'));
-  };
-  body.onmouseleave = () => body.querySelectorAll('tr.hot')
-                                .forEach(t => t.classList.remove('hot'));
 }
 
 /* ---------------- typing the targets ----------------
