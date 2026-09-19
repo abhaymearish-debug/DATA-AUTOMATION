@@ -426,7 +426,7 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
                     ct[b] += grid[k].get(b, 0.0)
             rows.append({
                 "kind": "cluster",
-                "name": f"CLUSTER {cl} TOTAL",
+                "name": f"CLUSTER {cl}",
                 "cells": {b: rounded(ct[b]) for b in brands},
                 "total": rounded(sum(ct.values())),
             })
@@ -1627,7 +1627,7 @@ def liquidation(start: date, end: date) -> dict:
             continue
         for bond in sorted(members):
             rows.append(row(bond, [bond], "bond"))
-        rows.append(row(f"CLUSTER - {cid} TOTAL", members, "cluster"))
+        rows.append(row(f"CLUSTER - {cid}", members, "cluster"))
     loose = sorted(b for b in seen if b and b not in known)
     for bond in loose:
         rows.append(row(bond, [bond], "bond"))
