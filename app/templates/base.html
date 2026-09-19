@@ -457,35 +457,27 @@
                    height:13px; }
   /* Hard against the right edge it opens the other way, never off-screen. */
   .srcline.rt .srcpop { left:auto; right:0; }
-  /* Sticky, because an eighteen-day window scrolls and the heading is what
-     tells you what you are looking at. Frosted so the rail reads through it. */
-  .srcpop h6 { position:sticky; top:0; z-index:2; margin:0;
-               display:flex; align-items:baseline; gap:8px;
-               padding:14px 18px 11px; font-size:8.5px; letter-spacing:1.1px;
-               font-weight:800; text-transform:uppercase; color:var(--muted);
-               background:color-mix(in srgb, var(--card) 88%, transparent);
-               backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-               border-bottom:1px solid color-mix(in srgb, var(--line) 70%, transparent);
-               border-radius:18px 18px 0 0; }
-  .srcpop h6 em { margin-left:auto; font-style:normal; font-size:9.5px;
-                  font-weight:700; letter-spacing:.2px; text-transform:none;
-                  color:color-mix(in srgb, var(--muted) 82%, transparent);
-                  font-variant-numeric:tabular-nums; }
-  .srcpop .body { padding:14px 18px 15px; }
+  .srcpop .body { padding:6px 18px 15px; }
 
   /* ---------- one leg: a label, then its rail ---------- */
-  .srcleg { --tone:var(--blue); margin-top:15px; padding-top:14px;
+  .srcleg { --tone:var(--blue); margin-top:14px; padding-top:13px;
              border-top:1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+  .srcpop .body > .srcleg:first-of-type > .leg { border-radius:17px 17px 0 0;
+             margin-top:-6px; padding-top:15px; }
   .srcleg.g { --tone:var(--gold); }
   .srcleg.s { --tone:var(--ok); }
   .srcpop .body > .srcleg:first-of-type { margin-top:0; padding-top:0; border-top:0; }
   /* The label is only drawn when a report reads from more than one kind of
      file - which is when which leg a file answered actually matters. */
-  .srcleg .leg { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
-                 margin:0 0 10px; font-size:8.5px; font-weight:800; letter-spacing:1px;
-                 text-transform:uppercase; color:var(--tone); }
-  .srcleg .leg span { font-weight:650; letter-spacing:.1px; text-transform:none;
-                      font-size:10.5px; color:var(--muted); }
+  /* Sticky and frosted: an eighteen-day window scrolls, and which card these
+     dates came off is the one thing that should not scroll away with them. */
+  .srcleg .leg { position:sticky; top:0; z-index:2;
+                 display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+                 margin:0 -18px 6px; padding:11px 18px 9px;
+                 font-size:8.5px; font-weight:800; letter-spacing:1px;
+                 text-transform:uppercase; color:var(--tone);
+                 background:color-mix(in srgb, var(--card) 88%, transparent);
+                 backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
 
   /* The rail. Its line is the stitch: two windows end to end are one run, and
      it fades at both ends so it reads as a thread rather than a border. */
@@ -840,7 +832,7 @@ window.ksdSource = function (block, host) {
     const legTint = one ? (l.items.find(c => c.tint) || {}).tint : null;
     const head = (one || legs.length > 1)
       ? `<div class="leg"${legTint ? ` style="--tone:${esc(legTint)}"` : ''}>` +
-        `${esc(one || l.leg)}${l.note ? `<span>${esc(l.note)}</span>` : ''}</div>`
+        `${esc(one || l.leg)}</div>`
       : '';
     const rows = l.items.map(c => {
       const name = String(c.name || '').replace(/\.(xlsx?|csv|pdf)$/i, '');
@@ -884,7 +876,6 @@ window.ksdSource = function (block, host) {
   const dots = seen.length
     ? `<span class="dots">${seen.slice(0, 4)
         .map(t => `<i style="--d:${esc(t)}"></i>`).join('')}</span>` : '';
-  const many = count === 1 ? '1 file' : `${count} files`;
 
   line.innerHTML =
     `<button type="button" class="srcchip" aria-expanded="false">
@@ -895,10 +886,7 @@ window.ksdSource = function (block, host) {
        </svg>
        <span>Source</span>${dots}${count > 1 ? `<span class="n">${count}</span>` : ''}
      </button>
-     <div class="srcpop">
-       <h6>Where these figures come from<em>${esc(many)}</em></h6>
-       <div class="body">${body}</div>
-     </div>`;
+     <div class="srcpop"><div class="body">${body}</div></div>`;
 
   const chip = line.querySelector('.srcchip');
   const pop = line.querySelector('.srcpop');

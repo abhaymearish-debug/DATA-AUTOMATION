@@ -89,11 +89,17 @@ def src_windows(chain: list) -> list:
 
 
 def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
+    """`note` is accepted and dropped - see src_block on `say`.
+
+    It read "what the shops sold", "what left the warehouses", or the window
+    again. The rows under it already carry their dates, and the heading already
+    names the card they came off, so the note was a third telling.
+    """
     for it in items or []:
         tint = STREAM_TINT.get(it.get("stream", ""))
         if tint:
             it["tint"] = tint
-    return {"leg": label, "note": note, "tone": tone, "items": items}
+    return {"leg": label, "tone": tone, "items": items}
 
 
 def src_block(legs: list, say: str = "") -> dict:
@@ -157,8 +163,10 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
         if book is not None and name == book.name:
             # Leads with its days like everything else; what it IS goes on the
             # line under, because its name reads like another report entirely.
+            # No note: the card above it says Secondary Sales - Daily, which
+            # is what "built from your daily uploads" was there to say.
             it = {"kind": "built workbook", "stream": STREAM["secondary"],
-                  "detail": "built from your daily uploads", "name": name}
+                  "name": name}
             if a and b:
                 it["from"], it["to"] = a.isoformat(), b.isoformat()
             else:
