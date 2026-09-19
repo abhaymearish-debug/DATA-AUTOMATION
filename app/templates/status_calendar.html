@@ -54,7 +54,8 @@
   @media (max-width:760px){ .streams { grid-template-columns:1fr; } }
   .srow { display:flex; align-items:center; gap:9px; font-size:12.5px; }
   .srow i { width:8px; height:8px; border-radius:50%; flex:none; }
-  .srow .nm { font-weight:650; color:var(--ink); white-space:nowrap; }
+  .srow .nm { font-weight:650; color:var(--ink); white-space:nowrap;
+              min-width:150px; }
   .srow .bar { flex:1; height:5px; border-radius:3px; background:var(--row);
                overflow:hidden; min-width:44px; }
   .srow .bar b { display:block; height:100%; border-radius:3px; }
@@ -69,7 +70,7 @@
          text-transform:uppercase; color:var(--muted); padding-bottom:6px; opacity:.85; }
   /* min-width:0 or the nowrap note below sets a floor the column cannot go
      under, and seven of those push the whole grid off the side of a laptop. */
-  .cell { min-height:86px; min-width:0; border:1px solid var(--line); border-radius:11px;
+  .cell { min-height:94px; min-width:0; border:1px solid var(--line); border-radius:11px;
           padding:9px 10px 10px; display:flex; flex-direction:column; background:var(--card);
           transition:box-shadow .15s ease, border-color .15s ease; }
   .cell:not(.pad):hover { border-color:color-mix(in srgb, var(--blue) 30%, var(--line));
@@ -96,8 +97,12 @@
   .slots { display:flex; gap:4px; margin-top:auto; }
   .slots b { flex:1; height:5px; border-radius:3px; background:var(--line); }
   .cell.none .slots, .cell.future .slots { visibility:hidden; }
-  .gap { font-size:10.5px; color:var(--muted); margin-top:7px; line-height:1.35;
-         white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  /* Two lines, so "no Secondary daily, Stock" reads out in full rather than
+     truncating - the names are the point, and a count was what this screen
+     used to say instead. */
+  .gap { font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.3;
+         min-width:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2;
+         -webkit-box-orient:vertical; }
 
   /* On a phone seven columns have about fifty pixels each, which is room for
      a number and four slots and nothing else. The note goes; the tooltip and
@@ -117,12 +122,6 @@
     .dow { font-size:8.5px; letter-spacing:.4px; }
   }
 
-  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:14px 2px 0; align-items:center; }
-  .chips .k { font-size:9.5px; font-weight:800; letter-spacing:.9px; text-transform:uppercase;
-              color:var(--muted); margin-right:3px; }
-  .chips span.p { font-size:11.5px; font-weight:650; color:var(--chip-ink);
-                  background:var(--chip); border-radius:7px; padding:4px 9px;
-                  font-variant-numeric:tabular-nums; }
 </style>
 {% endblock %}
 
@@ -143,7 +142,6 @@
 </div>
 
 <div class="cal"><div class="grid" id="grid"></div></div>
-<div class="chips" id="foot"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -238,16 +236,11 @@ function draw(){
       const pct = elapsed ? Math.round(n / elapsed * 100) : 0;
       return `<div class="srow" title="${esc(s.label)}: ${n} of ${elapsed} days">
           <i style="background:${s.colour}"></i>
-          <span class="nm">${esc(s.short)}</span>
+          <span class="nm">${esc(s.label.replace(' - ', ' \u00b7 '))}</span>
           <span class="bar"><b style="width:${pct}%;background:${s.colour}"></b></span>
           <span class="ct">${n}/${elapsed}</span>
         </div>`;
     }).join('');
-
-  foot.innerHTML = CAL.periods.length
-    ? '<span class="k">Cumulative pulls</span>'
-      + CAL.periods.map(p => `<span class="p">${esc(p.short)}</span>`).join('')
-    : '<span class="k">No cumulative period uploaded yet</span>';
 }
 draw();
 </script>

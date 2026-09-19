@@ -1995,6 +1995,28 @@ def _warehouse_days() -> set:
     return out
 
 
+def _item_issue_days() -> set:
+    """The days the item issue pulls answer for.
+
+    KSBC exports it over a range rather than a day at a time, so a stored
+    pull covers every day between its two dates - which is what the calendar
+    is asking about.
+    """
+    from . import itemissue as ii
+
+    out: set = set()
+    for p in ii.periods():
+        try:
+            day = date.fromisoformat(p["start"])
+            last = date.fromisoformat(p["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        while day <= last:
+            out.add(day)
+            day += timedelta(days=1)
+    return out
+
+
 def upload_calendar() -> dict:
     """day -> which streams can answer for it, plus the periods behind them."""
     cover: dict = defaultdict(set)
@@ -2005,6 +2027,8 @@ def upload_calendar() -> dict:
         cover[d].add("secondary")
     for d in _warehouse_days():
         cover[d].add("warehouse")
+    for d in _item_issue_days():
+        cover[d].add("item_issue")
 
     periods = []
     for p in cumulative_periods():
@@ -2019,16 +2043,22 @@ def upload_calendar() -> dict:
     return {
         "days": days,
         "periods": periods,
-        # The short name is what a day tile has room for: "no Stock yet" reads
-        # in a 90px cell where "no Warehouse Stock yet" wraps to three lines.
+        # Five raws go up every day, and they are named here exactly as the
+        # upload page names them - a calendar that says "Cumulative" when the
+        # card says "Shop Sales - Cumulative" makes you work out which of the
+        # two cumulatives it meant. Purchase instruction is the one raw that
+        # is not daily: KSBC exports it a month at a time, so it has no place
+        # on a screen about days.
         "streams": [
             {"key": "shop_cumulative", "label": "Shop Sales - Cumulative",
-             "short": "Cumulative", "colour": "#2563EB"},
+             "short": "Shop cumulative", "colour": "#2563EB"},
             {"key": "shop_daily", "label": "Shop Sales - Daily",
-             "short": "Daily", "colour": "#0EA5E9"},
-            {"key": "secondary", "label": "Secondary Sales",
-             "short": "Secondary", "colour": "#10B981"},
-            {"key": "warehouse", "label": "Warehouse Stock",
+             "short": "Shop daily", "colour": "#0EA5E9"},
+            {"key": "secondary", "label": "Secondary Sales - Daily",
+             "short": "Secondary daily", "colour": "#10B981"},
+            {"key": "item_issue", "label": "Secondary Sales - Analysis",
+             "short": "Secondary analysis", "colour": "#8B5CF6"},
+            {"key": "warehouse", "label": "Warehouse Physical Stock",
              "short": "Stock", "colour": "#F59E0B"},
         ],
         "span": {"first": min(days) if days else "", "last": max(days) if days else ""},
