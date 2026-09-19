@@ -7,20 +7,55 @@
   .lead { margin:-4px 0 18px; color:var(--muted); font-size:13.5px; max-width:74ch; }
   h3.sec { margin:26px 0 4px; font-size:17px; font-weight:650; }
 
-  .clusters { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  .clusters { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
               margin-bottom:22px; }
-  .cl { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  .cl h4 { margin:0 0 9px; font-size:12px; font-weight:750; letter-spacing:.7px;
-           text-transform:uppercase; color:var(--muted); }
+  /* Each cluster is a card with the house header on it, so the three read as
+     three of the same thing rather than three lists that happen to be near
+     each other. */
+  .cl { background:var(--card); border:1px solid var(--line); border-radius:12px;
+        overflow:hidden; box-shadow:0 1px 2px rgba(16,24,40,.05);
+        display:flex; flex-direction:column; }
+  .cl h4 { margin:0; padding:10px 15px; background:var(--navy); color:var(--gold);
+           font-size:10px; font-weight:700; letter-spacing:.9px; text-transform:uppercase;
+           display:flex; align-items:center; gap:9px; }
+  .cl h4 .n { margin-left:auto; background:rgba(255,255,255,.14); color:var(--gold);
+              border-radius:20px; padding:2px 9px; font-size:10px; letter-spacing:.4px; }
+  .cl .in { padding:13px 15px 15px; display:flex; flex-direction:column; gap:11px;
+            flex:1 1 auto; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { display:inline-flex; align-items:center; gap:6px; background:var(--chip); color:var(--chip-ink);
-          border-radius:20px; padding:4px 5px 4px 11px; font-size:12.5px; font-weight:600; }
-  .chip button { border:0; background:none; color:var(--muted); font-size:14px; line-height:1;
-                 cursor:pointer; padding:0 4px; }
-  .chip button:hover { color:var(--bad); }
-  .cl .none { font-size:12.5px; color:var(--muted); }
-  .cl select { margin-top:10px; width:100%; border:1px solid var(--line); border-radius:8px;
-               padding:7px 9px; font:inherit; font-size:13px; background:var(--card); color:var(--ink); }
+  .chip { display:inline-flex; align-items:center; gap:3px; background:var(--row);
+          border:1px solid var(--line); color:var(--ink);
+          border-radius:20px; padding:4px 4px 4px 11px; font-size:12.5px; font-weight:650;
+          letter-spacing:-.1px; transition:border-color .14s, background .14s; }
+  .chip:hover { background:var(--hover); border-color:#C7D2FE; }
+  .chip button { border:0; background:none; color:var(--muted); font-size:15px; line-height:1;
+                 cursor:pointer; padding:0 5px; border-radius:50%; }
+  .chip button:hover { color:var(--bad); background:rgba(180,35,24,.10); }
+  .cl .none { font-size:12.5px; color:var(--muted); font-style:italic; padding:4px 0; }
+
+  /* The bare select was the one raw control on the page. */
+  .addw { position:relative; display:flex; align-items:center; margin-top:auto; }
+  .addw select { appearance:none; -webkit-appearance:none; width:100%;
+                 border:1px dashed var(--line); border-radius:9px; padding:9px 30px 9px 12px;
+                 font:inherit; font-size:13px; font-weight:600; background:var(--card);
+                 color:var(--blue); cursor:pointer; }
+  .addw select:hover { border-color:var(--blue); background:var(--hover); }
+  .addw select:focus { outline:none; border-style:solid; border-color:var(--blue);
+                       box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  .addw select:disabled { color:var(--muted); cursor:default; background:var(--card); }
+  .addw select:disabled:hover { border-color:var(--line); background:var(--card); }
+  .addw i { position:absolute; right:12px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+
+  /* A bond in no cluster falls out of every clusterwise total, so it is said
+     out loud rather than left to be noticed. */
+  .spare { display:flex; align-items:flex-start; gap:11px; background:#FEF3C7;
+           border:1px solid #FDE68A; color:#92400E; border-radius:11px;
+           padding:11px 14px; font-size:13px; margin:-8px 0 22px; }
+  .spare b { color:#7C2D12; }
+  /* display:flex beats the UA rule behind [hidden], so say it here or the
+     empty strip sits on the page with nothing in it. */
+  .spare[hidden] { display:none !important; }
 
   .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
   .bar input[type=search], .bar select {
@@ -63,6 +98,7 @@
 <h3 class="sec">Clusters</h3>
 <p class="lead">Move a bond between clusters. This affects every report that groups by cluster.</p>
 <div class="clusters" id="clusters"></div>
+<div class="spare" id="spare" hidden></div>
 
 <h3 class="sec">Shops</h3>
 <div class="bar">
@@ -115,19 +151,33 @@ async function load(){
 function drawClusters(){
   const assigned = new Set(Object.values(clusters).flat());
   const spare = DATA.bonds.filter(b => !assigned.has(b));
-  clusters_el().innerHTML = ['1','2','3'].map(c => `
+  clusters_el().innerHTML = ['1','2','3'].map(c => {
+    const bonds = clusters[c] || [];
+    return `
     <div class="cl">
-      <h4>Cluster ${c}</h4>
-      <div class="chips">${
-        (clusters[c] || []).length
-          ? clusters[c].map(b => `<span class="chip">${escapeHtml(b)}
-              <button title="Remove" onclick="dropBond('${c}','${b}')">&times;</button></span>`).join('')
-          : '<span class="none">No bonds in this cluster</span>'}</div>
-      <select onchange="addBond('${c}', this)">
-        <option value="">Add a bond…</option>
-        ${spare.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('')}
-      </select>
-    </div>`).join('');
+      <h4>Cluster ${c}<span class="n">${bonds.length} bond${bonds.length === 1 ? '' : 's'}</span></h4>
+      <div class="in">
+        <div class="chips">${
+          bonds.length
+            ? bonds.map(b => `<span class="chip">${escapeHtml(b)}<button title="Take ${escapeHtml(b)} out of cluster ${c}" onclick="dropBond('${c}','${b}')">&times;</button></span>`).join('')
+            : '<span class="none">Nothing in this cluster yet</span>'}</div>
+        <div class="addw">
+          <select onchange="addBond('${c}', this)"${spare.length ? '' : ' disabled'}>
+            <option value="">${spare.length ? '+\u2002Add a bond' : 'Every bond is in a cluster'}</option>
+            ${spare.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('')}
+          </select><i>&#9662;</i>
+        </div>
+      </div>
+    </div>`; }).join('');
+
+  const note = document.getElementById('spare');
+  if (note){
+    note.hidden = !spare.length;
+    if (spare.length)
+      note.innerHTML = `<div><b>${spare.length} bond${spare.length === 1 ? '' : 's'} in no cluster</b>`
+        + ` \u2014 ${spare.map(escapeHtml).join(', ')}. `
+        + `They still count in a network total, but they fall out of every clusterwise one.</div>`;
+  }
 }
 function clusters_el(){ return document.getElementById('clusters'); }
 function addBond(c, sel){
