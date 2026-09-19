@@ -22,21 +22,25 @@
           cursor:pointer; white-space:nowrap; }
   .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
   .vs { font-size:12.5px; color:var(--muted); }
+  .link { border:0; background:none; font:inherit; font-size:12.5px; color:var(--blue);
+          cursor:pointer; padding:0; font-weight:600; }
 
   .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
           overflow:auto; }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px;
           table-layout:fixed; min-width:1120px; }
   /* Wide enough for AVERAGE DAILY SALE beside a figure with two decimals -
-     the two ran into each other at 150. */
+     the two ran into each other at 150 - and for a column head that names its
+     own days, SEP 17-17, once the two windows stop matching. */
   col.bond { width:168px; }
-  col.n { width:66px; }
+  col.n { width:74px; }
 
   thead th { position:sticky; background:var(--navy); color:var(--gold);
              font-weight:700; letter-spacing:.4px; text-transform:uppercase;
              padding:7px 5px; text-align:center; white-space:nowrap; }
   thead tr:first-child th { top:0; z-index:3; font-size:10px; }
-  thead tr:last-child th { top:28px; z-index:3; font-size:9.5px; color:#FFD98A; }
+  thead tr:last-child th { top:28px; z-index:3; font-size:9.5px; color:#FFD98A;
+                           letter-spacing:.2px; }
   thead th.gut { width:8px; padding:0; background:var(--navy);
                  border-left:1px solid var(--gold); border-right:1px solid var(--gold); }
   thead th:first-child { left:0; z-index:4; text-align:left; padding-left:14px; }
@@ -113,22 +117,36 @@
 {%- endmacro %}
 
 {% block content %}
-{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') ~ ('&round_off=1' if round_off else '') %}
+{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') ~ ('&round_off=1' if round_off else '') ~ (('&prev_from=' ~ data.previous.start ~ '&prev_to=' ~ data.previous.end) if data.custom_prev and data.previous else '') %}
 <div class="controls">
   <form method="get" class="bar1" id="f">
     <div class="fbar">
-      <div class="fitem" id="calWrap" style="position:relative">
+      <div class="fitem calhost" id="calWrap" style="position:relative">
         <span class="fi-k">Period</span>
-        <button type="button" class="fi-v" onclick="Cal.open(event)">
+        <button type="button" class="fi-v" onclick="openCur(event)">
           <span id="calLabel">{{ data.period.short if data.period else 'Pick a period' }}</span>
           <i>▾</i></button>
         <div class="calpop" id="calPop"></div>
       </div>
+      <span class="fdiv"></span>
+      <!-- The comparison is a window in its own right: normally the same days
+           a month back, but any two windows can be set against each other. -->
+      <div class="fitem calhost" id="calWrap2" style="position:relative">
+        <span class="fi-k">Against</span>
+        <button type="button" class="fi-v" onclick="openPrev(event)">
+          <span id="calLabel2">{{ data.previous.short if data.previous else 'Same days last month' }}</span>
+          <i>▾</i></button>
+        <div class="calpop" id="calPop2"></div>
+      </div>
     </div>
     <input type="hidden" name="date_from" id="dFrom" value="{{ data.period.start if data.period else '' }}">
     <input type="hidden" name="date_to" id="dTo" value="{{ data.period.end if data.period else '' }}">
+    <input type="hidden" name="prev_from" id="pFrom" value="{{ prev_from }}">
+    <input type="hidden" name="prev_to" id="pTo" value="{{ prev_to }}">
     <span class="vs">
-      {% if data.previous %}against {{ data.previous.short }}{% endif %}
+      {% if data.custom_prev %}
+        <button type="button" class="link" onclick="resetPrev()">Back to last month</button>
+      {% endif %}
     </span>
     <label class="chk"><input type="checkbox" name="round_off" value="1"
            {{ 'checked' if round_off }} onchange="document.getElementById('f').submit()">
@@ -189,7 +207,9 @@
 <p class="status">
   Cases. <strong>Total liquidation is shop plus Fed/Bar</strong>, not shop plus secondary — secondary
   is stock moving down the chain, so adding it would count every case a shop both received and sold.
-  Shop and total average over the {{ data.days.span }} days the window spans; the two dispatch
+  Shop and total average over the {{ data.days.span }} days this window spans{% if
+    data.days.prev_span and data.days.prev_span != data.days.span %} and the
+    {{ data.days.prev_span }} the one it is set against does{% endif %}; the two dispatch
   columns average over the {{ data.days.dispatch[0] }} days a dispatch actually went out.
 </p>
 {% endif %}
@@ -197,17 +217,51 @@
 
 {% block scripts %}
 <script>
-(function(){
-  const cal = {{ calendar | tojson }};
-  const days = new Set(cal.days || []);
-  for (const p of cal.periods || []){
+// Two windows, one picker. Each control hands the calendar its own popup, its
+// own label and its own pair of hidden dates when it opens, so the page can
+// set any window against any other - 1-16 August against 1-20 October - and
+// not just against the same days a month back.
+const CAL = {{ calendar | tojson }};
+const CAL_DAYS = (function(){
+  const days = new Set(CAL.days || []);
+  for (const p of CAL.periods || []){
     let d = new Date(p.from + 'T00:00:00'), end = new Date(p.to + 'T00:00:00');
     while (d <= end){ days.add(d.toISOString().slice(0,10)); d.setDate(d.getDate() + 1); }
   }
-  Cal.init(dFrom.value, dTo.value, (from, to) => {
-    dFrom.value = from; dTo.value = to; document.getElementById('f').submit();
-  });
-  Cal.setData([...days], cal.periods || []);
+  return [...days];
 })();
+
+const send = () => document.getElementById('f').submit();
+
+function pickInto(ev, from, to, popId, labelId, apply){
+  Cal.init(from, to, apply, {popId, labelId});
+  Cal.setData(CAL_DAYS, CAL.periods || []);
+  Cal.open(ev);
+}
+
+function openCur(ev){
+  pickInto(ev, dFrom.value, dTo.value, 'calPop', 'calLabel', (from, to) => {
+    dFrom.value = from; dTo.value = to; send();
+  });
+}
+
+function openPrev(ev){
+  // With nothing chosen yet it opens on the window the report is already
+  // comparing against, so the first click starts from what is on screen.
+  pickInto(ev, pFrom.value || '{{ data.previous.start if data.previous else "" }}',
+           pTo.value || '{{ data.previous.end if data.previous else "" }}',
+           'calPop2', 'calLabel2', (from, to) => {
+    pFrom.value = from; pTo.value = to; send();
+  });
+}
+
+function resetPrev(){ pFrom.value = ''; pTo.value = ''; send(); }
+
+// The period control draws itself on load; the comparison one draws when it
+// is opened.
+Cal.init(dFrom.value, dTo.value, (from, to) => {
+  dFrom.value = from; dTo.value = to; send();
+}, {popId: 'calPop', labelId: 'calLabel'});
+Cal.setData(CAL_DAYS, CAL.periods || []);
 </script>
 {% endblock %}

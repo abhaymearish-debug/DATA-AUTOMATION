@@ -78,12 +78,20 @@ const calPretty = x => { if (!x) return ''; const [y,m,d] = x.split('-').map(Num
 const Cal = {
   days: new Set(), quick: [], from: '', to: '',
   anchor: '', pick: null, hover: '', onApply: null,
+  /* One picker serves every control on a page. A control says which popup and
+     which label are its own when it opens, so a page can carry two ranges -
+     a period and the period it is being compared against - without two
+     copies of the calendar. */
+  popId: 'calPop', labelId: 'calLabel',
+  pop(){ return document.getElementById(this.popId); },
 
   /* Called once, on page load, before any data exists. */
   /* single:true — one click is the answer. Used where a window makes no
      sense: an upload covers one day, not a range. */
   init(from, to, onApply, opts){
     this.single = !!(opts && opts.single);
+    this.popId = (opts && opts.popId) || 'calPop';
+    this.labelId = (opts && opts.labelId) || 'calLabel';
     this.from = from || ''; this.to = to || '';
     this.onApply = onApply;
     this.anchor = this.monthOf(this.from) || this.monthOf(new Date().toISOString().slice(0,10));
@@ -103,14 +111,14 @@ const Cal = {
   open(ev){
     ev.stopPropagation();
     calSeal();
-    const pop = document.getElementById('calPop');
+    const pop = this.pop();
     if (pop.classList.toggle('on')){
       this.pick = null; this.hover = '';
       this.anchor = this.monthOf(this.from) || this.anchor;
       this.draw();
     }
   },
-  close(){ document.getElementById('calPop').classList.remove('on'); },
+  close(){ document.querySelectorAll('.calpop.on').forEach(el => el.classList.remove('on')); },
 
   step(n){
     let [y, m] = this.anchor.split('-').map(Number);
@@ -136,7 +144,7 @@ const Cal = {
   peek(d){ if (this.pick && this.hover !== d){ this.hover = d; this.paint(); } },
 
   paint(){
-    const pop = document.getElementById('calPop');
+    const pop = this.pop();
     if (!pop) return;
     const [lo, hi] = this.bounds();
     pop.querySelectorAll('.cal-g button.d').forEach(el => {
@@ -170,7 +178,7 @@ const Cal = {
   },
 
   label(){
-    const el = document.getElementById('calLabel');
+    const el = document.getElementById(this.labelId);
     if (!el) return;
     if (this.single){
       el.textContent = this.from ? calPretty(this.from) : 'Pick a date';
@@ -215,7 +223,7 @@ const Cal = {
   },
 
   draw(){
-    const pop = document.getElementById('calPop');
+    const pop = this.pop();
     if (!pop) return;
     let [y, m] = this.anchor.split('-').map(Number);
     let ny = y, nm = m + 1; if (nm > 12){ nm = 1; ny++; }
@@ -251,14 +259,15 @@ const Cal = {
    Stopping the click at #calPop, which survives the re-render, is what keeps
    that from happening. */
 function calSeal(){
-  const pop = document.getElementById('calPop');
-  if (pop && !pop.dataset.sealed){
+  document.querySelectorAll('.calpop').forEach(pop => {
+    if (pop.dataset.sealed) return;
     pop.dataset.sealed = '1';
     pop.addEventListener('click', e => e.stopPropagation());
-  }
+  });
 }
 document.addEventListener('DOMContentLoaded', calSeal);
 document.addEventListener('click', e => {
-  if (!e.target.closest('#calWrap')) Cal.close();
+  // Any control that hosts the picker keeps it open; everything else shuts it.
+  if (!e.target.closest('#calWrap') && !e.target.closest('.calhost')) Cal.close();
 });
 </script>

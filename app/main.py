@@ -2098,30 +2098,78 @@ def shop_analysis_pdf(request: Request, date_from: str = "", date_to: str = "",
 # ---------------------------------------------------------------------------
 
 
-def _liquidation(date_from: str, date_to: str, period: str = ""):
-    """The scorecard for a window, plus the labels every export needs."""
+def _liquidation(date_from: str, date_to: str, period: str = "",
+                 prev_from: str = "", prev_to: str = ""):
+    """The scorecard for a window, plus the labels every export needs.
+
+    The comparison window is normally the same days a month back. When one is
+    named outright the two sides can be any two windows - 1-16 August against
+    1-20 October - and the labels stop pretending otherwise: a column that
+    would read AUG against AUG says AUG 1-16 and AUG 20-31 instead.
+    """
     win = _window(date_from, date_to, period)
     if "error" in win:
         return {"error": win["error"]}
     cur = win["period"]
-    data = reports_api.liquidation(cur["start"], cur["end"])
+
+    chosen = None
+    if prev_from and prev_to:
+        try:
+            a = date.fromisoformat(prev_from)
+            b = date.fromisoformat(prev_to)
+        except ValueError:
+            return {"error": "Those comparison dates are not readable."}
+        chosen = (min(a, b), max(a, b))
+
+    data = reports_api.liquidation(cur["start"], cur["end"], chosen)
     if "error" in data:
         return data
     prev = data["previous"]
-    data["headings"] = [cur["start"].strftime("%b").upper(),
-                        prev["start"].strftime("%b").upper() if prev else "PREV", "CS", "%"]
-    data["subtitle"] = (
-        f'{cur["start"].strftime("%B").upper()} vs '
-        f'{prev["start"].strftime("%B").upper() if prev else "LAST MONTH"} {cur["start"].year}'
-        f'  \u00b7  DAYS {cur["start"].day}-{cur["end"].day}  \u00b7  cases')
+    data["custom_prev"] = bool(chosen)
+
+    def days_of(win_):
+        return (win_["start"].day, win_["end"].day)
+
+    # Two windows over the same month, or over different lengths, cannot both
+    # be called by their month alone.
+    plain = bool(prev) and days_of(cur) == days_of(prev) and \
+        cur["start"].month != prev["start"].month
+
+    def head(win_):
+        mon = win_["start"].strftime("%b").upper()
+        if plain:
+            return mon
+        if win_["start"].month == win_["end"].month:
+            return f'{mon} {win_["start"].day}-{win_["end"].day}'
+        return f'{win_["start"].day} {mon}-{win_["end"].day} {win_["end"].strftime("%b").upper()}'
+
+    data["headings"] = [head(cur), head(prev) if prev else "PREV", "CS", "%"]
+    if plain:
+        data["subtitle"] = (
+            f'{cur["start"].strftime("%B").upper()} vs '
+            f'{prev["start"].strftime("%B").upper()} {cur["start"].year}'
+            f'  \u00b7  DAYS {cur["start"].day}-{cur["end"].day}  \u00b7  cases')
+    else:
+        def span_label(win_):
+            a, b = win_["start"], win_["end"]
+            mon, mon_b = a.strftime("%b").upper(), b.strftime("%b").upper()
+            if a == b:
+                return f"{a.day} {mon} {a.year}"
+            if (a.month, a.year) == (b.month, b.year):
+                return f"{a.day}-{b.day} {mon} {a.year}"
+            return f"{a.day} {mon}-{b.day} {mon_b} {b.year}"
+
+        against = span_label(prev) if prev else "LAST MONTH"
+        data["subtitle"] = f'{span_label(cur)} vs {against}  \u00b7  cases'
     return data
 
 
 @app.get("/reports/liquidation", response_class=HTMLResponse)
 def liquidation_page(request: Request, date_from: str = "", date_to: str = "",
-                     period: str = "", round_off: str = ""):
+                     period: str = "", round_off: str = "",
+                     prev_from: str = "", prev_to: str = ""):
     user = require_user(request)
-    data = _liquidation(date_from, date_to, period)
+    data = _liquidation(date_from, date_to, period, prev_from, prev_to)
     return templates.TemplateResponse(
         request, "report_liquidation.html",
         {"user": user, "page": "liquidation", "started_at": STARTED_AT,
@@ -2130,15 +2178,17 @@ def liquidation_page(request: Request, date_from: str = "", date_to: str = "",
          "groups": ["Shop liquidation (KSBC)", "Secondary sales",
                     "Fed / Bar invoice", "Total liquidation"],
          "data": data, "error": data.get("error", ""),
-         "round_off": bool(round_off)},
+         "round_off": bool(round_off),
+         "prev_from": prev_from, "prev_to": prev_to},
     )
 
 
 @app.get("/reports/liquidation/export.pdf")
 def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "",
-                    period: str = "", round_off: str = ""):
+                    period: str = "", round_off: str = "",
+                    prev_from: str = "", prev_to: str = ""):
     require_user(request)
-    data = _liquidation(date_from, date_to, period)
+    data = _liquidation(date_from, date_to, period, prev_from, prev_to)
     if "error" in data:
         raise HTTPException(404, data["error"])
 
@@ -2161,7 +2211,8 @@ def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "",
 
 @app.get("/reports/liquidation/export.xlsx")
 def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
-                     period: str = "", round_off: str = ""):
+                     period: str = "", round_off: str = "",
+                     prev_from: str = "", prev_to: str = ""):
     """The scorecard as a workbook, cell for cell as the PDF prints it.
 
     Measured off the office's own sheet rather than styled by eye: its navy and
@@ -2173,7 +2224,7 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
     colour in the font, so the cell still sums, sorts and filters.
     """
     require_user(request)
-    data = _liquidation(date_from, date_to, period)
+    data = _liquidation(date_from, date_to, period, prev_from, prev_to)
     if "error" in data:
         raise HTTPException(404, data["error"])
 

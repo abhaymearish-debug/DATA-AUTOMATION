@@ -1588,10 +1588,18 @@ def _dispatch_by_bond(start: date, end: date) -> tuple[dict, dict, int]:
     return every, fedbar, len(days)
 
 
-def liquidation(start: date, end: date) -> dict:
-    """The bond liquidation scorecard: this window against the same one a month back."""
-    p_start, p_end = _same_window_last_month(start, end)
+def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
+    """The liquidation scorecard: this window against another.
+
+    The comparison defaults to the same day-range a month back, which is what
+    the trade asks for nine times in ten. `prev` overrides it with any window
+    at all - 1-16 August against 1-20 October - so the two sides no longer
+    have to be the same length, and the per-day averages divide each side by
+    its own span rather than by the current one twice.
+    """
+    p_start, p_end = prev if prev else _same_window_last_month(start, end)
     span = max(1, (end - start).days)
+    p_span = max(1, (p_end - p_start).days) if p_start else 1
 
     shop_now = _shop_sales_by_bond(start, end)
     shop_was = _shop_sales_by_bond(p_start, p_end) if p_start else {}
@@ -1642,8 +1650,8 @@ def liquidation(start: date, end: date) -> dict:
     # Both dispatch columns divide by the days a dispatch actually went out -
     # the office's August column reads 421 and 98 against 4,632 and 1,079,
     # which is 11 days for each, not one count per column.
-    divisors = [(span, span), (disp_days_now or 1, disp_days_was or 1),
-                (disp_days_now or 1, disp_days_was or 1), (span, span)]
+    divisors = [(span, p_span), (disp_days_now or 1, disp_days_was or 1),
+                (disp_days_now or 1, disp_days_was or 1), (span, p_span)]
     rows.append({
         "label": "AVERAGE DAILY SALE", "kind": "average",
         "blocks": [[grand[i][0] / divisors[i][0], grand[i][1] / divisors[i][1]]
@@ -1654,7 +1662,8 @@ def liquidation(start: date, end: date) -> dict:
         "rows": rows,
         "period": period_for(start, end),
         "previous": period_for(p_start, p_end) if p_start else None,
-        "days": {"span": span, "dispatch": [disp_days_now, disp_days_was]},
+        "days": {"span": span, "prev_span": p_span,
+                 "dispatch": [disp_days_now, disp_days_was]},
     }
 
 # ---------------------------------------------------------------------------
