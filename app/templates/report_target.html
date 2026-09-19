@@ -253,7 +253,7 @@
         <span class="fi-v" style="cursor:default" id="tgtMonth">—</span>
       </div>
     </div>
-    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
+    <label class="chk"><input type="checkbox" id="round" checked onchange="load()"> Round off</label>
     <div class="sp">
       <button type="button" class="act" onclick="openEditor()">Edit targets</button>
       <!-- Excel then PDF, the order every other report uses. -->
@@ -317,7 +317,7 @@ function params(){
   if (FROM) p.set('date_from', FROM);
   if (TO)   p.set('date_to', TO);
   if (+fCluster.value) p.set('cluster', fCluster.value);
-  if (round.checked) p.set('round_off', '1');
+  p.set('round_off', round.checked ? '1' : '0');
   return p;
 }
 

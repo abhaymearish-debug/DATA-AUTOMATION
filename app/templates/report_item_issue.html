@@ -137,7 +137,7 @@
         </select><i>&#9662;</i></div>
       </label>
     </div>
-    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
+    <label class="chk"><input type="checkbox" id="round" checked onchange="load()"> Round off</label>
     <div class="sp">
       <a class="act xl" id="xl" href="#">Download Excel</a>
     </div>
@@ -188,7 +188,7 @@ function params(){
   if (fPeriod.value) p.set('period', fPeriod.value);
   if (fPrior.value)  p.set('prior', fPrior.value);
   if (+fCluster.value) p.set('cluster', fCluster.value);
-  if (round.checked) p.set('round_off', '1');
+  p.set('round_off', round.checked ? '1' : '0');
   return p;
 }
 

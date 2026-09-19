@@ -44,21 +44,6 @@
   .seg button.on { background:var(--card); color:var(--ink);
                    box-shadow:0 1px 2px rgba(16,24,40,.12); }
 
-  /* The one thing this report exists to catch. A shop whose PI was never
-     generated prints as zeros and reads exactly like a shop KSBC cut to
-     nothing, so it is named here instead. */
-  .flag { background:#FEF3C7; border:1px solid #FDE68A; color:#7C4A03;
-          border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px; }
-  .flag .hd { display:flex; align-items:center; gap:10px; }
-  .flag b { color:#7C2D12; }
-  .flag .more { margin-left:auto; border:0; background:none; font:inherit; font-size:12.5px;
-                font-weight:650; color:#92400E; cursor:pointer; text-decoration:underline; }
-  .flag .list { display:none; margin-top:10px; padding-top:10px;
-                border-top:1px solid #FDE68A; column-count:3; column-gap:22px;
-                font-size:12px; line-height:1.75; }
-  .flag.open .list { display:block; }
-  .flag .list span { display:block; break-inside:avoid; }
-  .flag .list em { font-style:normal; color:#92400E; font-weight:650; }
   .banner { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
             border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
 
@@ -276,7 +261,6 @@ async function load(){
   const what = view === 'warehouse' ? 'warehouse' : 'bond';
   pdf.title = n > 1 ? `${n} PDFs - one per ${what} - in a zip`
                     : `One PDF for this ${what}`;
-  flag(d);
   render(d);
 }
 
@@ -284,28 +268,6 @@ function fillMonths(d){
   const opts = (d.months || []).map(m =>
     `<option value="${m.key}"${m.key === d.month ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
   if (fMonth.innerHTML !== opts) fMonth.innerHTML = opts;
-}
-
-function flag(d){
-  const b = d.blanks || [];
-  if (!b.length){ msg.innerHTML = ''; return; }
-  const cases = b.reduce((n, x) => n + (x.prior_mq || 0), 0);
-  const live = b.filter(x => x.prior_mq > 0);
-  msg.innerHTML =
-    `<div class="flag" id="flag">
-       <div class="hd">
-         <div><b>${b.length} shop${b.length === 1 ? '' : 's'} came back with no instruction</b> —
-           the ERP had not generated a ${esc(d.month_label)} PI for them when the export was taken.
-           They are printed as zeros, which is not the same as KSBC giving them nothing.
-           ${cases ? `Between them they carried <b>${num(cases)} cases</b> of ${esc(d.prior_label || 'last month')} MQ.` : ''}
-         </div>
-         <button type="button" class="more" onclick="flag.classList.toggle('open')">Which ones</button>
-       </div>
-       <div class="list">
-         ${b.map(x => `<span>${esc(x.name)}${x.bond ? ' · ' + esc(x.bond) : ''}` +
-                      `${x.prior_mq ? ` <em>${num(x.prior_mq)} cs</em>` : ''}</span>`).join('')}
-       </div>
-     </div>`;
 }
 
 function head(d){

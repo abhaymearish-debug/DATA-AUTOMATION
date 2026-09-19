@@ -423,7 +423,8 @@ function openUpload(c){
   upFiles.multiple = (c.mode === 'files' || c.mode === 'batch');
   upFilesLabel.textContent = (c.mode === 'files' || c.mode === 'batch') ? 'Files' : 'File';
   upHint.textContent =
-      c.mode === 'batch' ? 'Every shop\u2019s instruction for one month \u2014 the whole folder'
+      wantsPeriod(c)     ? 'One consolidation per warehouse \u2014 the whole pull'
+    : c.mode === 'batch' ? 'Every shop\u2019s instruction for one month \u2014 the whole folder'
     : c.mode === 'files' ? 'One or more Bevco exports (.xlsx)'
     : c.mode === 'range' ? 'One KSBC export covering this window (.xlsx)'
                          : 'One KSBC export for this date (.xlsx)';
@@ -438,15 +439,15 @@ function openUpload(c){
   // still picked here, because a folder is dropped in without opening a file:
   // it is checked against what the files declare, and the upload is refused
   // if they disagree.
-  upWhen.hidden = (c.mode === 'batch');
+  upWhen.hidden = (c.mode === 'batch' && !wantsPeriod(c));
   upMonth.hidden = !wantsMonth(c);
   if (!upMonth.hidden) initMonth();
   upDayLabel.textContent =
-      c.mode === 'range' ? 'Days this pull covers'
+      (c.mode === 'range' || wantsPeriod(c)) ? 'Days this pull covers'
     : c.mode === 'files' ? 'Date this export covers (read from the file name)'
     : 'Date this export covers';
 
-  if (c.mode === 'range'){
+  if (c.mode === 'range' || wantsPeriod(c)){
     const ym = today.slice(0,7);
     setRange(ym, 1, Math.min(16, daysIn(ym)));
   } else if (c.mode !== 'batch'){
@@ -503,7 +504,7 @@ function onPickRange(from, to){
 
 function saySpan(){
   if (!card) return;
-  if (card.mode === 'range' && upFrom.value && upTo.value){
+  if ((card.mode === 'range' || wantsPeriod(card)) && upFrom.value && upTo.value){
     const a = +upFrom.value.slice(8), b = +upTo.value.slice(8);
     const ym = upFrom.value.slice(0,7);
     rangeSay.textContent =
@@ -518,6 +519,13 @@ function saySpan(){
    range in every file and is uploaded a period at a time. */
 
 function wantsMonth(c){ return c.mode === 'batch' && c.stream === 'purchase_instruction'; }
+
+/* The issue consolidation is a batch too, but it is a pull over a window
+   rather than a month - and where the instruction always states its month,
+   some of these exports come through with no period in them at all. The
+   window is picked here: it is checked against what the files do say, and it
+   is what the silent ones are filed under. */
+function wantsPeriod(c){ return c.mode === 'batch' && c.stream === 'item_issue'; }
 
 function initMonth(){
   if (upMon.options.length) { sayMonth(); return; }
@@ -551,7 +559,9 @@ function refreshName(){
   if (card.mode === 'batch'){
     const n = upFiles.files.length;
     const files = n ? ` - ${n} file${n > 1 ? 's' : ''}` : '';
-    const when = wantsMonth(card) && upMon.options.length ? ` - ${monthWords()}` : '';
+    const when = wantsMonth(card) && upMon.options.length ? ` - ${monthWords()}`
+               : wantsPeriod(card) && upFrom.value ? ` - ${fmt(upFrom.value)} to ${fmt(upTo.value)}`
+               : '';
     upName.value = card.title + when + files;
   }
   else if (card.mode === 'day')   upName.value = `${card.title} - ${fmt(upDate.value)}`;
@@ -651,6 +661,13 @@ async function submitUpload(ev){
   for (const f of upFiles.files) fd.append('files', f);
 
   if (wantsMonth(card)) fd.append('covers_date', monthValue() + '-01');
+  if (wantsPeriod(card)){
+    if (!upFrom.value || !upTo.value){
+      upErr.textContent = 'Pick the days this pull covers.'; return false;
+    }
+    fd.append('covers_from', upFrom.value);
+    fd.append('covers_date', upTo.value);
+  }
   if (card.mode === 'day') fd.append('covers_date', upDate.value);
   if (card.mode === 'files' && upDate.value) fd.append('covers_date', upDate.value);
   if (card.mode === 'range'){
@@ -734,7 +751,7 @@ function showReceipt(r){
 
   h += '<div class="tiles">'
      + tile(r.ok, 'With an instruction', 'good', true)
-     + tile(r.blank, 'Blank — nothing to buy', 'warn')
+     + tile(r.blank, 'Blank — no instruction generated', 'warn')
      + tile(r.absent, 'In mapping, no file', 'warn')
      + tile(r.stray, 'Not in bond mapping', 'warn')
      + tile(r.duplicate, 'Duplicate shop', 'warn')
@@ -746,8 +763,11 @@ function showReceipt(r){
      + `<b>${r.shops}</b> shop${r.shops === 1 ? '' : 's'}`
      + (r.warehouses ? ` across <b>${r.warehouses}</b> warehouses` : '') + '. '
      + (r.mapped ? `Bond mapping holds <b>${r.mapped}</b>. ` : '')
-     + (r.blank ? `A blank sheet is a real answer — KSBC gave that shop nothing this `
-                + `month — so those ${r.blank} are kept and counted as zero.` : '')
+     + (r.blank ? `<b>${r.blank}</b> came back blank — the ERP had not generated a `
+                + `${esc(r.label)} instruction for them when the export was taken, which is `
+                + `not the same as KSBC giving them nothing. They are filed and read as `
+                + `zero, so if they should have had one, export those shops again and `
+                + `upload them.` : '')
      + '</div>';
 
   if (r.stray){

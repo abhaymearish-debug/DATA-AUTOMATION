@@ -564,6 +564,7 @@ async def build(
     stream_key: str,
     files: list[UploadFile] = File(...),
     covers_date: str = Form(""),
+    covers_from: str = Form(""),
     cumulative: str = Form(""),
 ):
     user = require_user(request)
@@ -720,19 +721,28 @@ async def build(
             job.summary["receipt"] = got
 
         elif stream_key == "item_issue":
-            # Same reasoning as the instruction: every export states the range
-            # it covers, and twenty-eight of them agreeing beats a typed date.
+            # Every export states the range it covers, and twenty-eight of them
+            # agreeing beats a typed date - so the period picked on the screen
+            # is a check on that, and the answer when an export names no range.
+            expect = None
+            if covers_from and covers_date:
+                a, b = _parse_date(covers_from), _parse_date(covers_date)
+                if b < a:
+                    a, b = b, a
+                expect = (a, b)
             staged = []
             for upload in files:
                 target = scratch_dir / (upload.filename or "issue.xls")
                 _save_upload(upload, target)
                 staged.append(target)
-            got = itemissue.store(staged)
+            got = itemissue.store(staged, expect=expect)
             if "error" in got:
                 raise UploadRejected(got["error"])
             placed = sorted((itemissue.root() / got["period"]).glob("*.xls*"))
             job.covers = got["period"].split("_")[1]
-            job.note = f"{got['label']}: {got['warehouses']} warehouses"
+            job.note = (f"{got['label']}: {got['warehouses']} warehouses"
+                        + (f", {got['undated']} without a stated period"
+                           if got.get("undated") else ""))
 
         ctx.uploaded = placed
         job.uploaded_names = [p.name for p in placed]
@@ -851,6 +861,17 @@ def _archive_raws(job: Job, placed: list[Path]) -> None:
             # that 404s.
             pass
     job.raw_kept = saved == len(placed) and saved > 0
+
+
+def _rounded(value: str) -> bool:
+    """Whole cases unless the page says otherwise.
+
+    Round off is what the office reads out, so it is the default: a request
+    that says nothing gets whole figures, and only an explicit 0 - which every
+    switch on every report sends when it is turned off - asks for the two
+    decimals underneath.
+    """
+    return str(value).strip().lower() not in ("0", "false", "no", "off")
 
 
 def _parse_date(value: str) -> date:
@@ -1179,6 +1200,7 @@ def brandwise_data(
     round_off: str = "",
 ):
     require_user(request)
+    round_off = _rounded(round_off)
     if view not in ("bond", "warehouse", "shop"):
         raise HTTPException(400, "Unknown view.")
     f, t = _report_args(date_from, date_to)
@@ -1200,6 +1222,7 @@ def brandwise_shops_data(
 ):
     """One group's shops, for the drill-down under a bond or warehouse row."""
     require_user(request)
+    round_off = _rounded(round_off)
     if view not in ("bond", "warehouse"):
         raise HTTPException(400, "Unknown view.")
     f, t = _report_args(date_from, date_to)
@@ -1227,6 +1250,7 @@ def brandwise_xlsx(
     so the workbook and the PDF of the same view cannot be told apart.
     """
     require_user(request)
+    round_off = _rounded(round_off)
     f, t = _report_args(date_from, date_to)
     data = reports_api.brandwise(view=view, date_from=f, date_to=t, bond=bond,
                                  warehouse=warehouse, round_off=bool(round_off))
@@ -1394,6 +1418,7 @@ def brandwise_pdf(
                      the table, so the two cannot drift apart.
     """
     require_user(request)
+    round_off = _rounded(round_off)
 
     # Only the official cluster books need the month's workbook - they are built
     # by the same script the pipeline runs. The current view renders from the
@@ -1685,6 +1710,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     anyone who wants to pivot.
     """
     require_user(request)
+    round_off = _rounded(round_off)
     win = _window(date_from, date_to, period)
     if "error" in win:
         raise HTTPException(404, win["error"])
@@ -1832,6 +1858,7 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
                      shop, zipped when more than one bond is asked for.
     """
     require_user(request)
+    round_off = _rounded(round_off)
     win = _window(date_from, date_to, period)
     if "error" in win:
         raise HTTPException(404, win["error"])
@@ -1970,6 +1997,7 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
                        period: str = "", cluster: int = 0, bond: str = "",
                        round_off: str = ""):
     user = require_user(request)
+    round_off = _rounded(round_off)
     periods = reports_api.cumulative_periods()
     win = _window(date_from, date_to, period)
     chosen = None if "error" in win else win["period"]
@@ -1998,6 +2026,7 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
                        period: str = "", cluster: int = 0, bond: str = "",
                        round_off: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     win = _window(date_from, date_to, period)
     if "error" in win:
         raise HTTPException(404, win["error"])
@@ -2051,6 +2080,7 @@ def shop_analysis_pdf(request: Request, date_from: str = "", date_to: str = "",
                       period: str = "", cluster: int = 0, bond: str = "",
                       round_off: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     win = _window(date_from, date_to, period)
     if "error" in win:
         raise HTTPException(404, win["error"])
@@ -2169,6 +2199,7 @@ def liquidation_page(request: Request, date_from: str = "", date_to: str = "",
                      period: str = "", round_off: str = "",
                      prev_from: str = "", prev_to: str = ""):
     user = require_user(request)
+    round_off = _rounded(round_off)
     data = _liquidation(date_from, date_to, period, prev_from, prev_to)
     return templates.TemplateResponse(
         request, "report_liquidation.html",
@@ -2188,6 +2219,7 @@ def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "",
                     period: str = "", round_off: str = "",
                     prev_from: str = "", prev_to: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     data = _liquidation(date_from, date_to, period, prev_from, prev_to)
     if "error" in data:
         raise HTTPException(404, data["error"])
@@ -2224,6 +2256,7 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
     colour in the font, so the cell still sums, sorts and filters.
     """
     require_user(request)
+    round_off = _rounded(round_off)
     data = _liquidation(date_from, date_to, period, prev_from, prev_to)
     if "error" in data:
         raise HTTPException(404, data["error"])
@@ -2536,6 +2569,7 @@ def daily_data(request: Request, kind: str, date_from: str = "", date_to: str = 
 def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "",
               cluster: str = "", view: str = "bond", round_off: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     _daily_kind(kind)
     import tempfile
 
@@ -2555,6 +2589,7 @@ def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "
 def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = "",
                cluster: str = "", view: str = "bond", round_off: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     _daily_kind(kind)
     import tempfile
     from openpyxl import Workbook
@@ -2743,6 +2778,7 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
                             cluster: int = 0, month: str = "", round_off: str = ""):
     """The sheet as it prints, in the shape the office already circulates."""
     require_user(request)
+    round_off = _rounded(round_off)
     window = _tva_window(date_from, date_to)
     if window is None:
         raise HTTPException(404, "No shop sales have been uploaded yet.")
@@ -2905,6 +2941,7 @@ def target_achievement_pdf(request: Request, date_from: str = "", date_to: str =
     page as it stands, cluster filter and all.
     """
     require_user(request)
+    round_off = _rounded(round_off)
     if scope not in ("current", "all"):
         raise HTTPException(400, "Unknown scope.")
     window = _tva_window(date_from, date_to)
@@ -3005,6 +3042,7 @@ def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
                     cluster: int = 0, round_off: str = ""):
     """The sheet as it prints, in the house colours."""
     require_user(request)
+    round_off = _rounded(round_off)
     data = reports_api.item_issue(period=period, prior=prior, cluster=cluster or None)
     if "error" in data:
         raise HTTPException(404, data["error"])

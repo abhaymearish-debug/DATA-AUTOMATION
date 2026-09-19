@@ -122,7 +122,7 @@
         </select>
       </div>
     </div>
-    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
+    <label class="chk"><input type="checkbox" id="round" checked onchange="load()"> Round off</label>
     <div class="sp">
       <button class="btn xl" onclick="dl('xlsx')">Download Excel</button>
       <button class="btn pdf" onclick="dl('pdf')">Download PDF</button>
@@ -162,7 +162,7 @@ function params(){
   if (TO)   p.set('date_to', TO);
   if (fCluster.value) p.set('cluster', fCluster.value);
   if (view !== 'bond') p.set('view', view);
-  if (round.checked) p.set('round_off', '1');
+  p.set('round_off', round.checked ? '1' : '0');
   return p;
 }
 let SPAN = {min:'', max:''};

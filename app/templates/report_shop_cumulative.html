@@ -280,7 +280,7 @@
         <span class="ic">⌕</span>
         <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
       </div>
-      <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
+      <label class="chk"><input type="checkbox" id="round" checked onchange="load()"> Round off</label>
     </div>
     <div class="sp" id="dlBar">
       <a class="act xl" id="dlXl" href="#">Download Excel</a>
@@ -335,7 +335,7 @@ function params(){
   } else if (fWh.value) {
     p.set('warehouse', fWh.value);
   }
-  if (round.checked) p.set('round_off', '1');
+  p.set('round_off', round.checked ? '1' : '0');
   return p;
 }
 

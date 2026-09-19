@@ -162,32 +162,55 @@ def period_label(key: str) -> str:
             f"{end.day} {MONTH_NAMES[end.month - 1]} {end.year}")
 
 
-def store(paths: list[Path]) -> dict:
-    """File a batch under the period the files themselves declare.
+def store(paths: list[Path], expect: tuple | None = None) -> dict:
+    """File a batch under the period it covers.
 
     Every file in one pull covers the same range, so a batch that does not is
     two pulls mixed together and is refused rather than half-filed.
+
+    `expect` is the period the person picked on the upload screen. It is a
+    check, not an override: files that name a different range are refused with
+    both stated, so a September pull cannot be filed under August by a slip of
+    the picker. It is also the answer for an export that names no range at
+    all - those used to be dropped on the floor with nothing to file them
+    under, which is the whole reason the picker exists.
     """
+    want = period_key(expect[0], expect[1]) if expect else ""
     by_period: dict[str, list[tuple[Path, dict]]] = defaultdict(list)
+    undated: list[tuple[Path, dict]] = []
     skipped: list[str] = []
 
     for p in paths:
         parsed = parse_file(p)
-        if not parsed["warehouse"] or not parsed["start"] or not parsed["end"]:
+        if not parsed["warehouse"]:
             skipped.append(Path(p).name)
+            continue
+        if not parsed["start"] or not parsed["end"]:
+            undated.append((p, parsed))
             continue
         by_period[period_key(parsed["start"], parsed["end"])].append((p, parsed))
 
-    if not by_period:
-        return {"error": "None of those files look like a KSBC item issue "
-                         "consolidation export - no warehouse or report period "
-                         "could be read out of them."}
     if len(by_period) > 1:
         spans = ", ".join(period_label(k) for k in sorted(by_period))
         return {"error": f"Those files cover more than one period ({spans}). "
                          "Upload one pull at a time."}
 
-    key, items = next(iter(by_period.items()))
+    if by_period:
+        key, items = next(iter(by_period.items()))
+        if want and key != want:
+            return {"error": f"You picked {period_label(want)}, but those files "
+                             f"are for {period_label(key)}. Change the period or "
+                             f"upload the files for {period_label(want)}."}
+    elif want and undated:
+        key, items = want, []
+    elif not by_period:
+        return {"error": "None of those files look like a KSBC item issue "
+                         "consolidation export - no warehouse or report period "
+                         "could be read out of them."}
+
+    # An export that named no range still belongs to the pull: it goes in under
+    # the period the rest of the batch - or the person - answered for.
+    items = list(items) + undated
     folder = root() / key
     if folder.exists():
         shutil.rmtree(folder)
@@ -198,7 +221,7 @@ def store(paths: list[Path]) -> dict:
     _CACHE.pop(key, None)
     return {"period": key, "label": period_label(key), "files": len(items),
             "warehouses": len({d["warehouse"] for _p, d in items}),
-            "skipped": skipped}
+            "undated": len(undated), "skipped": skipped}
 
 
 _CACHE: dict = {}

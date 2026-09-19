@@ -152,7 +152,7 @@
         </select><i>&#9662;</i></div>
       </label>
     </div>
-    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
+    <label class="chk"><input type="checkbox" id="round" checked onchange="load()"> Round off</label>
     <div class="sp">
       <div class="menu" id="xlMenu">
         <button type="button" class="act xl" onclick="toggleMenu('xlMenu')">Download Excel &#9662;</button>
@@ -213,7 +213,7 @@ function params(){
   if (fWh.value)   p.set('warehouse', fWh.value);
   if (FROM) p.set('date_from', FROM);
   if (TO)   p.set('date_to', TO);
-  if (round.checked) p.set('round_off', '1');
+  p.set('round_off', round.checked ? '1' : '0');
   return p;
 }
 
@@ -337,7 +337,7 @@ async function toggleGroup(name){
   const p = new URLSearchParams({ view, key: name });
   if (FROM) p.set('date_from', FROM);
   if (TO)   p.set('date_to', TO);
-  if (round.checked) p.set('round_off', '1');
+  p.set('round_off', round.checked ? '1' : '0');
   // Same columns as the table above, in the same order.
   p.set('brands', (DATA.brands || []).join('\u001f'));
   try {

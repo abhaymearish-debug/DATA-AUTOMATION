@@ -142,7 +142,7 @@
   {{ v if v is integer else '%.2f'|format(v) }}
 {%- endmacro %}
 
-{% set qs = 'date_from=' ~ chosen.start ~ '&date_to=' ~ chosen.end ~ ('&cluster=' ~ cluster if cluster else '') ~ ('&bond=' ~ bond if bond else '') ~ ('&round_off=1' if round_off else '') %}
+{% set qs = 'date_from=' ~ chosen.start ~ '&date_to=' ~ chosen.end ~ ('&cluster=' ~ cluster if cluster else '') ~ ('&bond=' ~ bond if bond else '') ~ ('&round_off=1' if round_off else '&round_off=0') %}
 <div class="controls">
   <form method="get" class="bar1" id="f">
     <div class="fbar">
@@ -175,8 +175,12 @@
         </select><i>▾</i></div>
       </label>
     </div>
-    <label class="chk"><input type="checkbox" name="round_off" value="1"
-           {{ 'checked' if round_off }} onchange="this.form.submit()"> Round off</label>
+    <!-- An unticked box submits nothing, and nothing means the default, which
+         is on - so the switch writes 1 or 0 into a field that always rides. -->
+    <input type="hidden" name="round_off" id="roVal" value="{{ '1' if round_off else '0' }}">
+    <label class="chk"><input type="checkbox" id="round" {{ 'checked' if round_off }}
+           onchange="roVal.value = this.checked ? '1' : '0'; this.form.submit()">
+           Round off</label>
     <div class="sp">
       {% if not no_data %}
         <a class="act xl" href="/reports/shop-analysis/export.xlsx?{{ qs }}">Download Excel</a>

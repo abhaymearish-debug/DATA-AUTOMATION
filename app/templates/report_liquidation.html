@@ -117,7 +117,7 @@
 {%- endmacro %}
 
 {% block content %}
-{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') ~ ('&round_off=1' if round_off else '') ~ (('&prev_from=' ~ data.previous.start ~ '&prev_to=' ~ data.previous.end) if data.custom_prev and data.previous else '') %}
+{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') ~ ('&round_off=1' if round_off else '&round_off=0') ~ (('&prev_from=' ~ data.previous.start ~ '&prev_to=' ~ data.previous.end) if data.custom_prev and data.previous else '') %}
 <div class="controls">
   <form method="get" class="bar1" id="f">
     <div class="fbar">
@@ -148,8 +148,13 @@
         <button type="button" class="link" onclick="resetPrev()">Back to last month</button>
       {% endif %}
     </span>
-    <label class="chk"><input type="checkbox" name="round_off" value="1"
-           {{ 'checked' if round_off }} onchange="document.getElementById('f').submit()">
+    <!-- A form cannot submit an unticked box, and silence here would read as
+         the default - which is on. So the value rides in a hidden field the
+         switch sets, and the request always says 1 or 0 outright. -->
+    <input type="hidden" name="round_off" id="roVal" value="{{ '1' if round_off else '0' }}">
+    <label class="chk"><input type="checkbox" id="round" {{ 'checked' if round_off }}
+           onchange="roVal.value = this.checked ? '1' : '0';
+                     document.getElementById('f').submit()">
            Round off</label>
     {% if not error %}
     <div class="sp">

@@ -425,12 +425,16 @@ window.ksdCases = function (value, round) {
     : {minimumFractionDigits: 2, maximumFractionDigits: 2});
 };
 
-// A link carrying the flag opens rounded, so a shared URL shows what the
-// person who sent it was looking at. Registered here, which is before any
-// page script, so the report's own load() sees the box already ticked.
+// Round off is the default - whole cases are what the office reads out - so
+// the switch starts on and a link decides for itself: one carrying round_off=0
+// opens on the exact figures, anything else on whole ones. Registered here,
+// which is before any page script, so the report's own load() sees the box in
+// the state the link asked for.
 document.addEventListener('DOMContentLoaded', function () {
   const box = document.getElementById('round');
-  if (box && new URLSearchParams(location.search).has('round_off')) box.checked = true;
+  if (!box) return;
+  const asked = new URLSearchParams(location.search).get('round_off');
+  if (asked !== null) box.checked = asked !== '0';
 });
 </script>
 {% block scripts %}{% endblock %}
