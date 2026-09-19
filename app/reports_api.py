@@ -150,6 +150,10 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
         else:
             items.append({"kind": "raw upload", "stream": STREAM["secondary"],
                           "name": name})
+    # Oldest first, the way the shop legs read, with the month's workbook at
+    # the head of them - it is the file actually read, the raws stand behind it.
+    items.sort(key=lambda i: ("" if i.get("kind") == "built workbook" else "1",
+                              i.get("from", "")))
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
 
 
