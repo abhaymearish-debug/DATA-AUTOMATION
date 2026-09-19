@@ -94,7 +94,10 @@ async def page_not_found(request: Request, exc):
     wants_json = (request.url.path.startswith(("/api/", "/jobs/"))
                   or "application/json" in request.headers.get("accept", ""))
     if wants_json or not current_user(request):
-        return JSONResponse({"detail": "Not Found"}, status_code=404)
+        # A 404 raised with something to say keeps saying it: "Nothing is filed
+        # for January 2026" is an answer, "Not Found" is a shrug.
+        said = getattr(exc, "detail", None)
+        return JSONResponse({"detail": said or "Not Found"}, status_code=404)
     return templates.TemplateResponse(
         request, "notfound.html",
         {"user": current_user(request), "page": "", "started_at": STARTED_AT,
@@ -3200,6 +3203,22 @@ def _pi_months(month: str = "", prior: str = "") -> tuple[str, str]:
         return month, prior
     later = [m for m in have if m < month]
     return month, (later[0] if later else "")
+
+
+@app.get("/api/pi-receipt")
+def pi_receipt(request: Request, month: str):
+    """What landed for a month already filed.
+
+    The upload writes a receipt and the history keeps it, but a run from
+    before the receipt existed has none - and the question ("how many came
+    back blank in July?") is worth answering either way. This reads the
+    month's filed sheets back and says so.
+    """
+    require_user(request)
+    got = pi_mod.receipt_for(month)
+    if "error" in got:
+        raise HTTPException(404, got["error"])
+    return JSONResponse(got)
 
 
 @app.get("/api/pi-variance")

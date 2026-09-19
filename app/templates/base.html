@@ -267,6 +267,70 @@
   .chk input:checked ~ .sw::after { transform:translateX(14px); }
   .chk input:checked ~ .t { color:var(--ink); }
   .chk input:focus-visible ~ .sw { box-shadow:0 0 0 3px rgba(37,99,235,.3); }
+
+  /* ------------------------------------------------------------------
+     The filter strip, with the edges taken off.
+
+     Every report builds the same strip out of the same parts - a .fbar of
+     .fitem cells, a segmented .seg, the buttons on the right - so the motion
+     lives here once rather than seven times. Two-class selectors so a page's
+     own .fitem rule does not quietly win.
+
+     Nothing moves more than a pixel or two: this is a working screen, and a
+     control that bounces is a control that is in the way. Anybody who has
+     asked their machine to stop animating gets the whole thing switched off
+     at the bottom. */
+
+  @keyframes ksd-rise { from { opacity:0; transform:translateY(7px); }
+                        to   { opacity:1; transform:none; } }
+  @keyframes ksd-pop  { from { opacity:0; transform:translateY(-4px) scale(.985); }
+                        to   { opacity:1; transform:none; } }
+
+  /* The strip arrives a beat before the table, left to right. */
+  .controls .bar1 > * { animation:ksd-rise .34s cubic-bezier(.2,.7,.3,1) both; }
+  .controls .bar1 > *:nth-child(2) { animation-delay:.04s; }
+  .controls .bar1 > *:nth-child(3) { animation-delay:.08s; }
+  .controls .bar1 > *:nth-child(4) { animation-delay:.12s; }
+
+  .controls .fbar { transition:box-shadow .22s ease, border-color .22s ease; }
+  .controls .fbar:hover { box-shadow:0 4px 14px rgba(16,24,40,.08);
+                          border-color:color-mix(in srgb, var(--blue) 22%, var(--line)); }
+
+  .fbar .fitem { position:relative;
+                 transition:background-color .18s ease, box-shadow .18s ease; }
+  .fbar .fitem:hover { box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--blue) 16%, transparent); }
+  .fbar .fitem:focus-within { box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--blue) 40%, transparent); }
+  /* The chevron leans into the click. */
+  .fbar .selw i, .fbar .fi-v i { transition:transform .18s ease, color .18s ease; }
+  .fbar .fitem:hover .selw i, .fbar .fitem:hover .fi-v i { transform:translateY(1px);
+                                                           color:var(--blue); }
+
+  /* Bond / Warehouse: the one that is on sits proud of the one that is not. */
+  .seg button { transition:background-color .2s ease, color .2s ease,
+                           box-shadow .2s ease, transform .16s ease; }
+  .seg button:hover:not(.on) { color:var(--ink); }
+  .seg button:active { transform:scale(.97); }
+
+  /* Buttons take a press. */
+  .act, .btn { transition:background-color .18s ease, border-color .18s ease,
+                          box-shadow .18s ease, transform .14s ease; }
+  .act:hover, .btn:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(16,24,40,.12); }
+  .act:active, .btn:active { transform:translateY(0); box-shadow:0 1px 2px rgba(16,24,40,.1); }
+
+  /* Anything that opens under a control opens rather than appears. */
+  .calpop.on, .menu.open .items { animation:ksd-pop .16s cubic-bezier(.2,.7,.3,1) both; }
+
+  /* Search: the ring grows, and the glass takes the accent. */
+  input[type=search].search { transition:box-shadow .18s ease, border-color .18s ease; }
+  .searchwrap .ic { transition:color .18s ease; }
+  .searchwrap:focus-within .ic { color:var(--blue); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .controls .bar1 > *, .calpop.on, .menu.open .items { animation:none; }
+    .act, .btn, .seg button, .fbar .fitem, .fbar .selw i, .fbar .fi-v i,
+    .chk .sw, .chk .sw::after { transition:none; }
+    .act:hover, .btn:hover, .act:active, .btn:active, .seg button:active { transform:none; }
+  }
 </style>
 {% block head %}{% endblock %}
 </head>

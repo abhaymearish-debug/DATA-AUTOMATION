@@ -268,64 +268,8 @@ def store(paths: list[Path], expect: str = "") -> dict:
         problems.append({"name": d["file"], "state": "blank", "shop": _shop_of(d),
                          "why": "no instruction lines - nothing to buy"})
 
-    # Every shop in bond mapping, and what became of it. Four states, and the
-    # fourth is the one that used to be invisible: KSBC keeps exporting for
-    # shops that have closed, and those files land here with nothing in master
-    # to hang them on. They are filed - a closed shop with an instruction is
-    # worth seeing - but they are named as strays rather than counted as though
-    # the mapping knew about them.
-    try:
-        master = pi_master()
-    except Exception:
-        master = {}
-
-    roster: list[dict] = []
-    for code, (_p, d) in by_shop.items():
-        info = master.get(code)
-        roster.append({
-            "code": code, "name": _shop_of(d),
-            "bond": str((info or {}).get("bond") or ""),
-            "warehouse": str(d.get("warehouse") or ""),
-            # Two separate facts: what its sheet said, and whether the mapping
-            # knows the shop at all. A closed shop KSBC still exports for can
-            # be either, and counting it as one hid the other.
-            "state": "blank" if _blank_of(d) else "filed",
-            "stray": info is None,
-        })
-    for code, info in master.items():
-        if code in by_shop:
-            continue
-        roster.append({
-            "code": code, "name": _tidy_shop(str(info.get("name") or code)),
-            "bond": str(info.get("bond") or ""),
-            "warehouse": str(info.get("warehouse") or ""),
-            "state": "absent", "stray": False,
-        })
-    roster.sort(key=lambda r: (r["bond"] or "~", r["name"]))
-
-    def count(state: str) -> int:
-        return sum(1 for r in roster if r["state"] == state)
-
-    strays = sum(1 for r in roster if r.get("stray"))
-
     _CACHE.pop(key, None)
-    return {
-        "month": key, "label": month_label(key),
-        "files": len(paths),
-        "shops": len(by_shop),
-        "mapped": len(master),
-        "ok": len(by_shop) - len(blanks),
-        "blank": len(blanks),
-        "stray": strays,
-        "absent": count("absent"),
-        "duplicate": sum(1 for x in problems if x["state"] == "duplicate"),
-        "other_month": sum(1 for x in problems if x["state"] == "other_month"),
-        "failed": sum(1 for x in problems if x["state"] == "failed"),
-        "warehouses": len({(d.get("warehouse") or "").strip()
-                           for _p, d in by_shop.values() if d.get("warehouse")}),
-        "roster": roster,
-        "problems": problems[:400],
-    }
+    return _receipt(key, by_shop, len(paths), problems)
 
 
 _CACHE: dict = {}
@@ -547,3 +491,97 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
         "unknown_codes": sorted(unknown_codes),
         "months": months(),
     }
+
+
+def _receipt(key: str, by_shop: dict, files: int, problems: list) -> dict:
+    """What landed, shop by shop - the same answer at upload and months later.
+
+    Every shop in bond mapping, and what became of it. Four states, and the
+    fourth is the one that used to be invisible: KSBC keeps exporting for
+    shops that have closed, and those files land here with nothing in master
+    to hang them on. They are filed - a closed shop with an instruction is
+    worth seeing - but they are named as strays rather than counted as though
+    the mapping knew about them.
+    """
+    blanks = [d for _p, d in by_shop.values() if _blank_of(d)]
+    try:
+        master = pi_master()
+    except Exception:
+        master = {}
+
+    roster: list[dict] = []
+    for code, (_p, d) in by_shop.items():
+        info = master.get(code)
+        roster.append({
+            "code": code, "name": _shop_of(d),
+            "bond": str((info or {}).get("bond") or ""),
+            "warehouse": str(d.get("warehouse") or ""),
+            # Two separate facts: what its sheet said, and whether the mapping
+            # knows the shop at all. A closed shop KSBC still exports for can
+            # be either, and counting it as one hid the other.
+            "state": "blank" if _blank_of(d) else "filed",
+            "stray": info is None,
+        })
+    for code, info in master.items():
+        if code in by_shop:
+            continue
+        roster.append({
+            "code": code, "name": _tidy_shop(str(info.get("name") or code)),
+            "bond": str(info.get("bond") or ""),
+            "warehouse": str(info.get("warehouse") or ""),
+            "state": "absent", "stray": False,
+        })
+    roster.sort(key=lambda r: (r["bond"] or "~", r["name"]))
+
+    def count(state: str) -> int:
+        return sum(1 for r in roster if r["state"] == state)
+
+    return {
+        "month": key, "label": month_label(key),
+        "files": files,
+        "shops": len(by_shop),
+        "mapped": len(master),
+        "ok": len(by_shop) - len(blanks),
+        "blank": len(blanks),
+        "stray": sum(1 for r in roster if r.get("stray")),
+        "absent": count("absent"),
+        "duplicate": sum(1 for x in problems if x["state"] == "duplicate"),
+        "other_month": sum(1 for x in problems if x["state"] == "other_month"),
+        "failed": sum(1 for x in problems if x["state"] == "failed"),
+        "warehouses": len({(d.get("warehouse") or "").strip()
+                           for _p, d in by_shop.values() if d.get("warehouse")}),
+        "roster": roster,
+        "problems": problems[:400],
+    }
+
+
+def receipt_for(month: str) -> dict:
+    """The receipt for a month already filed, read back off the files.
+
+    What the upload itself saw - a file that would not open, one for another
+    month, two sheets for the same shop - is only in the receipt that upload
+    wrote. This reads what is on disk now, so it always answers for filed,
+    blank, absent and stray, and says it is a reading rather than a record.
+    """
+    folder = month_dir(month)
+    if not folder.is_dir():
+        return {"error": f"Nothing is filed for {month_label(month)}."}
+
+    by_shop: dict[str, tuple] = {}
+    unreadable = 0
+    for path in sorted(folder.glob("*.xls*")):
+        try:
+            parsed = parse_file(path)
+        except Exception:
+            unreadable += 1
+            continue
+        code = parsed.get("shop_code")
+        if not code:
+            unreadable += 1
+            continue
+        by_shop[code] = (path, parsed)
+
+    got = _receipt(month, by_shop, len(by_shop) + unreadable, [])
+    got["rebuilt"] = True
+    got["failed"] = unreadable
+    return got

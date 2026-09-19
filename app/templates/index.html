@@ -770,6 +770,13 @@ function showReceipt(r){
                 + `upload them.` : '')
      + '</div>';
 
+  if (r.rebuilt){
+    h += `<div class="rnote">Read back from the ${r.files} sheet`
+       + `${r.files === 1 ? '' : 's'} filed for <b>${esc(r.label)}</b>. A file that would `
+       + `not open, one for another month, or two sheets for the same shop is only in the `
+       + `receipt the upload itself wrote, and this run kept none.</div>`;
+  }
+
   if (r.stray){
     h += `<div class="rnote"><b>${r.stray}</b> shop`
        + `${r.stray === 1 ? ' is' : 's are'} not in bond mapping — KSBC still exports `
@@ -1103,6 +1110,12 @@ function drawHistory(){
       actions += `<a class="act" href="/jobs/${withRaw.id}/raw">`
                + `${k > 1 ? `Raw files (${k})` : 'Raw file'}</a>`;
     }
+    // The instruction's receipt - what filed, what came back blank, what the
+    // mapping expected and never saw. The upload keeps one; a month filed
+    // before it did is read back off its own sheets instead.
+    if (historyCard.stream === 'purchase_instruction'){
+      actions += `<button class="act" onclick="runReceipt('${lead.id}','${day}')">Receipt</button>`;
+    }
     actions += `<button class="act danger" onclick="delDate('${day}')">Delete</button>`;
 
     const others = runs.filter(r => r.id !== lead.id);
@@ -1132,6 +1145,21 @@ function drawHistory(){
       ${more}
     </div>`;
   }).join('') + '</div>';
+}
+
+async function runReceipt(jobId, day){
+  const job = historyJobs.find(j => j.id === jobId);
+  const kept = job && job.summary && job.summary.receipt;
+  if (kept){ showReceipt(kept); return; }
+  // Nothing kept for that run, so read the month back off what is filed.
+  try {
+    const res = await fetch('/api/pi-receipt?month=' + encodeURIComponent(day.slice(0,7)));
+    const got = await res.json();
+    if (!res.ok) throw new Error(got.detail || 'That month could not be read back.');
+    showReceipt(got);
+  } catch (err) {
+    alert(err.message || 'That month could not be read back.');
+  }
 }
 
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s??''; return d.innerHTML; }
