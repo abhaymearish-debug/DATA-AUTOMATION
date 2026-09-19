@@ -292,16 +292,30 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
                 it["title"] = _sec_book_title(name)
             items.append(it)
         elif a and b:
-            items.append({"kind": "raw upload", "stream": STREAM["secondary"],
+            # One upload, one day - said as "daily upload" so a run of them
+            # folds into the span it is, the way shop sales already reads.
+            items.append({"kind": "daily upload", "stream": STREAM["secondary"],
                           "name": name, "from": a.isoformat(), "to": b.isoformat(),
+                          "files": 1,
                           "behind": bool(isinstance(src, dict) and src.get("behind"))})
         else:
             items.append({"kind": "raw upload", "stream": STREAM["secondary"],
                           "name": name})
-    # Oldest first, the way the shop legs read, with the month's workbook at
-    # the head of them - it is the file actually read, the raws stand behind it.
-    items.sort(key=lambda i: ("" if i.get("kind") == "built workbook" else "1",
-                              i.get("from", "")))
+    # Your uploads first, folded into the runs of days they are, and the
+    # month's built workbook after them. That order is the provenance: the
+    # raws are what you put in, the workbook is what was made out of them and
+    # what still answers for any day whose raw is no longer on disk. Leading
+    # with the workbook made the daily uploads look like its footnotes.
+    raws = [i for i in items if i.get("kind") == "daily upload"]
+    rest = [i for i in items if i.get("kind") not in ("daily upload", "built workbook")]
+    book_items = [i for i in items if i.get("kind") == "built workbook"]
+    raws.sort(key=lambda i: i.get("from", ""))
+    # The workbook is built out of the raws, so counting both would count the
+    # same fortnight twice. It only counts as a file where it is the only
+    # thing left - an older month whose raws have been cleared out.
+    for it in book_items:
+        it["files"] = 0 if raws else 1
+    items = src_fold(raws) + rest + book_items
     if not items and lo and hi:
         items = [src_missing(lo, hi)]
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
@@ -695,24 +709,39 @@ def secondary_covered_days() -> set:
     every dated raw adds its own day. Inside that, a day with no line is a day
     nothing moved; outside it, a zero means nobody has uploaded that day yet.
     """
-    days: set = set()
+    raw_days = {end for end, _path in secondary_raw_files()}
+    days: set = set(raw_days)
 
     book = find_secondary_workbook()
     if book is not None:
         dated = [l["date"] for l in load_dispatch_lines(book) if l.get("date")]
         if dated:
             hi = max(dated)
-            m = _re.search(r"(\d{1,2})(?:st|nd|rd|th)\s*-\s*(\d{1,2})(?:st|nd|rd|th)",
-                           book.name, _re.IGNORECASE)
-            first, last = (int(m.group(1)), int(m.group(2))) if m else (1, hi.day)
-            for day in range(first, last + 1):
-                try:
-                    days.add(date(hi.year, hi.month, day))
-                except ValueError:
-                    break
-
-    for end, _path in secondary_raw_files():
-        days.add(end)
+            # Days the workbook genuinely holds lines for. These count wherever
+            # they come from: a day whose raw has since been cleared off disk
+            # is still a day this app can answer.
+            days |= set(dated)
+            # The rest of the window written on the workbook's name is a
+            # claim, not a fact - the name says "1st - 18th" because that is
+            # what it was built for, not because 18 files went in. Taking it
+            # at its word covered for days nobody had uploaded: September
+            # 2026 has raws for the 1st to the 10th and the 12th to the 17th,
+            # and the panel reported the 11th and the 18th as answered
+            # without either one ever being uploaded. The name is only
+            # believed for a month with no raws at all behind it - a month
+            # from before this app, where the workbook is all that is left
+            # and a quiet day inside it would otherwise read as a hole.
+            uploaded_this_month = any((d.year, d.month) == (hi.year, hi.month)
+                                      for d in raw_days)
+            if not uploaded_this_month:
+                m = _re.search(r"(\d{1,2})(?:st|nd|rd|th)\s*-\s*(\d{1,2})(?:st|nd|rd|th)",
+                               book.name, _re.IGNORECASE)
+                first, last = (int(m.group(1)), int(m.group(2))) if m else (1, hi.day)
+                for day in range(first, last + 1):
+                    try:
+                        days.add(date(hi.year, hi.month, day))
+                    except ValueError:
+                        break
     return days
 
 
@@ -790,6 +819,12 @@ def secondary_lines() -> tuple[list, list]:
         days = {l["date"] for l in got if l.get("date")}
         fresh = [l for l in got if l.get("date") and l["date"] not in claimed]
         if not fresh:
+            # Every line already came off the month's workbook, so this raw
+            # adds no figures - but it is still the file you uploaded, and
+            # the workbook is only a thing built out of it. Dropping it here
+            # is why a fortnight of daily uploads used to report itself as
+            # "1 file": one workbook, and sixteen raws nobody could see.
+            sources.append(dict(entry(path.name, got), behind=True))
             continue
         lines += fresh
         claimed |= days

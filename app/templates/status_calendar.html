@@ -61,6 +61,12 @@
   .srow .bar b { display:block; height:100%; border-radius:3px; }
   .srow .ct { font-size:11.5px; font-weight:700; color:var(--muted); flex:none;
               font-variant-numeric:tabular-nums; min-width:44px; text-align:right; }
+  /* Days answered and files uploaded are not the same number, and on the
+     cumulative row they are nowhere near: two pulls answer a whole month.
+     Printing only the days made that row read as thirty-one uploads. */
+  .srow .fc { font-size:10.5px; font-weight:650; color:var(--muted); flex:none;
+              opacity:.8; font-variant-numeric:tabular-nums;
+              min-width:58px; text-align:right; }
 
   /* ---------- the grid ---------- */
   .cal { background:var(--card); border:1px solid var(--line); border-radius:14px;
@@ -217,7 +223,23 @@ function draw(){
                  key === today ? 'today' : ''].filter(Boolean).join(' ');
 
     // The whole day's state, spelled out, for anyone who hovers.
-    const tip = nothingDue ? key : S.map(s => have.includes(s.key) ? `\u2713 ${s.label}`
+    // A cumulative day is answered by a pull that usually covers a fortnight
+    // either side of it, so the tick on its own invites the question this
+    // now answers in place: which file is speaking for this day.
+    const pull = (CAL.periods || []).find(p => p.from <= key && key <= p.to);
+    // "1 - 16 Aug 2026", not "1 Aug 2026 to 16 Aug 2026" - the month and the
+    // year are the same at both ends, and saying them twice in a tooltip
+    // that is already five lines long is five words nobody reads.
+    const span = p => {
+      const A = new Date(p.from + 'T00:00'), B = new Date(p.to + 'T00:00');
+      const mon = d => d.toLocaleDateString('en-GB', {month:'short'});
+      return A.getMonth() === B.getMonth() && A.getFullYear() === B.getFullYear()
+        ? `${A.getDate()}\u2013${B.getDate()} ${mon(B)} ${B.getFullYear()}`
+        : `${A.getDate()} ${mon(A)} \u2013 ${B.getDate()} ${mon(B)} ${B.getFullYear()}`;
+    };
+    const tip = nothingDue ? key : S.map(s => have.includes(s.key)
+          ? `\u2713 ${s.label}` +
+            (s.key === 'shop_cumulative' && pull ? ` \u2014 from the ${span(pull)} pull` : '')
         : dueBy(key, s) > today ? `\u00b7 ${s.label} \u2014 not due yet`
         : `\u2014 ${s.label}`).join('\n');
 
@@ -263,15 +285,30 @@ function draw(){
   // Worst first, and each against the days it was actually due - stock is
   // due for today as well, the other four are not, so they do not share a
   // denominator.
-  streams.innerHTML = S.map(s => ({s, n: tally[s.key] || 0, of: dueDays[s.key] || 0}))
+  // How many files are behind a row, which is not how many days it answers.
+  // Every stream but one is a file a day, so the two numbers agree and the
+  // file count says nothing new. A cumulative pull covers every day back to
+  // the 1st, so two files answer all thirty-one days of August - and the row
+  // read "31/31" beside a Shop Daily row of "4/31" that meant four uploads.
+  // Same bar, two different questions. The file count is what tells them
+  // apart, so it is only printed where it differs from the days.
+  const monthFrom = iso(y, m, 1), monthTo = iso(y, m, last);
+  const filesOf = key => key !== 'shop_cumulative' ? (tally[key] || 0)
+    : (CAL.periods || []).filter(p => p.from <= monthTo && p.to >= monthFrom).length;
+
+  streams.innerHTML = S.map(s => ({s, n: tally[s.key] || 0, of: dueDays[s.key] || 0,
+                                   f: filesOf(s.key)}))
     .sort((a, b) => (a.of ? a.n / a.of : 1) - (b.of ? b.n / b.of : 1))
-    .map(({s, n, of}) => {
+    .map(({s, n, of, f}) => {
       const pct = of ? Math.round(n / of * 100) : 0;
-      return `<div class="srow" title="${esc(s.label)}: ${n} of ${of} days due">
+      const said = f === 1 ? '1 file' : `${f} files`;
+      const show = f !== n;
+      return `<div class="srow" title="${esc(s.label)}: ${n} of ${of} days due, from ${said}">
           <i style="background:${s.colour}"></i>
           <span class="nm">${esc(s.label.replace(' - ', ' \u00b7 '))}</span>
           <span class="bar"><b style="width:${pct}%;background:${s.colour}"></b></span>
           <span class="ct">${n}/${of}</span>
+          <span class="fc">${show ? esc(said) : ''}</span>
         </div>`;
     }).join('');
 }
