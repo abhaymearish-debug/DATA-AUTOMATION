@@ -122,6 +122,88 @@ _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, object]] = {}
 
 
+# ---------------------------------------------------------------------------
+# Parse a raw file once, ever
+# ---------------------------------------------------------------------------
+#
+# Every report here is a read over workbooks somebody uploaded, and openpyxl
+# is the whole cost: about half a second for one day's shop export on a fast
+# machine, two or three times that on the box this runs on. A month of days is
+# therefore twenty to thirty seconds of parsing - which is what the daily
+# report was spending every time the process came up cold, and every time a
+# new day was uploaded, because the in-memory cache was keyed on the whole set
+# of files rather than on each one.
+#
+# A raw never changes once it is uploaded. So each file is parsed once and its
+# result is written beside the workspace, keyed on the file's own identity -
+# name, mtime, size - plus the master data's, since what master says about a
+# shop decides which rows are kept. Change either and the key changes and the
+# file is parsed again; change nothing and a cold start reads JSON instead of
+# a workbook, which is milliseconds.
+
+_CACHE_DIR = config.WORKSPACE_ROOT / "_cache"
+_CACHE_KEEP = 600          # files, after which the oldest are swept
+
+
+def _master_stamp() -> str:
+    """What master data is right now, as one short token."""
+    path = config.MASTER_DATA
+    try:
+        return str(path.stat().st_mtime_ns)
+    except OSError:
+        return "0"
+
+
+def _parsed(kind: str, path: Path, build, *, uses_master: bool = True):
+    """`build()`'s result for this file, from disk if it has been built before.
+
+    Best-effort throughout: a cache that cannot be read or written is simply
+    not used, and the report is right either way - only slower.
+    """
+    import hashlib
+    import json
+
+    try:
+        st = path.stat()
+    except OSError:
+        return build()
+    stamp = f"{kind}|{path.name}|{st.st_mtime_ns}|{st.st_size}"
+    if uses_master:
+        stamp += "|" + _master_stamp()
+    name = hashlib.sha1(stamp.encode("utf-8")).hexdigest()[:24] + ".json"
+    into = _CACHE_DIR / name
+
+    try:
+        if into.is_file():
+            return json.loads(into.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+
+    got = build()
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = into.with_suffix(".part")
+        tmp.write_text(json.dumps(got), encoding="utf-8")
+        tmp.replace(into)
+        _sweep_cache()
+    except (OSError, TypeError, ValueError):
+        pass
+    return got
+
+
+def _sweep_cache() -> None:
+    """Keep the folder from growing for ever: oldest out, newest kept."""
+    try:
+        files = sorted(_CACHE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+    except OSError:
+        return
+    for f in files[:-_CACHE_KEEP] if len(files) > _CACHE_KEEP else []:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
 def canonical_warehouse(raw) -> str:
     """'WH-KOLLAM FL9-KLM-01/2026-27' -> 'KOLLAM'. Handles FL9 and RFL9."""
     if not raw:
@@ -740,7 +822,15 @@ SHOP_OUT_COLUMNS = ("Shop Code", "Shop Out Cases", "Shop Out Bottles", "Bottle P
 
 
 def _shop_rows(ws, day, master: dict) -> list[dict]:
-    """Cases sold out of shops on one day, from a SupplierWiseShopSaleReport grid."""
+    """Cases sold out of shops on one day, with our mapping applied."""
+    return [{"bond": master.get(code, {}).get("bond", ""),
+             "warehouse": wh or master.get(code, {}).get("warehouse", ""),
+             "shop_code": code, "date": day, "cases": qty}
+            for code, wh, qty in _shop_raw_sheet(ws)]
+
+
+def _shop_raw_sheet(ws) -> list:
+    """[shop code, warehouse, cases] off a SupplierWiseShopSaleReport grid."""
     rows = ws.iter_rows(values_only=True)
     try:
         header = [str(h).strip() if h else "" for h in next(rows)]
@@ -765,9 +855,7 @@ def _shop_rows(ws, day, master: dict) -> list[dict]:
         # KSBC reports and can change between months - and master is only the
         # fallback for an export that does not carry it.
         wh = canonical_warehouse(r[cW]) if (cW is not None and len(r) > cW) else ""
-        out.append({"bond": master.get(code, {}).get("bond", ""),
-                    "warehouse": wh or master.get(code, {}).get("warehouse", ""),
-                    "shop_code": code, "date": day, "cases": float(qty)})
+        out.append([code, wh, float(qty)])
     return out
 
 
@@ -795,12 +883,9 @@ def load_shop_daily_raws() -> list[dict]:
     if not files:
         return []
 
-    key = "shopraws:" + ",".join(f"{p.name}:{p.stat().st_mtime_ns}" for p, _, _ in sorted(files))
-    with _CACHE_LOCK:
-        hit = _CACHE.get(key)
-    if hit:
-        return hit[1]
-
+    # Cached per file rather than per set: uploading the 18th used to
+    # re-parse the 1st to the 17th as well, because the key was every file's
+    # mtime joined together.
     master = load_master()
     out: list[dict] = []
     for path, month, dom in files:
@@ -809,20 +894,35 @@ def load_shop_daily_raws() -> list[dict]:
             day = date(year, month, dom)
         except ValueError:
             continue
-        try:
-            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        except (OSError, ValueError):
-            continue
-        for sheet in wb.worksheets:
-            rows = _shop_rows(sheet, day, master)
-            if rows:
-                out.extend(rows)
-                break
-        wb.close()
-
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
+        for code, wh, qty in _parsed("shopday", path,
+                                     lambda p=path: _shop_raw_rows(p),
+                                     uses_master=False):
+            known = master.get(code, {})
+            out.append({"bond": known.get("bond", ""),
+                        "warehouse": wh or known.get("warehouse", ""),
+                        "shop_code": code, "date": day, "cases": qty})
     return out
+
+
+def _shop_raw_rows(path: Path) -> list:
+    """[shop code, warehouse, cases] out of one day's export, and nothing else.
+
+    Only what the file itself says. Which bond a shop belongs to is our own
+    mapping and can change in Settings, so it is looked up fresh each time
+    rather than frozen into the cache.
+    """
+    try:
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    except (OSError, ValueError):
+        return []
+    try:
+        for sheet in wb.worksheets:
+            rows = _shop_raw_sheet(sheet)
+            if rows:
+                return rows
+        return []
+    finally:
+        wb.close()
 
 
 def load_shop_daily(workbook: Path) -> list[dict]:
@@ -1176,12 +1276,19 @@ def cumulative_lines(path: Path) -> dict:
     and every coarser figure is just this summed. Cached on mtime: the file
     never changes once uploaded, so the second read costs nothing.
     """
-    key = f"cumline:{path}:{path.stat().st_mtime_ns}"
+    key = f"cumline:{path}:{path.stat().st_mtime_ns}:{_master_stamp()}"
     with _CACHE_LOCK:
         hit = _CACHE.get(key)
     if hit:
         return hit[1]
+    got = _parsed("cumline", path, lambda: _cumulative_lines_read(path))
+    with _CACHE_LOCK:
+        _CACHE[key] = (0.0, got)
+    return got
 
+
+def _cumulative_lines_read(path: Path) -> dict:
+    """The workbook itself, read start to finish. Cached by its caller."""
     master = load_master()
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
@@ -1217,8 +1324,6 @@ def cumulative_lines(path: Path) -> dict:
             cell[k] += float(r[ix[c_col]] or 0) + (
                 float(r[ix[b_col]] or 0) / bpc if bpc else 0.0)
     wb.close()
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
     return out
 
 
@@ -1279,12 +1384,19 @@ def shop_day_files() -> dict:
 
 def _day_lines(path: Path, master: dict) -> dict:
     """The same shape as cumulative_lines, for one day's export."""
-    key = f"dayline:{path}:{path.stat().st_mtime_ns}"
+    key = f"dayline:{path}:{path.stat().st_mtime_ns}:{_master_stamp()}"
     with _CACHE_LOCK:
         hit = _CACHE.get(key)
     if hit:
         return hit[1]
+    got = _parsed("dayline", path, lambda: _day_lines_read(path, master))
+    with _CACHE_LOCK:
+        _CACHE[key] = (0.0, got)
+    return got
 
+
+def _day_lines_read(path: Path, master: dict) -> dict:
+    """The day's export, read start to finish. Cached by its caller."""
     out: dict = {"lines": {}, "names": {}, "warehouses": {}}
     try:
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
@@ -1319,8 +1431,6 @@ def _day_lines(path: Path, master: dict) -> dict:
                 cell[k] += float(r[ix[c_col]] or 0) + (
                     float(r[ix[b_col]] or 0) / bpc if bpc else 0.0)
     wb.close()
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
     return out
 
 
