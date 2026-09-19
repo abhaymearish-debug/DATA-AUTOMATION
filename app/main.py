@@ -2786,14 +2786,16 @@ def daily_page(request: Request, kind: str):
 
 @app.get("/api/reports/daily/{kind}")
 def daily_data(request: Request, kind: str, date_from: str = "", date_to: str = "",
-               cluster: str = "", view: str = "bond"):
+               cluster: str = "", view: str = "bond", round_off: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     _daily_kind(kind)
     if view not in ("bond", "warehouse"):
         raise HTTPException(400, "Unknown view.")
     cl = int(cluster) if cluster in ("1", "2", "3") else None
     return JSONResponse(reports_api.daily_grid(kind, date_from=date_from,
-                                               date_to=date_to, cluster=cl, view=view))
+                                               date_to=date_to, cluster=cl, view=view,
+                                               round_off=bool(round_off)))
 
 
 @app.get("/reports/daily/{kind}/export.pdf")
@@ -2806,7 +2808,7 @@ def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "
 
     cl = int(cluster) if cluster in ("1", "2", "3") else None
     data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to,
-                                  cluster=cl, view=view)
+                                  cluster=cl, view=view, round_off=bool(round_off))
     if "error" in data:
         raise HTTPException(404, data["error"])
 
@@ -2828,7 +2830,7 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
 
     cl = int(cluster) if cluster in ("1", "2", "3") else None
     data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to,
-                                  cluster=cl, view=view)
+                                  cluster=cl, view=view, round_off=bool(round_off))
     if "error" in data:
         raise HTTPException(404, data["error"])
 
@@ -2957,14 +2959,16 @@ def target_achievement_page(request: Request):
 
 @app.get("/api/target-achievement")
 def target_achievement_data(request: Request, date_from: str = "", date_to: str = "",
-                            cluster: int = 0, month: str = ""):
+                            cluster: int = 0, month: str = "", round_off: str = ""):
     require_user(request)
+    round_off = _rounded(round_off)
     window = _tva_window(date_from, date_to)
     if window is None:
         return JSONResponse({"error": "No shop sales have been uploaded yet, so there is "
                                       "nothing to measure a target against."})
     data = reports_api.target_vs_achievement(
-        window[0], window[1], cluster=cluster or None, month=month)
+        window[0], window[1], cluster=cluster or None, month=month,
+        round_off=bool(round_off))
     data.setdefault("bonds", sorted({b for members in reports_api.bond_clusters().values()
                                      for b in members}))
     data["calendar"] = _calendar_days()
@@ -3014,7 +3018,8 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
     if window is None:
         raise HTTPException(404, "No shop sales have been uploaded yet.")
     data = reports_api.target_vs_achievement(
-        window[0], window[1], cluster=cluster or None, month=month)
+        window[0], window[1], cluster=cluster or None, month=month,
+        round_off=bool(round_off))
     if "error" in data:
         raise HTTPException(404, data["error"])
 
@@ -3183,7 +3188,8 @@ def target_achievement_pdf(request: Request, date_from: str = "", date_to: str =
 
     def grid(which: int | None):
         got = reports_api.target_vs_achievement(
-            window[0], window[1], cluster=which, month=month)
+            window[0], window[1], cluster=which, month=month,
+            round_off=bool(round_off))
         if "error" in got:
             raise HTTPException(404, got["error"])
         return got

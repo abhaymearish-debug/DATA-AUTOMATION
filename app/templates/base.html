@@ -661,15 +661,24 @@ window.ksdCases = function (value, round) {
 
 // Round off is the default - whole cases are what the office reads out - so
 // the switch starts on and a link decides for itself: one carrying round_off=0
-// opens on the exact figures, anything else on whole ones. Registered here,
-// which is before any page script, so the report's own load() sees the box in
-// the state the link asked for.
-document.addEventListener('DOMContentLoaded', function () {
-  const box = document.getElementById('round');
-  if (!box) return;
-  const asked = new URLSearchParams(location.search).get('round_off');
-  if (asked !== null) box.checked = asked !== '0';
-});
+// opens on the exact figures, anything else on whole ones.
+//
+// This runs the moment the script is reached, not on DOMContentLoaded: this
+// block sits after the report's markup and before its script block, so the
+// box already exists here, and waiting would put the sync AFTER the report's
+// own load() - which reads the box - and the first fetch would go out asking
+// for the wrong thing. DOMContentLoaded is kept only as a second chance for a
+// page that mounts its switch later.
+(function () {
+  function sync(){
+    const box = document.getElementById('round');
+    if (!box) return false;
+    const asked = new URLSearchParams(location.search).get('round_off');
+    if (asked !== null) box.checked = asked !== '0';
+    return true;
+  }
+  if (!sync()) document.addEventListener('DOMContentLoaded', sync);
+})();
 
 // ---------------------------------------------------------------------
 // Source: one chip, every report.

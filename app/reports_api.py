@@ -1080,8 +1080,15 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
 
 
 def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
-               cluster: int | None = None, view: str = "bond") -> dict:
-    """Bond (or warehouse) x day grid with cluster subtotals and a grand total."""
+               cluster: int | None = None, view: str = "bond",
+               round_off: bool = True) -> dict:
+    """Bond (or warehouse) x day grid with cluster subtotals and a grand total.
+
+    Every figure was rounded to a whole case here regardless of what the page
+    asked for, so the round-off switch on both daily reports did nothing at
+    all - a shop issued half a case read the same either way. The switch now
+    reaches the arithmetic, as it does on every other report.
+    """
     if kind not in DAILY_KINDS:
         return {"error": f"Unknown report '{kind}'."}
 
@@ -1185,10 +1192,15 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
         days.append(d)
         d += timedelta(days=1)
 
+    # Round once, for display, and from the unrounded figure every time: a
+    # total is its own sum rounded, never the rounded cells added up.
+    def rounded(v: float) -> float:
+        return half_up(v) if round_off else round(v, 2)
+
     def row(label: str, members: list[str], kind_: str, cl: int | None = None) -> dict:
-        cells = [half_up(sum(exact[(b, d)] for b in members)) for d in days]
+        cells = [rounded(sum(exact[(b, d)] for b in members)) for d in days]
         return {"kind": kind_, "label": label, "cluster": cl, "cells": cells,
-                "total": half_up(sum(exact[(b, d)] for b in members for d in days))}
+                "total": rounded(sum(exact[(b, d)] for b in members for d in days))}
 
     rows: list[dict] = []
     for c in (1, 2, 3):
@@ -2166,8 +2178,17 @@ def _tva_legs(start: date, end: date) -> dict:
 
 
 def _tva_row(label: str, kind: str, cluster: int | None,
-             bonds: list, grid: dict, tgt: dict, cols: list) -> dict:
-    """One printed line. Every cell is the true sum, rounded only here."""
+             bonds: list, grid: dict, tgt: dict, cols: list,
+             round_off: bool = True) -> dict:
+    """One printed line. Every cell is the true sum, rounded only here.
+
+    Rounded only here AND only when asked: this rounded regardless, so the
+    switch on this report did nothing either. A target is typed in whole, but
+    what a bond actually sold need not be.
+    """
+    def show(v: float) -> float:
+        return round(v) if round_off else round(v, 2)
+
     ach_true = {k: sum(grid.get(b, {}).get(k, 0.0) for b in bonds) for k in cols}
     tgt_true = {k: sum(tgt.get(b, {}).get(k, 0.0) for b in bonds) for k in cols}
     ach_total = sum(ach_true.values())
@@ -2177,17 +2198,17 @@ def _tva_row(label: str, kind: str, cluster: int | None,
         "label": label,
         "cluster": cluster,
         "bond": bonds[0] if kind == "bond" else "",
-        "ach": {k: round(v) for k, v in ach_true.items()},
-        "tgt": {k: round(v) for k, v in tgt_true.items()},
-        "ach_total": round(ach_total),
-        "tgt_total": round(tgt_total),
+        "ach": {k: show(v) for k, v in ach_true.items()},
+        "tgt": {k: show(v) for k, v in tgt_true.items()},
+        "ach_total": show(ach_total),
+        "tgt_total": show(tgt_total),
         "ach_exact": round(ach_total, 3),
         "pct": round(ach_total / tgt_total * 100, 2) if tgt_total else None,
     }
 
 
 def target_vs_achievement(start: date, end: date, cluster: int | None = None,
-                          month: str = "") -> dict:
+                          month: str = "", round_off: bool = True) -> dict:
     """The bond x brand grid, in target-and-achieved pairs, by cluster."""
     from . import targets as targets_mod
 
@@ -2219,15 +2240,17 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
         if not members:
             continue
         for bond in members:
-            rows.append(_tva_row(bond, "bond", cid, [bond], grid, tgt, cols))
-        rows.append(_tva_row(f"CLUSTER {cid}", "cluster", cid, members, grid, tgt, cols))
+            rows.append(_tva_row(bond, "bond", cid, [bond], grid, tgt, cols, round_off))
+        rows.append(_tva_row(f"CLUSTER {cid}", "cluster", cid, members, grid, tgt, cols,
+                             round_off))
         shown += members
 
     if cluster in (None, 0):
         for bond in loose:
-            rows.append(_tva_row(bond, "bond", None, [bond], grid, tgt, cols))
+            rows.append(_tva_row(bond, "bond", None, [bond], grid, tgt, cols, round_off))
         shown += loose
-        rows.append(_tva_row("GRAND TOTAL", "grand", None, shown, grid, tgt, cols))
+        rows.append(_tva_row("GRAND TOTAL", "grand", None, shown, grid, tgt, cols,
+                             round_off))
 
     legs = got["legs"]
     return {
