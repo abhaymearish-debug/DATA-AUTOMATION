@@ -395,7 +395,10 @@
      figures came from one pull or three stitched together.
   ------------------------------------------------------------------ */
   .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
-  .srcline { position:relative; display:flex; }
+  /* Shrink-wrapped to the chip. As a plain block flex container this ran the
+     full width of the page - an invisible strip from the chip to the right
+     edge, and hovering anywhere along it opened the panel. */
+  .srcline { position:relative; display:flex; width:fit-content; max-width:100%; }
 
   .srcchip { display:inline-flex; align-items:center; gap:7px; cursor:pointer;
              border:1px solid var(--line); border-radius:999px;
@@ -413,12 +416,12 @@
                 padding:0 4px; border-radius:999px; background:var(--chip);
                 color:var(--chip-ink); font-size:9.5px; font-weight:800;
                 letter-spacing:0; font-variant-numeric:tabular-nums; }
-  .srcline:hover .srcchip, .srcline.on .srcchip {
+  .srcchip:hover, .srcline.on .srcchip {
                 border-color:color-mix(in srgb, var(--blue) 42%, var(--line));
                 box-shadow:0 1px 2px rgba(16,24,40,.06),
                            0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
                 transform:translateY(-1px); }
-  .srcline:hover .srcchip svg, .srcline.on .srcchip svg { opacity:1; }
+  .srcchip:hover svg, .srcline.on .srcchip svg { opacity:1; }
 
   /* ---------- the panel ---------- */
   .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 10px); z-index:40;
@@ -853,8 +856,9 @@ window.ksdSource = function (block, host) {
   const later = () => { if (pinned) return; stop(); timer = setTimeout(shut, 280); };
   const pin = () => { pinned = true; stop(); };
 
-  line.addEventListener('mouseenter', open);
-  line.addEventListener('mouseleave', later);
+  // On the chip and the panel, never on the line around them.
+  chip.addEventListener('mouseenter', open);
+  chip.addEventListener('mouseleave', later);
   pop.addEventListener('mouseenter', open);
   pop.addEventListener('mouseleave', later);
   pop.addEventListener('scroll', pin, {passive: true});
