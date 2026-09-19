@@ -400,106 +400,152 @@
      edge, and hovering anywhere along it opened the panel. */
   .srcline { position:relative; display:flex; width:fit-content; max-width:100%; }
 
-  .srcchip { display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+  .srcchip { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
              border:1px solid var(--line); border-radius:999px;
-             background:linear-gradient(180deg, var(--card),
-                        color-mix(in srgb, var(--card) 94%, var(--bg)));
-             color:var(--ink); padding:5px 12px 5px 9px; font:inherit;
+             background:linear-gradient(180deg,
+                        color-mix(in srgb, var(--card) 97%, #fff),
+                        color-mix(in srgb, var(--card) 92%, var(--bg)));
+             color:var(--ink); padding:6px 13px 6px 10px; font:inherit;
              font-size:11.5px; font-weight:700; letter-spacing:.2px;
-             box-shadow:0 1px 2px rgba(16,24,40,.05);
-             transition:border-color .18s ease, box-shadow .18s ease,
-                        transform .18s cubic-bezier(.2,.7,.3,1); }
+             box-shadow:0 1px 1px rgba(16,24,40,.04),
+                        inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
+             transition:border-color .2s ease, box-shadow .2s ease,
+                        transform .2s cubic-bezier(.2,.7,.3,1); }
   .srcchip svg { width:14px; height:14px; fill:none; stroke:var(--blue);
                  stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;
-                 opacity:.85; transition:opacity .18s ease; }
-  .srcchip .n { display:inline-grid; place-items:center; min-width:16px; height:16px;
-                padding:0 4px; border-radius:999px; background:var(--chip);
+                 opacity:.9; transition:opacity .2s ease, transform .2s ease; }
+  /* The streams behind the figures, as the dots the Status Calendar uses. The
+     chip answers half the question before it is even opened. */
+  .srcchip .dots { display:inline-flex; align-items:center; gap:3px;
+                   margin-left:1px; }
+  .srcchip .dots i { width:5px; height:5px; border-radius:50%;
+                     background:var(--d); box-shadow:0 0 0 1.5px
+                        color-mix(in srgb, var(--d) 22%, transparent); }
+  .srcchip .n { display:inline-grid; place-items:center; min-width:17px; height:17px;
+                padding:0 5px; border-radius:999px;
+                background:color-mix(in srgb, var(--chip) 78%, transparent);
                 color:var(--chip-ink); font-size:9.5px; font-weight:800;
                 letter-spacing:0; font-variant-numeric:tabular-nums; }
   .srcchip:hover, .srcline.on .srcchip {
-                border-color:color-mix(in srgb, var(--blue) 42%, var(--line));
-                box-shadow:0 1px 2px rgba(16,24,40,.06),
-                           0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
+                border-color:color-mix(in srgb, var(--blue) 40%, var(--line));
+                box-shadow:0 2px 6px -2px rgba(16,24,40,.14),
+                           0 0 0 3.5px color-mix(in srgb, var(--blue) 11%, transparent),
+                           inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
                 transform:translateY(-1px); }
-  .srcchip:hover svg, .srcline.on .srcchip svg { opacity:1; }
+  .srcchip:hover svg, .srcline.on .srcchip svg { opacity:1; transform:translateY(-.5px); }
 
   /* ---------- the panel ---------- */
-  .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 10px); z-index:40;
-            width:362px; max-width:calc(100vw - 44px); padding:15px 17px 14px;
-            max-height:min(66vh, 440px); overflow:auto; text-align:left;
+  .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 11px); z-index:40;
+            width:380px; max-width:calc(100vw - 44px); text-align:left;
+            max-height:min(66vh, 452px); overflow:auto;
             /* Scrolling to the end of the list used to hand the rest of the
                scroll to the page. The page moved, the chip slid out from under
                the pointer, hover was lost and the panel shut itself while you
                were reading it. The scroll stops here now. */
             overscroll-behavior:contain;
-            background:var(--card); border:1px solid var(--line); border-radius:16px;
-            box-shadow:0 1px 2px rgba(16,24,40,.06), 0 22px 48px -14px rgba(16,24,40,.28); }
+            background:var(--card); border:1px solid
+                       color-mix(in srgb, var(--line) 86%, transparent);
+            border-radius:18px;
+            box-shadow:0 0 0 1px color-mix(in srgb, var(--ink) 3%, transparent),
+                       0 2px 4px -2px rgba(16,24,40,.10),
+                       0 28px 60px -18px rgba(16,24,40,.34); }
   .srcline.on .srcpop { display:block;
-            animation:ksd-pop .18s cubic-bezier(.2,.7,.3,1) both; }
+            animation:ksd-pop .2s cubic-bezier(.2,.7,.3,1) both; }
   /* The panel stands clear of the chip; this covers the gap so the pointer
      never leaves it on the way across. */
   .srcpop::after { content:''; position:absolute; left:0; right:0; top:100%;
-                   height:12px; }
+                   height:13px; }
   /* Hard against the right edge it opens the other way, never off-screen. */
   .srcline.rt .srcpop { left:auto; right:0; }
-  .srcpop h6 { margin:0 0 14px; font-size:9px; letter-spacing:1px; font-weight:800;
-               text-transform:uppercase; color:var(--muted); opacity:.85; }
+  /* Sticky, because an eighteen-day window scrolls and the heading is what
+     tells you what you are looking at. Frosted so the rail reads through it. */
+  .srcpop h6 { position:sticky; top:0; z-index:2; margin:0;
+               display:flex; align-items:baseline; gap:8px;
+               padding:14px 18px 11px; font-size:8.5px; letter-spacing:1.1px;
+               font-weight:800; text-transform:uppercase; color:var(--muted);
+               background:color-mix(in srgb, var(--card) 88%, transparent);
+               backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+               border-bottom:1px solid color-mix(in srgb, var(--line) 70%, transparent);
+               border-radius:18px 18px 0 0; }
+  .srcpop h6 em { margin-left:auto; font-style:normal; font-size:9.5px;
+                  font-weight:700; letter-spacing:.2px; text-transform:none;
+                  color:color-mix(in srgb, var(--muted) 82%, transparent);
+                  font-variant-numeric:tabular-nums; }
+  .srcpop .body { padding:14px 18px 15px; }
 
   /* ---------- one leg: a label, then its rail ---------- */
-  .srcleg { --tone:var(--blue); margin-top:14px; padding-top:13px;
-             border-top:1px solid var(--line); }
+  .srcleg { --tone:var(--blue); margin-top:15px; padding-top:14px;
+             border-top:1px solid color-mix(in srgb, var(--line) 70%, transparent); }
   .srcleg.g { --tone:var(--gold); }
   .srcleg.s { --tone:var(--ok); }
-  .srcpop > .srcleg:first-of-type { margin-top:0; padding-top:0; border-top:0; }
+  .srcpop .body > .srcleg:first-of-type { margin-top:0; padding-top:0; border-top:0; }
   /* The label is only drawn when a report reads from more than one kind of
      file - which is when which leg a file answered actually matters. */
-  .srcleg .leg { display:flex; align-items:center; gap:8px; margin:0 0 9px;
-                 font-size:9px; font-weight:800; letter-spacing:.9px;
+  .srcleg .leg { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+                 margin:0 0 10px; font-size:8.5px; font-weight:800; letter-spacing:1px;
                  text-transform:uppercase; color:var(--tone); }
-  .srcleg .leg span { font-weight:700; letter-spacing:.2px; text-transform:none;
-                      font-size:10.5px; color:var(--muted); white-space:nowrap;
-                      overflow:hidden; text-overflow:ellipsis; }
+  .srcleg .leg span { font-weight:650; letter-spacing:.1px; text-transform:none;
+                      font-size:10.5px; color:var(--muted); }
 
-  /* The rail. Its line is the stitch: two windows end to end are one run. */
-  .srcrail { position:relative; padding-left:19px; }
-  .srcrail::before { content:''; position:absolute; left:3.5px; top:7px; bottom:8px;
+  /* The rail. Its line is the stitch: two windows end to end are one run, and
+     it fades at both ends so it reads as a thread rather than a border. */
+  .srcrail { position:relative; padding-left:21px; }
+  .srcrail::before { content:''; position:absolute; left:4px; top:9px; bottom:10px;
                      width:1.5px; border-radius:1px;
-                     background:color-mix(in srgb, var(--tone) 26%, transparent); }
+                     background:linear-gradient(180deg,
+                        transparent,
+                        color-mix(in srgb, var(--tone) 30%, transparent) 12%,
+                        color-mix(in srgb, var(--tone) 30%, transparent) 88%,
+                        transparent); }
   .srcrail.one::before { display:none; }
-  .srcitem { position:relative; padding-bottom:12px; }
-  .srcitem:last-child { padding-bottom:0; }
-  .srcitem::before { content:''; position:absolute; left:-19px; top:4.5px;
-                     width:8px; height:8px; border-radius:50%;
-                     background:var(--card); border:2px solid var(--tint, var(--tone));
-                     box-shadow:0 0 0 3px var(--card); }
-  .srcitem .w { display:flex; align-items:center; gap:10px; }
-  .srcitem .w b { font-size:12.5px; font-weight:700; color:var(--ink);
-                  letter-spacing:-.1px; font-variant-numeric:tabular-nums;
+  .srcitem { position:relative; padding:7px 9px 8px; margin:0 -9px;
+             border-radius:11px; transition:background .16s ease; }
+  .srcitem:hover { background:color-mix(in srgb, var(--tint, var(--tone)) 5%,
+                                        transparent); }
+  /* A filled node, ringed in the page colour so the rail passes behind it. */
+  .srcitem::before { content:''; position:absolute; left:-12px; top:12.5px;
+                     width:9px; height:9px; border-radius:50%;
+                     background:var(--tint, var(--tone));
+                     box-shadow:0 0 0 3px var(--card),
+                                0 0 0 4.5px color-mix(in srgb,
+                                   var(--tint, var(--tone)) 20%, transparent); }
+  .srcitem .w { display:flex; align-items:center; gap:12px; }
+  .srcitem .w b { flex:0 1 auto; min-width:0;
+                  font-size:13px; font-weight:700; color:var(--ink);
+                  letter-spacing:-.15px; font-variant-numeric:tabular-nums;
                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* A file with no window of its own leads with its name, or with what it is
      said in words, and neither is a date: it gets to wrap onto a second line
      rather than be cut off. */
   .srcitem.nw .w { align-items:flex-start; }
-  .srcitem.nw .w b { font-size:12px; line-height:1.35; white-space:normal;
+  .srcitem.nw .w b { font-size:12.5px; line-height:1.35; white-space:normal;
                      overflow:visible; text-overflow:clip; }
+  .srcitem.nw::before { top:11px; }
   .srcitem .tag { margin-left:auto; flex:none; font-size:8.5px; font-weight:750;
                   letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
                   background:color-mix(in srgb, var(--chip) 62%, transparent);
-                  border-radius:6px; padding:3px 7px; }
+                  border-radius:7px; padding:3px 8px; }
   /* The upload card it came off, beside the date rather than under it: the
      two together are the whole answer. It wears the colour the Status Calendar
      gives that stream - blue for shop cumulative, sky for shop daily, green
-     for secondary, and so on - so one colour means one thing across the app. */
-  .srcitem .card { margin-left:auto; flex:none; font-size:10.5px; font-weight:700;
-                   letter-spacing:.1px; white-space:nowrap;
-                   border-radius:7px; padding:3px 8px;
-                   color:var(--tint, var(--chip-ink));
-                   background:color-mix(in srgb, var(--tint, var(--chip)) 13%,
-                                        transparent); }
-  .srcitem .f { margin-top:2px; font-size:10.5px; line-height:1.4; color:var(--muted);
-                letter-spacing:.1px; overflow:hidden; text-overflow:ellipsis;
-                white-space:nowrap; }
-
+     for secondary, and so on - so one colour means one thing across the app.
+     A dot rather than a block of colour, so eighteen of them down a panel read
+     as a list and not as a paint chart. */
+  .srcitem .card { margin-left:auto; flex:none; display:inline-flex;
+                   align-items:center; gap:6px; white-space:nowrap;
+                   font-size:10.5px; font-weight:700; letter-spacing:.1px;
+                   border-radius:999px; padding:3.5px 10px 3.5px 8px;
+                   color:color-mix(in srgb, var(--tint, var(--chip-ink)) 82%,
+                                   var(--ink));
+                   background:color-mix(in srgb, var(--tint, var(--chip)) 9%,
+                                        transparent);
+                   box-shadow:inset 0 0 0 1px color-mix(in srgb,
+                              var(--tint, var(--line)) 18%, transparent); }
+  .srcitem .card::before { content:''; width:5px; height:5px; border-radius:50%;
+                           flex:none; background:var(--tint, var(--chip-ink)); }
+  .srcitem .f { margin-top:3px; font-size:10.5px; line-height:1.45;
+                color:var(--muted); letter-spacing:.1px;
+                overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   @media (prefers-reduced-motion: reduce) {
     .controls .bar1 > *, .calpop.on, .menu.open .items { animation:none; }
@@ -784,8 +830,18 @@ window.ksdSource = function (block, host) {
   const TONE = {gold: 'g', green: 's'};
 
   const body = legs.map(l => {
-    const head = legs.length < 2 ? '' :
-      `<div class="leg">${esc(l.leg)}${l.note ? `<span>${esc(l.note)}</span>` : ''}</div>`;
+    // Where every file in a leg came off the same card - which is most legs,
+    // and always the long ones - the card is named once at its head instead of
+    // on all eighteen rows. Eighteen identical pills down a panel is a paint
+    // chart, not an answer. A leg that mixes cards keeps them on the rows,
+    // because there the card is what tells one row from another.
+    const cards = [...new Set(l.items.map(c => c.stream || ''))];
+    const one = cards.length === 1 && cards[0];
+    const legTint = one ? (l.items.find(c => c.tint) || {}).tint : null;
+    const head = (one || legs.length > 1)
+      ? `<div class="leg"${legTint ? ` style="--tone:${esc(legTint)}"` : ''}>` +
+        `${esc(one || l.leg)}${l.note ? `<span>${esc(l.note)}</span>` : ''}</div>`
+      : '';
     const rows = l.items.map(c => {
       const name = String(c.name || '').replace(/\.(xlsx?|csv|pdf)$/i, '');
       // A file that answers a window leads with the window and names itself
@@ -800,8 +856,8 @@ window.ksdSource = function (block, host) {
       // The card carries the colour the Status Calendar gives that stream, so
       // the same upload reads as the same thing in both places.
       const tint = c.tint ? ` style="--tint:${esc(c.tint)}"` : '';
-      const card = c.stream
-        ? `<span class="card"${tint}>${esc(c.stream)}</span>`
+      const card = one ? ''
+        : c.stream ? `<span class="card"${tint}>${esc(c.stream)}</span>`
         : (c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '');
       // A count or a word about the file, where there is one to say - never
       // the file name, which would only repeat the date above it.
@@ -818,6 +874,18 @@ window.ksdSource = function (block, host) {
         <div class="srcrail${chained ? '' : ' one'}">${rows}</div></div>`;
   }).join('');
 
+  // The streams involved, in the order they first appear, as the colours the
+  // Status Calendar gives them. Four is the most that reads as dots rather
+  // than as confetti; past that the count beside them does the talking.
+  const seen = [];
+  legs.forEach(l => l.items.forEach(c => {
+    if (c.tint && !seen.includes(c.tint)) seen.push(c.tint);
+  }));
+  const dots = seen.length
+    ? `<span class="dots">${seen.slice(0, 4)
+        .map(t => `<i style="--d:${esc(t)}"></i>`).join('')}</span>` : '';
+  const many = count === 1 ? '1 file' : `${count} files`;
+
   line.innerHTML =
     `<button type="button" class="srcchip" aria-expanded="false">
        <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -825,9 +893,12 @@ window.ksdSource = function (block, host) {
          <path d="M3 12.5 12 17l9-4.5"></path>
          <path d="M3 17 12 21.5 21 17"></path>
        </svg>
-       <span>Source</span>${count > 1 ? `<span class="n">${count}</span>` : ''}
+       <span>Source</span>${dots}${count > 1 ? `<span class="n">${count}</span>` : ''}
      </button>
-     <div class="srcpop"><h6>Where these figures come from</h6>${body}</div>`;
+     <div class="srcpop">
+       <h6>Where these figures come from<em>${esc(many)}</em></h6>
+       <div class="body">${body}</div>
+     </div>`;
 
   const chip = line.querySelector('.srcchip');
   const pop = line.querySelector('.srcpop');
