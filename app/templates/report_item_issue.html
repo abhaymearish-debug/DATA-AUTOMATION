@@ -151,6 +151,7 @@
   <thead><tr><th>Warehouse</th></tr></thead>
   <tbody><tr><td>Loading&hellip;</td></tr></tbody>
 </table></div>
+<div class="status srcline" id="srcLine" hidden></div>
 
 <div class="veil" id="indVeil" onclick="if(event.target===this)closeInd()">
   <div class="sheet">
@@ -221,7 +222,7 @@ async function load(){
     msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
     grid.querySelector('thead').innerHTML = '<tr><th>Warehouse</th></tr>';
     grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
-    return;
+    srcLine.hidden = true; return;
   }
   DATA = d;
 
@@ -241,6 +242,7 @@ async function load(){
 
   xl.href = '/reports/secondary-analysis/export.xlsx?' + params().toString();
   render(d);
+  ksdSource(d.source_block);
 }
 
 function head(d){

@@ -25,7 +25,6 @@
           font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
           cursor:pointer; white-space:nowrap; }
   .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
-  #srcSay b { font-weight:700; color:var(--ink); }
   .warn { display:inline-block; font-size:12px; font-weight:650; color:#92400E;
           background:#FEF3C7; border:1px solid #FDE68A; border-radius:20px;
           padding:4px 11px; }
@@ -305,7 +304,7 @@
   <div class="sp"><span>Opening</span><span>Receipt</span><span>Sales</span><span>Closing</span></div>
 </div>
 <div id="list"><div class="bd"><div class="empty">Loading…</div></div></div>
-<div class="status" id="srcSay"></div>
+<div class="status srcline" id="srcLine" hidden></div>
 {% endblock %}
 
 {% block scripts %}
@@ -392,7 +391,7 @@ function syncLinks(){
 function fail(msg){
   document.getElementById('list').innerHTML =
     '<div class="bd"><div class="empty">' + msg + '</div></div>';
-  srcSay.textContent = '';
+  srcLine.hidden = true;
 }
 
 const CAL_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' +
@@ -427,7 +426,7 @@ function noData(d){
       '<p>' + esc(d.error || '') + '</p>' +
       '<div class="acts">' + acts + '</div>' + have +
     '</div></div>';
-  srcSay.textContent = '';
+  srcLine.hidden = true;
   lede.hidden = true;
   bar2.hidden = true;
   dlBar.hidden = true;
@@ -558,15 +557,7 @@ function render(){
   document.getElementById('list').innerHTML = html;
   // Say which files answered this window - stitching 1-16 to 17-24 is normal
   // here, not an edge case, so it should be visible rather than implied.
-  const chain = DATA.chain || [];
-  srcSay.innerHTML = chain.length > 1
-    ? `Stitched from <b>${chain.length} uploads</b>: ` +
-      chain.map(c => esc(c.name.replace(/\.xlsx$/i, ''))).join(' + ') + '.'
-    : (chain.length === 1
-        ? (chain[0].kind === 'cumulative'
-            ? `From <b>${esc(chain[0].name.replace(/\.xlsx$/i, ''))}</b>.`
-            : 'From one daily upload.')
-        : '');
+  ksdSource(DATA.source_block);
 }
 
 function detailRows(code){

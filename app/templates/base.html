@@ -360,6 +360,69 @@
   .searchwrap .ic { transition:color .18s ease; }
   .searchwrap:focus-within .ic { color:var(--blue); }
 
+  /* ------------------------------------------------------------------
+     Source: where a report's figures came from.
+
+     Every report answers from files somebody uploaded, and more often than
+     not from several - a window to the 18th is 1-16 stitched to 17-18, and
+     a liquidation figure is shop files on one side and dispatch raws on the
+     other. That is worth being able to check and not worth a paragraph under
+     every table, so it folds into one chip that opens on hover or a click.
+  ------------------------------------------------------------------ */
+  .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
+  .srcline { position:relative; display:flex; }
+  .srcchip { display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+             border:1px solid var(--line); background:var(--card); color:var(--muted);
+             border-radius:999px; padding:5px 12px 5px 10px; font:inherit;
+             font-size:11.5px; font-weight:700; letter-spacing:.3px;
+             box-shadow:0 1px 2px rgba(16,24,40,.05);
+             transition:color .16s ease, border-color .16s ease, background .16s ease; }
+  .srcchip svg { width:13px; height:13px; fill:none; stroke:currentColor;
+                 stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .srcchip .n { display:inline-grid; place-items:center; min-width:15px; height:15px;
+                padding:0 4px; border-radius:999px; background:var(--chip);
+                color:var(--chip-ink); font-size:10px; font-weight:800; }
+  .srcline:hover .srcchip, .srcline.on .srcchip { color:var(--ink);
+                border-color:color-mix(in srgb, var(--blue) 35%, var(--line));
+                background:var(--hover); }
+
+  .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 9px); z-index:40;
+            min-width:288px; max-width:430px; padding:13px 15px 12px;
+            max-height:min(64vh, 430px); overflow:auto;
+            background:var(--card); border:1px solid var(--line); border-radius:12px;
+            box-shadow:0 16px 38px rgba(16,24,40,.18); text-align:left; }
+  .srcline:hover .srcpop, .srcline.on .srcpop { display:block;
+            animation:ksd-pop .16s cubic-bezier(.2,.7,.3,1) both; }
+  /* Near the right edge the popup hangs the other way, so it never runs off. */
+  .srcline.rt .srcpop { left:auto; right:0; }
+  .srcpop h6 { margin:0 0 9px; font-size:9.5px; letter-spacing:.8px; font-weight:800;
+               text-transform:uppercase; color:var(--muted); }
+  /* A leg heading: only drawn when a report reads from more than one kind of
+     file, which is when knowing which leg a file answered actually matters. */
+  .srcpop .leg { display:flex; align-items:center; gap:7px; margin:10px 0 5px;
+                 padding-top:9px; border-top:1px solid var(--line);
+                 font-size:10.5px; font-weight:800; letter-spacing:.3px; color:var(--ink); }
+  .srcpop > div:first-of-type .leg { margin-top:0; padding-top:0; border-top:0; }
+  .srcpop .leg i { width:6px; height:6px; border-radius:50%; background:var(--blue); flex:none; }
+  .srcpop .leg.g i { background:var(--gold); }
+  .srcpop .leg.s i { background:#3F8600; }
+  .srcpop .leg span { font-weight:650; color:var(--muted); letter-spacing:0; }
+  .srcpop .seg1 { display:flex; gap:9px; padding:6px 0; border-top:1px solid var(--line); }
+  .srcpop .seg1.first { border-top:0; padding-top:0; }
+  .srcpop .dot { width:7px; height:7px; border-radius:50%; margin-top:5px; flex:none;
+                 background:var(--blue); }
+  .srcpop .dot.daily { background:var(--gold); }
+  /* Inside a leg the files take that leg's colour, so three legs read as
+     three groups rather than one long list of blue dots. */
+  .srcpop .g1 .dot { background:var(--gold); }
+  .srcpop .s1 .dot { background:#3F8600; }
+  .srcpop .win { font-size:12.5px; font-weight:700; color:var(--ink); }
+  .srcpop .file { font-size:11px; color:var(--muted); word-break:break-word; }
+  .srcpop .kind { font-size:10px; font-weight:700; letter-spacing:.4px;
+                  text-transform:uppercase; color:var(--muted); }
+  .srcpop .say { margin-top:9px; padding-top:9px; border-top:1px solid var(--line);
+                 font-size:11.5px; color:var(--muted); line-height:1.5; }
+
   @media (prefers-reduced-motion: reduce) {
     .controls .bar1 > *, .calpop.on, .menu.open .items { animation:none; }
     .act, .btn, .seg button, .fbar .fitem, .fbar .selw i, .fbar .fi-v i,
@@ -554,6 +617,111 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!box) return;
   const asked = new URLSearchParams(location.search).get('round_off');
   if (asked !== null) box.checked = asked !== '0';
+});
+
+// ---------------------------------------------------------------------
+// Source: one chip, every report.
+//
+// A report is only ever as good as the files behind it, and on this app a
+// window almost never maps to one file - KSBC caps a pull at sixteen days,
+// so anything longer is the first-half file plus the ones after it, and a
+// liquidation or target figure reads from two different streams at once.
+// The chip says Source; what it opens names each file, the days it answered
+// for, and how it reached the app.
+//
+//   block = {legs: [{leg, note, tone, items: [{from, to, kind, name}]}], say}
+//
+// A single-leg block drops the heading: on a cumulative report there is only
+// one kind of file, and a label above it would say nothing the chip does not.
+// ---------------------------------------------------------------------
+window.ksdDate = function (iso) {
+  if (!iso) return '';
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  return (y && m && d) ? `${d} ${M[m - 1]} ${y}` : String(iso);
+};
+
+window.ksdSource = function (block, host) {
+  const line = typeof host === 'string' ? document.getElementById(host)
+                                        : (host || document.getElementById('srcLine'));
+  if (!line) return;
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const legs = ((block && block.legs) || []).filter(l => l && (l.items || []).length);
+  const count = legs.reduce((n, l) => n + l.items.length, 0);
+  line.hidden = !count;
+  line.classList.remove('on');
+  if (!count) { line.innerHTML = ''; return; }
+
+  // One leg needs no heading; several do, because which file answered which
+  // half of the arithmetic is the whole question being asked.
+  const TONE = {gold: 'g', green: 's'};
+  const body = legs.map(l => {
+    const head = legs.length < 2 ? '' :
+      `<div class="leg ${TONE[l.tone] || ''}"><i></i>${esc(l.leg)}` +
+      (l.note ? ` <span>${esc(l.note)}</span>` : '') + '</div>';
+    const rows = l.items.map((c, i) => {
+      const name = String(c.name || '').replace(/\.(xlsx?|csv|pdf)$/i, '');
+      // A file that answers a window leads with the window and names itself
+      // underneath; one that has no window of its own leads with its name.
+      const dated = !!(c.from || c.to || c.title);
+      const win = dated
+        ? ((c.from || c.to)
+            ? `${esc(ksdDate(c.from))}${c.to && c.to !== c.from ? ' – ' + esc(ksdDate(c.to)) : ''}`
+            : esc(c.title))
+        : esc(name);
+      const kind = c.kind ? `<span class="kind">${esc(c.kind)}</span>` : '';
+      return `<div class="seg1${i === 0 ? ' first' : ''}">
+          <span class="dot ${c.kind === 'daily upload' ? 'daily' : ''}"></span>
+          <span>
+            <div class="win">${win}${dated && kind ? ' · ' + kind : ''}</div>
+            ${dated ? (name ? `<div class="file">${esc(name)}</div>` : '')
+                    : (kind ? `<div>${kind}</div>` : '')}
+          </span></div>`;
+    }).join('');
+    return `<div class="${TONE[l.tone] || 'b'}1">${head}${rows}</div>`;
+  }).join('');
+
+  line.innerHTML =
+    `<button type="button" class="srcchip" aria-expanded="false">
+       <svg viewBox="0 0 24 24" aria-hidden="true">
+         <path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"></path>
+         <path d="M3 12.5 12 17l9-4.5"></path>
+         <path d="M3 17 12 21.5 21 17"></path>
+       </svg>
+       <span>Source</span>${count > 1 ? `<span class="n">${count}</span>` : ''}
+     </button>
+     <div class="srcpop"><h6>Where these figures come from</h6>${body}` +
+    ((block && block.say) ? `<div class="say">${esc(block.say)}</div>` : '') + '</div>';
+
+  line.querySelector('.srcchip').addEventListener('click', () => {
+    line.classList.toggle('on');
+    // Hard against the right edge it would open off-screen, so it flips.
+    const pop = line.querySelector('.srcpop');
+    line.classList.toggle('rt', line.getBoundingClientRect().left + pop.offsetWidth
+                                > document.documentElement.clientWidth - 16);
+  });
+};
+
+// Pinned open by a click, closed the way everything else on the page closes.
+document.addEventListener('click', e => {
+  if (e.target.closest('.srcline')) return;
+  document.querySelectorAll('.srcline.on').forEach(l => l.classList.remove('on'));
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape')
+    document.querySelectorAll('.srcline.on').forEach(l => l.classList.remove('on'));
+});
+
+// Server-rendered pages hand their block over in a script tag rather than
+// fetching it: the figures are already on the page, and so is their source.
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('script[type="application/json"][data-source]').forEach(tag => {
+    const line = document.getElementById(tag.dataset.source);
+    if (!line) return;
+    try { ksdSource(JSON.parse(tag.textContent || '{}'), line); } catch (e) {}
+  });
 });
 </script>
 {% block scripts %}{% endblock %}

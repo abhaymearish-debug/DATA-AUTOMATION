@@ -277,6 +277,7 @@
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
+<div class="status srcline" id="srcLine" hidden></div>
 
 <!-- typing the month's targets -->
 <div class="veil" id="edVeil" onclick="if(event.target===this)closeEditor()">
@@ -334,6 +335,7 @@ async function load(){
   }
   if (d.error){
     msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
+    srcLine.hidden = true;
     grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
     grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
     return;
@@ -361,6 +363,8 @@ async function load(){
   dlAll.href  = '/reports/target-achievement/export.pdf?' + q + '&scope=all';
   dlView.href = '/reports/target-achievement/export.pdf?' + q + '&scope=current';
   render(d);
+  // Achievement adds two streams together, so its source is two legs.
+  ksdSource(d.source_block);
 }
 
 /* How much of the target month the chosen window has used up. A bond at 55%

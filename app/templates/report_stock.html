@@ -289,6 +289,7 @@
   <thead><tr><th>Warehouse</th><th>Physical</th><th>Allotable</th><th>Pending</th></tr></thead>
   <tbody id="list"><tr><td class="item" colspan="4"><div class="empty">Loading…</div></td></tr></tbody>
 </table></div>
+<div class="status srcline" id="srcLine" hidden></div>
 <div class="status" id="foot"></div>
 {% endblock %}
 
@@ -336,10 +337,12 @@ async function load(){
   if (d.error){
     msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`;
     list.innerHTML = '<tr><td class="item" colspan="4"><div class="empty">No data</div></td></tr>';
-    foot.textContent = ''; return;
+    foot.textContent = ''; srcLine.hidden = true; return;
   }
   msg.innerHTML = '';
   DATA = d;
+  // A stock position is a photograph of one day, so the chip names the day.
+  ksdSource(d.source_block);
 
   // Refreshed on EVERY load, not just the first: a day uploaded while this page
   // was open has to appear in the calendar without a hard reload.

@@ -490,7 +490,42 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
         "blanks": sorted(blanks, key=lambda b: -b["prior_mq"]),
         "unknown_codes": sorted(unknown_codes),
         "months": months(),
+        "source_block": source_for(month, prior),
     }
+
+
+def source_for(month: str, prior: str = "") -> dict:
+    """The sheets behind one month's instruction, and the month beside it.
+
+    KSBC exports purchase instruction one shop at a time, so a month is a few
+    hundred files that all say the same thing about themselves. The month, the
+    count filed and how many came back blank is the answer worth reading; the
+    Receipt button beside this opens the file-by-file version.
+    """
+    from . import reports_api as _r
+
+    def leg(key: str, label: str, tone: str = "") -> dict:
+        folder = month_dir(key) if key else None
+        if not folder or not folder.is_dir():
+            return {}
+        files = [f for f in folder.glob("*.xls*") if not f.name.startswith("~$")]
+        if not files:
+            return {}
+        filed = load(key)
+        blank = sum(1 for d in filed if _blank_of(d))
+        note = f"{len(files)} shop sheet{'' if len(files) == 1 else 's'} filed"
+        if blank:
+            note += f", {blank} blank"
+        return _r.src_leg(label, [{"title": month_label(key), "kind": note,
+                                   "name": ""}], tone=tone)
+
+    legs = [l for l in (leg(month, "Purchase instruction"),
+                        leg(prior, "Compared against", "green")) if l]
+    return _r.src_block(
+        legs,
+        "One KSBC export per shop, filed under the month it names. A blank sheet "
+        "is a shop that returned no instruction - it is counted as blank, never "
+        "as a zero.")
 
 
 def _receipt(key: str, by_shop: dict, files: int, problems: list) -> dict:

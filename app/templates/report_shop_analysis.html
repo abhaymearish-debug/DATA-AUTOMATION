@@ -23,8 +23,6 @@
           font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
           cursor:pointer; white-space:nowrap; }
   .fi-v i { font-style:normal; font-size:9px; color:var(--muted); }
-  .warn { display:inline-block; font-size:12px; font-weight:650; color:#92400E;
-          background:#FEF3C7; border:1px solid #FDE68A; border-radius:20px; padding:4px 11px; }
   .selw { position:relative; display:flex; align-items:center; }
   .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
                  font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
@@ -259,9 +257,13 @@
   </table>
 </div>
 
+<div class="status srcline" id="srcLine" hidden></div>
+{# The figures are already on the page and so is their source, so the block is
+   handed over here rather than fetched. #}
+<script type="application/json" data-source="srcLine">{{ source_block|tojson }}</script>
+
 <p class="status">
   {% if prev %}Compared against {{ prev.short }}.{% else %}No matching window last month, so LM reads zero.{% endif %}
-  {% if chain and chain|length > 1 %}<span class="warn">stitched from {{ chain|length }} uploads</span>{% endif %}
   Cases{% if round_off %}, rounded to whole numbers{% endif %}. Every figure is rounded from its
   own unrounded total, so a column can read one apart from the sum of the rows above it and both
   be right.

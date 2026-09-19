@@ -1670,12 +1670,34 @@ def shop_cumulative_api(request: Request, date_from: str = "", date_to: str = ""
     if "error" not in data:
         data["source"] = win["source"]
         data["chain"] = win.get("chain", [])
+        data["source_block"] = _shop_source(win)
         data["all_warehouses"] = data.pop("warehouses", [])
         data["cluster"] = cluster
         data["bond"] = (bond or "").upper()
         data["warehouse"] = (warehouse or "").upper()
         data["calendar"] = _calendar_days()
     return JSONResponse(data)
+
+
+
+def _shop_source(win: dict, prev: dict | None = None) -> dict:
+    """Which uploads answered a shop window - and the one it is set against.
+
+    A window to the 18th is normally 1-16 stitched to 17-18, because KSBC caps
+    a pull at sixteen days. That is worth being able to check on any report
+    that reads these files, so both shop reports build it the same way.
+    """
+    now = reports_api.src_windows(win.get("chain", []))
+    legs = [reports_api.src_leg("Shop sales (KSBC)", now,
+                                win["period"]["short"] if win.get("period") else "")]
+    if prev and prev.get("chain"):
+        legs.append(reports_api.src_leg(
+            "Shop sales - set against", reports_api.src_windows(prev["chain"]),
+            prev["period"]["short"] if prev.get("period") else "", "green"))
+    say = reports_api.src_stitched(len(now)) if len(legs) == 1 else (
+        "Each side of the comparison is answered by its own uploads. "
+        + reports_api.src_stitched(len(now)))
+    return reports_api.src_block(legs, say)
 
 
 def _calendar_days() -> dict:
@@ -2018,6 +2040,8 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
          "round_off": bool(round_off),
          "calendar": _calendar_days(),
          "source": win.get("source", ""), "chain": win.get("chain", []),
+         "source_block": (_shop_source(win, _previous_window(chosen))
+                          if chosen else {"legs": [], "say": ""}),
          "no_data": win.get("error", ""),
          "asked": _asked_period(date_from, date_to, period),
          "suggest": _suggested_window()},

@@ -224,6 +224,39 @@ def store(paths: list[Path], expect: tuple | None = None) -> dict:
             "undated": len(undated), "skipped": skipped}
 
 
+def source_for(key: str, prior: str = "") -> dict:
+    """Which pulls answered this report - one per period, not one per file.
+
+    A pull is fourteen-odd warehouse exports that all cover the same range,
+    so naming every file would be fourteen lines saying the same thing. The
+    period, the count and the warehouses behind it is the whole answer.
+    """
+    from . import reports_api as _r
+
+    def leg(k: str, label: str, tone: str = "") -> dict:
+        span = period_of(k) if k else None
+        if not span:
+            return {}
+        folder = root() / k
+        files = sorted(folder.glob("*.xls*")) if folder.is_dir() else []
+        if not files:
+            return {}
+        houses = sorted({warehouse_of(parse_file(f).get("warehouse") or "")
+                         for f in files} - {""})
+        return _r.src_leg(label, [{
+            "from": span[0].isoformat(), "to": span[1].isoformat(),
+            "kind": f"{len(files)} warehouse export{'' if len(files) == 1 else 's'}",
+            "name": ", ".join(houses) if houses else folder.name,
+        }], tone=tone)
+
+    legs = [l for l in (leg(key, "Item issue - this period"),
+                        leg(prior, "Item issue - set against", "green")) if l]
+    return _r.src_block(
+        legs,
+        "KSBC's item issue consolidation, one export per warehouse. The industry "
+        "figure beside it is typed in - no export carries it.")
+
+
 _CACHE: dict = {}
 _LOCK = threading.Lock()
 

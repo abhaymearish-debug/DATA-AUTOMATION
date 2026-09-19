@@ -135,6 +135,7 @@
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
+<div class="status srcline" id="srcLine" hidden></div>
 <div class="status" id="foot"></div>
 {% endblock %}
 
@@ -176,7 +177,7 @@ async function load(){
   if (d.error){
     msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`;
     grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
-    foot.textContent = ''; return;
+    foot.textContent = ''; srcLine.hidden = true; return;
   }
   msg.innerHTML = '';
   SPAN = d.span;
@@ -218,6 +219,8 @@ function render(d){
   if (d.unmapped.length)
     notes.push(`${d.unmapped.length} outlet(s) with no bond in master data.`);
   foot.textContent = notes.join(' ');
+  // Which files answered the days on screen, folded into one chip.
+  ksdSource(d.source_block);
 }
 
 function grab(url){ const a=document.createElement('a'); a.href=url;

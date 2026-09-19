@@ -176,6 +176,7 @@
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
+<div class="status srcline" id="srcLine" hidden></div>
 <div class="status" id="foot"></div>
 {% endblock %}
 
@@ -239,7 +240,7 @@ async function load(refresh){
   if (d.error){
     msg.innerHTML = `<div class="banner">${escapeHtml(d.error)}</div>`;
     grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
-    foot.textContent = ''; return;
+    foot.textContent = ''; srcLine.hidden = true; return;
   }
   msg.innerHTML = d.unmapped && d.unmapped.length
     ? `<div class="note"><strong>${d.unmapped.length} outlet(s)</strong> dispatched but not found in master
@@ -264,8 +265,10 @@ async function load(refresh){
   Cal.setData(d.days_with_data || [], []);
   Cal.init(FROM, TO, onPick);
   render(d);
-  // The row count, the brand columns and the period are all on screen already.
+  // The row count, the brand columns and the period are all on screen already;
+  // which files answered for them is not, so that goes in the chip.
   foot.textContent = '';
+  ksdSource(d.source_block);
 }
 
 function fill(sel, values, placeholder){

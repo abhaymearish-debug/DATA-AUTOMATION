@@ -209,6 +209,10 @@
   </table>
 </div>
 
+<div class="status srcline" id="srcLine" hidden></div>
+{# Server-rendered, so the block travels with the page rather than being fetched. #}
+<script type="application/json" data-source="srcLine">{{ data.source_block|default({})|tojson }}</script>
+
 <p class="status">
   Cases. <strong>Total liquidation is shop plus Fed/Bar</strong>, not shop plus secondary — secondary
   is stock moving down the chain, so adding it would count every case a shop both received and sold.

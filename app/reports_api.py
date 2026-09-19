@@ -31,6 +31,66 @@ BOND_CLUSTERS: dict[int, list[str]] = {
     3: ["KANNUR", "KOZHIKODE", "PALAKKAD", "PERINTHALMANNA"],
 }
 
+# ---------------------------------------------------------------------------
+# Where a report's figures came from
+# ---------------------------------------------------------------------------
+#
+# Every report on this app answers from files somebody uploaded, and rarely
+# from just one. The KSBC portal caps a pull at sixteen days, so any window
+# longer than that is the first-half file stitched to the ones after it; and
+# a liquidation or target figure reads two streams at once - what the shops
+# sold on one side, what was dispatched on the other.
+#
+# Which file answered which part is a question you ask occasionally and want
+# answered exactly. These build the block the Source chip reads: legs, each
+# holding the files it drew on, and one plain sentence at the end.
+
+SRC_KIND = {"cumulative": "cumulative upload", "daily": "daily upload"}
+
+
+def src_windows(chain: list) -> list:
+    """Chain segments - the files that tile a window - as the chip reads them."""
+    out = []
+    for seg in chain or []:
+        name = seg.get("name") or Path(seg["path"]).name
+        out.append({"from": str(seg["from"])[:10], "to": str(seg["to"])[:10],
+                    "kind": SRC_KIND.get(seg.get("kind", ""), seg.get("kind", "")),
+                    "name": name})
+    return out
+
+
+def src_files(names, kind: str = "raw upload", title: str = "") -> list:
+    """Loose files with no window of their own - a workbook, a month's raws."""
+    return [{"title": title, "kind": kind, "name": str(n)}
+            for n in (names or []) if n]
+
+
+def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
+    return {"leg": label, "note": note, "tone": tone, "items": items}
+
+
+def src_block(legs: list, say: str = "") -> dict:
+    """One report's provenance. Empty legs drop out; an empty block hides."""
+    kept = [l for l in legs if l and l.get("items")]
+    return {"legs": kept, "say": say} if kept else {"legs": [], "say": ""}
+
+
+def src_secondary(sources: list) -> dict:
+    """The dispatch leg: the month's built workbook, then the raws after it."""
+    book = find_secondary_workbook()
+    items = [{"kind": "built workbook" if (book is not None and n == book.name)
+                      else "raw upload", "name": n} for n in (sources or [])]
+    return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
+
+
+def src_stitched(n: int) -> str:
+    """The sentence under a window answered by more than one file."""
+    if n > 1:
+        return (f"{n} uploads, stitched end to end - KSBC caps a pull at 16 days, "
+                f"so a longer window is the first-half file plus the ones after it.")
+    return "One upload answers this whole window."
+
+
 
 def bond_clusters() -> dict[int, list[str]]:
     """The live split, which Settings can change, falling back to the above."""
@@ -466,6 +526,11 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
         "bonds": sorted({l["bond"] for l in lines if l["bond"]}),
         "warehouses": sorted({l["warehouse"] for l in lines if l["warehouse"]}),
         "unmapped": sorted({l["shop"] or l["shop_code"] for l in sel if not l["bond"]}),
+        "source_block": src_block(
+            [src_secondary(sources)],
+            "The month's analysis workbook is the authority where it exists; days it "
+            "does not cover are filled from the raws themselves, newest first, so no "
+            "invoice is counted twice."),
     }
 
 
@@ -610,6 +675,13 @@ def warehouse_stock(as_of: str = "", cluster: int | None = None,
         "warehouses": warehouses,
         "grand": grand,
         "all_warehouses": sorted({r["warehouse"] for r in rows if r["date"] == day}),
+        "source_block": src_block(
+            [src_leg("Warehouse stock (Bevco)",
+                     [{"from": day, "to": day, "kind": "daily snapshot",
+                       "name": stock_history_path().name}])],
+            "A stock position is a photograph, not a total: this is the snapshot "
+            "the daily build filed for that date. The Bevco exports themselves are "
+            "deleted after ingest, so the history file is the record."),
     }
 
 
@@ -840,6 +912,35 @@ def _latest_month(days) -> tuple:
     return min(inside), max(inside)
 
 
+def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
+    """What answered a daily grid - one day at a time, or a month's raws."""
+    if kind == "secondary":
+        return src_block(
+            [src_secondary(sources)],
+            "A day reports as soon as its raw is uploaded; the month's workbook "
+            "takes over for the days it covers.")
+
+    # Shop sales are stored a day at a time, so the grid's provenance is
+    # literally the files for the days on screen - which also makes a gap in
+    # the middle of a window visible as a day with no file behind it.
+    files = {d: path for d, path in shop_day_files().items() if lo <= d <= hi}
+    if files:
+        items = [{"from": d.isoformat(), "to": d.isoformat(), "kind": "daily upload",
+                  "name": files[d].name} for d in sorted(files)]
+        gaps = (hi - lo).days + 1 - len(items)
+        return src_block(
+            [src_leg("Shop sales (KSBC)", items, "what the shops sold")],
+            f"{len(items)} day file{'' if len(items) == 1 else 's'} across this window"
+            + (f"; {gaps} day{'' if gaps == 1 else 's'} in it has nothing uploaded yet, "
+               f"which is why {'it reads' if gaps == 1 else 'they read'} zero." if gaps > 0
+               else " - every day in it is accounted for."))
+    if book is not None and not book.is_dir():
+        return src_block([src_leg("Shop sales (KSBC)",
+                                  [{"kind": "month workbook", "name": book.name}])],
+                         "Read from the month's workbook: these days predate per-day storage.")
+    return src_block([])
+
+
 def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
                cluster: int | None = None, view: str = "bond") -> dict:
     """Bond (or warehouse) x day grid with cluster subtotals and a grand total."""
@@ -983,6 +1084,8 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
                    else "uploaded raw files"),
         "unmapped": sorted({l.get("shop_code", "") for l in lines
                             if l["bond"] not in of_bond and l.get("shop_code")}),
+        "source_block": _daily_source(kind, sources if kind == "secondary" else [],
+                                      book, lo, hi),
     }
 
 # ---------------------------------------------------------------------------
@@ -1588,6 +1691,34 @@ def _dispatch_by_bond(start: date, end: date) -> tuple[dict, dict, int]:
     return every, fedbar, len(days)
 
 
+def _liq_source(start: date, end: date, p_start, p_end) -> dict:
+    """Both windows, both legs. A scorecard reads four sets of files at once.
+
+    Shop and dispatch are different streams stored in different places, and
+    each side of the comparison is answered by its own files - which is worth
+    being able to see when the two sides are not the same length.
+    """
+    _l, sec = secondary_lines()
+
+    def shop(a, b):
+        plan = plan_window(a, b)
+        return src_windows(plan.get("chain", []))
+
+    legs = [src_leg("Shop sales (KSBC)", shop(start, end),
+                    f"{period_for(start, end)['short']}")]
+    if p_start:
+        was = shop(p_start, p_end)
+        if was:
+            legs.append(src_leg("Shop sales - set against",
+                                was, period_for(p_start, p_end)["short"], "green"))
+    legs.append(src_secondary(sec))
+    return src_block(
+        legs,
+        "Shop liquidation comes off the KSBC cumulative files; secondary and "
+        "Fed/Bar off the dispatch raws. Total liquidation is shop plus Fed/Bar, "
+        "never shop plus secondary.")
+
+
 def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
     """The liquidation scorecard: this window against another.
 
@@ -1664,6 +1795,7 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
         "previous": period_for(p_start, p_end) if p_start else None,
         "days": {"span": span, "prev_span": p_span,
                  "dispatch": [disp_days_now, disp_days_was]},
+        "source_block": _liq_source(start, end, p_start, p_end),
     }
 
 # ---------------------------------------------------------------------------
@@ -1775,6 +1907,26 @@ def upload_calendar() -> dict:
 # that did not equal the column added up by hand. Round once, for display.
 
 
+def _tva_source(sources: dict) -> dict:
+    """Achievement is two legs added together, so its source is two legs.
+
+    What the shops sold comes off the KSBC cumulative files; what went
+    straight to Fed and Bar outlets never passes through a shop and comes off
+    the dispatch raws. Targets are typed in rather than uploaded, so they are
+    named but carry no file.
+    """
+    legs = [src_leg("Shop sales (KSBC)", src_windows(sources.get("chain", [])),
+                    "what the shops sold")]
+    invoice = sources.get("invoice") or []
+    if invoice:
+        legs.append(src_secondary(invoice))
+    return src_block(
+        legs,
+        "Achievement is shop sales plus Fed/Bar invoice. KSBC-category dispatch "
+        "is deliberately left out - that stock is already counted where the shop "
+        "sold it. Targets are entered in the app, not uploaded.")
+
+
 def _tva_legs(start: date, end: date) -> dict:
     """Achievement per (bond, family), and what each leg contributed."""
     master = load_master()
@@ -1788,6 +1940,7 @@ def _tva_legs(start: date, end: date) -> dict:
     if "error" in win:
         return {"error": win["error"]}
     sources["tertiary"] = [seg["name"] for seg in win.get("chain", [])]
+    sources["chain"] = win.get("chain", [])
     for key, cell in win["lines"].items():
         sold = cell[2]
         if not sold:
@@ -1896,6 +2049,7 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
         "legs": {k: round(v, 3) for k, v in legs.items()},
         "liquidation": round(sum(legs.values()), 3),
         "sources": got["sources"],
+        "source_block": _tva_source(got["sources"]),
         "targets_set": bool(tgt),
         "target_meta": targets_mod.meta(month),
         "cluster": cluster or 0,
@@ -2031,6 +2185,7 @@ def item_issue(period: str = "", prior: str = "", cluster: int | None = None) ->
                      "by": industry.get("by", "")},
         "unknown": unknown,
         "cluster": cluster or 0,
+        "source_block": ii.source_for(period, prior),
     }
 
 

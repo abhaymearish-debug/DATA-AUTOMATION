@@ -187,6 +187,7 @@
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
 </table></div>
+<div class="status srcline" id="srcLine" hidden></div>
 <div class="status" id="foot"></div>
 {% endblock %}
 
@@ -248,7 +249,7 @@ async function load(){
     msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
     grid.querySelector('thead').innerHTML = '<tr><th>Bond</th></tr>';
     grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
-    foot.textContent = ''; return;
+    foot.textContent = ''; srcLine.hidden = true; return;
   }
   DATA = d;
   fillMonths(d);
@@ -375,6 +376,7 @@ function render(d){
   if (d.unknown_codes.length)
     notes.push(`Unknown brand codes: ${d.unknown_codes.join(', ')}`);
   foot.textContent = notes.join('  ·  ');
+  ksdSource(d.source_block);
 }
 
 function toggle(key){
