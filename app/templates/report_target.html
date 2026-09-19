@@ -158,7 +158,11 @@
   .sheet footer .sp { margin-left:auto; display:flex; gap:8px; }
   .sheet .err { color:var(--bad); font-size:12.5px; }
 
-  table.edit { width:100%; font-size:13px; border-collapse:separate; border-spacing:0; }
+  /* width:100% let the browser squeeze the bond column to fit the fixed-width
+     inputs, and PATHANAMTHITTA then ran out of its own cell into the next.
+     max-content sizes the table to what is in it and scrolls instead. */
+  table.edit { width:max-content; min-width:100%; font-size:13px;
+               border-collapse:separate; border-spacing:0; }
   /* The header has to be opaque and above everything, or a row scrolling under
      it shows through and reads as a rendering fault. */
   table.edit thead th { position:sticky; top:0; z-index:5; background:var(--navy);
@@ -168,7 +172,7 @@
                         border-bottom:1px solid #22407F;
                         border-left:1px solid rgba(255,255,255,.10); }
   table.edit thead th:first-child { text-align:left; padding-left:20px; left:0; z-index:7;
-                                    min-width:176px; border-left:0;
+                                    width:212px; min-width:212px; border-left:0;
                                     box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
   table.edit thead th:last-child { right:0; z-index:7;
                                    box-shadow:-7px 0 9px -7px rgba(0,0,0,.45); }
@@ -178,7 +182,9 @@
                   border-left:1px solid var(--line); }
   table.edit td.b { text-align:left; padding-left:20px; font-weight:650; position:sticky;
                     left:0; background:var(--card); z-index:3; border-left:0;
+                    width:212px; min-width:212px; max-width:212px;
                     border-right:1px solid var(--line); white-space:nowrap;
+                    overflow:hidden; text-overflow:ellipsis;
                     box-shadow:7px 0 9px -7px rgba(16,24,40,.26); }
   table.edit td.t { position:sticky; right:0; background:var(--card); font-weight:750;
                     z-index:3; font-variant-numeric:tabular-nums;
