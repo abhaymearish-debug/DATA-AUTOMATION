@@ -62,8 +62,6 @@ UPLOAD_CARDS = [
      "mode": "day", "icon": "truck", "ready": True},
     {"id": "pi_variance", "title": "Purchase Instruction", "stream": "purchase_instruction",
      "mode": "batch", "icon": "clipboard", "ready": True},
-    {"id": "wh_monthly", "title": "WH Monthly Stock & Sales", "stream": None,
-     "mode": "range", "icon": "layers", "ready": False},
 ]
 
 LEAVE_CARDS = [
