@@ -130,10 +130,9 @@ def build_rows(now: dict, prev: dict, days: int, prev_days: int,
     A cluster or bond filter narrows what is shown AND what is totalled, so the
     TOTAL line always ties out to the rows above it rather than to the book.
 
-    `days_by` lets a bond divide by its own trading days - a hartal that shut
-    one bond for two days should not flatter or punish the twelve that traded
-    through it. Anything not named in it falls back to `days`, which is what
-    the cluster and grand rows use.
+    `days_by` lets a bond divide by its own trading days. The trade shuts
+    together in practice, so the app passes nothing and every row divides by
+    `days`; it is here for the day that stops being true.
     """
     days_by = days_by or {}
     prev_days_by = prev_days_by or {}

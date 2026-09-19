@@ -714,7 +714,10 @@ const RC_WORDS = {
   failed:      'could not be read',
 };
 
-function tile(n, k, look){
+// A tile reading nought is a thing that did not happen. Only the count that
+// always matters keeps its place when it is zero.
+function tile(n, k, look, always){
+  if (!n && !always) return '';
   return `<div class="tile ${n ? look : 'nil'}"><div class="n">${n}</div>`
        + `<div class="k">${k}</div></div>`;
 }
@@ -730,7 +733,7 @@ function showReceipt(r){
         + (bad ? ` · ${bad} not filed` : '') + `</span></div>`;
 
   h += '<div class="tiles">'
-     + tile(r.ok, 'With an instruction', 'good')
+     + tile(r.ok, 'With an instruction', 'good', true)
      + tile(r.blank, 'Blank — nothing to buy', 'warn')
      + tile(r.absent, 'In mapping, no file', 'warn')
      + tile(r.stray, 'Not in bond mapping', 'warn')

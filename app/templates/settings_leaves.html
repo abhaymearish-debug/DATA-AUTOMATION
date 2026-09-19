@@ -30,11 +30,8 @@
          position:relative; }
   .day:hover { background:var(--hover); border-color:var(--blue); }
   .day.today { box-shadow:inset 0 0 0 1px var(--blue); }
-  /* Already recorded: gold for everybody, a dot for a named few. */
+  /* Already recorded. */
   .day.all { background:var(--gold); border-color:var(--gold); color:#20160A; }
-  .day.some::after { content:''; position:absolute; left:50%; bottom:5px; width:4px;
-                     height:4px; border-radius:50%; background:var(--blue);
-                     transform:translateX(-50%); }
   .day.sel { background:var(--navy); border-color:var(--navy); color:#fff; }
   .day.sel.all { background:var(--navy); }
   .key { display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; font-size:11.5px;
@@ -42,37 +39,20 @@
   .key i { display:inline-block; width:10px; height:10px; border-radius:3px;
            margin-right:5px; vertical-align:-1px; }
   .key .k1 i { background:var(--gold); }
-  .key .k2 i { background:var(--blue); border-radius:50%; }
   .key .k3 i { background:var(--navy); }
 
   /* the form */
   label.f { display:block; font-size:10px; letter-spacing:.7px; text-transform:uppercase;
             color:var(--muted); font-weight:700; margin:16px 0 6px; }
   label.f:first-of-type { margin-top:0; }
-  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px;
-         overflow:hidden; }
-  .seg button { border:0; background:var(--card); color:var(--muted); font:inherit;
-                font-size:12.5px; font-weight:650; padding:7px 14px; cursor:pointer; }
-  .seg button.on { background:var(--navy); color:#fff; }
   input[type=text] { width:100%; padding:9px 11px; border-radius:9px;
                      border:1px solid var(--line); background:var(--card); color:var(--ink);
                      font:inherit; font-size:13.5px; box-sizing:border-box; }
   input:focus { outline:2px solid #C7D2FE; outline-offset:-1px; border-color:var(--blue); }
 
-  .picker { border:1px solid var(--line); border-radius:11px; overflow:hidden; }
-  .picker .find { border:0; border-bottom:1px solid var(--line); border-radius:0; }
-  .picker .list { max-height:230px; overflow:auto; padding:6px; }
-  .picker .grp { font-size:10px; letter-spacing:.6px; text-transform:uppercase;
-                 font-weight:700; color:var(--muted); padding:9px 8px 4px;
-                 display:flex; align-items:center; gap:8px; }
-  .picker .grp button { border:0; background:none; color:var(--blue); font:inherit;
-                        font-size:10.5px; font-weight:700; cursor:pointer;
-                        text-transform:uppercase; letter-spacing:.5px; }
-  .picker .opt { display:flex; align-items:center; gap:9px; padding:6px 8px;
-                 border-radius:7px; font-size:13px; cursor:pointer; }
-  .picker .opt:hover { background:var(--hover); }
-  .picker .opt input { margin:0; }
-  .picker .none { padding:14px 10px; text-align:center; color:var(--muted); font-size:12.5px; }
+  .rep { display:flex; align-items:center; gap:9px; margin-top:16px;
+         font-size:13px; color:var(--ink); cursor:pointer; }
+  .rep input { margin:0; }
   .chosen { margin-top:8px; font-size:12px; color:var(--muted); }
   .chosen b { color:var(--ink); font-weight:650; }
 
@@ -83,10 +63,6 @@
   .lrow:last-child { border-bottom:0; }
   .lrow .d { font-weight:700; width:104px; flex:none; }
   .lrow .who { font-weight:600; }
-  .lrow .tag { font-size:10px; letter-spacing:.5px; text-transform:uppercase;
-               font-weight:700; border-radius:20px; padding:2px 9px; flex:none; }
-  .lrow .tag.all { background:var(--gold); color:#7A5200; }
-  .lrow .tag.some { background:#E0E7FF; color:#3730A3; }
   .lrow .why { color:var(--muted); font-size:12.5px; min-width:0;
                overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .lrow .sp { margin-left:auto; flex:none; }
@@ -125,14 +101,13 @@
       {% endfor %}
       {% for _ in range(lead) %}<div class="pad"></div>{% endfor %}
       {% for day in days %}
-        <button type="button" class="day{{ ' all' if day.all }}{{ ' some' if day.some }}{{ ' today' if day.today }}"
+        <button type="button" class="day{{ ' all' if day.all }}{{ ' today' if day.today }}"
                 data-iso="{{ day.iso }}"
                 title="{{ day.title }}">{{ day.dom }}</button>
       {% endfor %}
     </div>
     <div class="key">
-      <span class="k1"><i></i>Everyone shut</span>
-      <span class="k2"><i></i>Some named</span>
+      <span class="k1"><i></i>Shut</span>
       <span class="k3"><i></i>Picked now</span>
     </div>
   </div>
@@ -141,42 +116,15 @@
     <h3>Mark a day closed</h3>
     <p class="sub">{{ blurb }}</p>
 
-    <label class="f">Applies to</label>
-    <div class="seg" id="segScope">
-      <button type="button" data-s="all" class="on" onclick="setScope('all')">All {{ noun_pl }}</button>
-      <button type="button" data-s="some" onclick="setScope('some')">Named {{ noun_pl }}</button>
-    </div>
-
-    <div id="who" hidden>
-      <label class="f">Which {{ noun_pl }}</label>
-      <div class="picker">
-        <input type="text" class="find" id="find" placeholder="Type to filter…"
-               oninput="filterList()" autocomplete="off">
-        <div class="list" id="list">
-          {% for group, items in groups %}
-            {% if group %}
-              <div class="grp" data-grp="{{ group }}">
-                <span>{{ group }}</span>
-                <button type="button" onclick="pickGroup('{{ group|e }}', true)">All</button>
-                <button type="button" onclick="pickGroup('{{ group|e }}', false)">None</button>
-              </div>
-            {% endif %}
-            {% for it in items %}
-              <label class="opt" data-name="{{ it|lower }}" data-grp="{{ group }}">
-                <input type="checkbox" name="names" value="{{ it }}" onchange="sayChosen()">
-                <span>{{ it }}</span>
-              </label>
-            {% endfor %}
-          {% endfor %}
-        </div>
-      </div>
-      <div class="chosen" id="chosen">Nothing selected yet.</div>
-    </div>
-
     <label class="f" for="reason">Reason</label>
     <input type="text" id="reason" name="reason" maxlength="200"
            placeholder="Dry day, hartal, local festival — whatever it was"
            autocomplete="off">
+
+    <label class="rep">
+      <input type="checkbox" name="monthly" value="1" id="monthly">
+      <span>Repeat on the same date every month to December</span>
+    </label>
 
     <div class="chosen" id="picked" style="margin-top:16px">No days picked.</div>
     <div style="margin-top:12px">
@@ -195,7 +143,6 @@
     {% for row in recorded %}
       <div class="lrow">
         <span class="d">{{ row.nice }}</span>
-        <span class="tag {{ row.scope }}">{{ 'Everyone' if row.scope == 'all' else row.names|length ~ ' named' }}</span>
         <span class="who">{{ row.who }}</span>
         <span class="why">{{ row.reason or '—' }}</span>
         <span class="sp">
@@ -234,43 +181,6 @@ function sayPicked(){
     : 'No days picked.';
 }
 function picked_el(){ return document.getElementById('picked'); }
-
-function setScope(s){
-  document.querySelectorAll('#segScope button').forEach(b =>
-    b.classList.toggle('on', b.dataset.s === s));
-  who.hidden = (s === 'all');
-  if (s === 'all'){
-    document.querySelectorAll('#list input').forEach(i => i.checked = false);
-    sayChosen();
-  }
-}
-
-function filterList(){
-  const q = find.value.trim().toLowerCase();
-  document.querySelectorAll('#list .opt').forEach(o => {
-    o.style.display = !q || o.dataset.name.includes(q) ? '' : 'none';
-  });
-  // A group heading with nothing under it is noise.
-  document.querySelectorAll('#list .grp').forEach(g => {
-    const any = [...document.querySelectorAll(`#list .opt[data-grp="${CSS.escape(g.dataset.grp)}"]`)]
-                  .some(o => o.style.display !== 'none');
-    g.style.display = any ? '' : 'none';
-  });
-}
-
-function pickGroup(group, on){
-  document.querySelectorAll(`#list .opt[data-grp="${CSS.escape(group)}"] input`)
-    .forEach(i => { i.checked = on; });
-  sayChosen();
-}
-
-function sayChosen(){
-  const on = [...document.querySelectorAll('#list input:checked')];
-  chosen.innerHTML = on.length
-    ? `<b>${on.length}</b> selected: ${on.slice(0,6).map(i => i.value).join(', ')}`
-      + (on.length > 6 ? ` and ${on.length - 6} more` : '')
-    : 'Nothing selected yet.';
-}
 
 // A leave with no day is nothing at all, so say so here rather than letting
 // the server answer with an error page.

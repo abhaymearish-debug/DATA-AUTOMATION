@@ -331,19 +331,18 @@ _LEAVE_LOOK = {
     "shop": {
         "heading": "Shop Leaves",
         "noun_pl": "shops",
-        "blurb": "A day KSBC outlets were shut - a dry day, a hartal, a local "
-                 "festival. Pick the days on the calendar, say who it applies to, "
-                 "and write down why.",
-        "feeds": "Used by <b>Shop Sales Analysis</b>: the per-day rate divides by "
-                 "the days shops could trade, not by every day in the window. A "
-                 "day only leaves a bond's divisor when nobody could open - "
-                 "everyone-shut days, or every shop in that bond named.",
+        "blurb": "A day every KSBC outlet was shut - a dry day, a hartal, a "
+                 "local festival. Pick the days on the calendar and write down "
+                 "why. The 1st of the month repeats with one tick.",
+        "feeds": "Used by <b>Shop Sales Analysis</b>: the per-day rate divides "
+                 "by the days shops could trade, not by every day in the window. "
+                 "The report says what it divided by and which days came out.",
     },
     "warehouse": {
         "heading": "Warehouse Leaves",
         "noun_pl": "warehouses",
-        "blurb": "A day a KSBC warehouse did not issue. Pick the days on the "
-                 "calendar, say which warehouses, and write down why.",
+        "blurb": "A day the KSBC warehouses did not issue. Pick the days on the "
+                 "calendar and write down why.",
         "feeds": "Recorded, and shown here. <b>No report divides by it yet</b> - "
                  "say the word and secondary-sales dispatch rates can use it.",
     },
@@ -379,35 +378,18 @@ def leaves_page(request: Request, kind: str, month: str = "",
     days = []
     for day in leaves.month_days(year, mon):
         here = by_day.get(day.isoformat(), [])
-        shut_all = any(r.get("scope") == "all" for r in here)
-        named = [n for r in here if r.get("scope") != "all" for n in (r.get("names") or [])]
         said = [r.get("reason") for r in here if r.get("reason")]
-        title = ("Everyone shut" if shut_all else
-                 f"{len(named)} {look['noun_pl']} shut" if named else "Open")
-        if said:
-            title += " - " + "; ".join(said)
+        title = ("Shut" + (" - " + "; ".join(said) if said else "")) if here else "Open"
         days.append({"iso": day.isoformat(), "dom": day.day,
-                     "all": shut_all, "some": bool(named),
-                     "today": day == today, "title": title})
-
-    if kind == "warehouse":
-        groups = [("", leaves.warehouses())]
-    else:
-        by_bond: dict[str, list] = defaultdict(list)
-        for shop in leaves.shops():
-            by_bond[shop["bond"] or "UNMAPPED"].append(shop["name"])
-        groups = [(bond, by_bond[bond]) for bond in sorted(by_bond)]
+                     "all": bool(here), "today": day == today, "title": title})
 
     recorded = []
     for row in sorted(rows, key=lambda r: r["date"]):
         day = date.fromisoformat(row["date"])
-        names = row.get("names") or []
         recorded.append({
-            "id": row.get("id", ""), "scope": row.get("scope", "all"),
-            "names": names, "reason": row.get("reason", ""),
+            "id": row.get("id", ""), "reason": row.get("reason", ""),
             "nice": f"{day.day} {MONTH_NAMES[day.month - 1][:3].title()}",
-            "who": (f"All {look['noun_pl']}" if row.get("scope") == "all"
-                    else ", ".join(names[:4]) + (f" +{len(names) - 4}" if len(names) > 4 else "")),
+            "who": f"All {look['noun_pl']}",
         })
 
     first = date(year, mon, 1)
@@ -423,28 +405,28 @@ def leaves_page(request: Request, kind: str, month: str = "",
          "month_label": f"{MONTH_NAMES[mon - 1].title()} {year}",
          "prev_ym": f"{prev.year:04d}-{prev.month:02d}",
          "next_ym": f"{nxt.year:04d}-{nxt.month:02d}",
-         "lead": first.weekday(), "days": days, "groups": groups,
+         "lead": first.weekday(), "days": days,
          "recorded": recorded, "note": note, "error": error},
     )
 
 
 @app.post("/settings/leaves/{kind}/add")
 def leaves_add(request: Request, kind: str, days: str = Form(""),
-               names: list[str] = Form(default=[]), reason: str = Form(""),
+               reason: str = Form(""), monthly: str = Form(""),
                month: str = Form("")):
     user = require_user(request)
     if kind not in leaves.KINDS:
         raise HTTPException(404, "There is no such leave calendar.")
     got = leaves.add(kind, [d for d in days.split(",") if d.strip()],
-                     names, reason, user)
+                     reason, user, monthly=bool(monthly))
     back = {"month": month}
     if "error" in got:
         back["error"] = got["error"]
     else:
         said = f"{got['added']} day{'' if got['added'] == 1 else 's'} marked closed"
         if got["already"]:
-            said += f" ({got['already']} already recorded)"
-        back["note"] = said + f" for {got['who']}."
+            said += f" ({got['already']} already on the calendar)"
+        back["note"] = said + "."
     return RedirectResponse(f"/settings/leaves/{kind}?" + urlencode(back), status_code=303)
 
 
@@ -1831,30 +1813,26 @@ def _previous_window(period: dict):
     return None if "error" in prev else prev
 
 
-def _analysis_basis(chosen: dict, prev: dict | None, bonds) -> dict:
+def _analysis_basis(chosen: dict, prev: dict | None) -> dict:
     """How many days each bond could actually trade in the window.
 
     The per-day rate used to divide by the calendar, so three dry days read as
     three days of bad trading. It now divides by the days shops could open -
-    the window, less the days the leave calendar says nobody did. A bond only
-    loses a day when nobody in it could open, so one shop shut for a festival
-    does not quietly move a whole bond's rate.
+    the window, less the days the leave calendar says they were shut. Shops
+    shut together, so this is one number for the whole book.
     """
     start, end = chosen["start"], chosen["end"]
-    shut = leaves.shop_closed_days(start, end)
+    shut = leaves.closed_days("shop", start, end)
     basis = {
         "span": leaves.span_days(start, end),
         "open": leaves.open_days(start, end),
         "closed": sorted(d.isoformat() for d in shut),
-        "days_by": {b: leaves.open_days(start, end, b) for b in bonds},
     }
     if prev:
         p_start, p_end = prev["period"]["start"], prev["period"]["end"]
         basis["prev_open"] = leaves.open_days(p_start, p_end)
-        basis["prev_days_by"] = {b: leaves.open_days(p_start, p_end, b) for b in bonds}
     else:
         basis["prev_open"] = basis["open"]
-        basis["prev_days_by"] = {}
     return basis
 
 
@@ -1865,10 +1843,9 @@ def _analysis_rows(win: dict, cluster: int, bond: str):
     prev = _previous_window(chosen)
     now = _bond_totals(win)
     before = _bond_totals(prev) if prev else {}
-    basis = _analysis_basis(chosen, prev, sorted(set(now) | set(before)))
+    basis = _analysis_basis(chosen, prev)
     raw = mod.build_rows(now, before, basis["open"], basis["prev_open"],
-                         cluster, bond,
-                         basis["days_by"], basis["prev_days_by"])
+                         cluster, bond)
     rows = [{
         "kind": r["kind"], "label": r["label"], "cells": r["cells"],
         "net_pct": mod.pct(r["net_pct"]), "sell": mod.pct(r["sell"]),
@@ -1973,21 +1950,14 @@ def shop_analysis_pdf(request: Request, date_from: str = "", date_to: str = "",
     # screen just showed instead of re-deriving them from a different read.
     totals = outdir / "_totals.json"
     totals.write_text(json.dumps(_bond_totals(win)))
-    now_totals = _bond_totals(win)
-    basis = _analysis_basis(chosen, prev, sorted(now_totals))
-    days_by = outdir / "_days_by.json"
-    days_by.write_text(json.dumps(basis["days_by"]))
+    basis = _analysis_basis(chosen, prev)
     argv = ["python3", str(APP_REPORTS / "build_shop_analysis_pdf.py"),
             "--totals", str(totals), "--outdir", str(outdir),
-            "--period", chosen["short"], "--days", str(basis["open"]),
-            "--days-by", str(days_by)]
+            "--period", chosen["short"], "--days", str(basis["open"])]
     if prev:
         before = outdir / "_prev.json"
         before.write_text(json.dumps(_bond_totals(prev)))
-        prev_by = outdir / "_prev_days_by.json"
-        prev_by.write_text(json.dumps(basis["prev_days_by"]))
-        argv += ["--prev-totals", str(before), "--prev-days", str(basis["prev_open"]),
-                 "--prev-days-by", str(prev_by)]
+        argv += ["--prev-totals", str(before), "--prev-days", str(basis["prev_open"])]
     if cluster:
         argv += ["--cluster", str(cluster)]
     if bond:
