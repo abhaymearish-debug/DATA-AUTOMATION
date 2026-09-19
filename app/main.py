@@ -1220,6 +1220,12 @@ def brandwise_xlsx(
     warehouse: str = "",
     round_off: str = "",
 ):
+    """The cumulative sheet as a workbook, laid out as the PDF prints it.
+
+    Same two bands, the same navy header with gold labels, the same zebra body
+    with dimmed zeros, cluster subtotals on navy and one gold-on-navy total -
+    so the workbook and the PDF of the same view cannot be told apart.
+    """
     require_user(request)
     f, t = _report_args(date_from, date_to)
     data = reports_api.brandwise(view=view, date_from=f, date_to=t, bond=bond,
@@ -1229,37 +1235,133 @@ def brandwise_xlsx(
 
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.page import PageMargins
+
+    NAVY, GOLD = "FF0A294F", "FFFFBD30"
+    INK, ZEBRA, ZERO = "FF1B2A4A", "FFF5F7FB", "FFC7CDD8"
+    HAIR = Side(style="thin", color="FFDCE1EA")
+    BOX = Border(left=HAIR, right=HAIR, top=HAIR, bottom=HAIR)
+
+    brands = data["brands"]
+    span = len(brands) + 2                     # label + brands + TOTAL
+    last_col = get_column_letter(span)
 
     wb = Workbook()
     ws = wb.active
-    ws.title = f"BRANDWISE {view.upper()}"[:31]
+    ws.title = f"CUMULATIVE {view.upper()}"[:31]
+    ws.sheet_view.showGridLines = False
 
-    navy, gold, white = "FF0D1B4A", "FFFFB300", "FFFFFFFF"
-    ws.append([data["label"]] + data["brands"] + ["Total"])
-    for cell in ws[1]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(bold=True, color=white, size=10)
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    ws.row_dimensions[1].height = 42
+    def paint(row, col, fill=None, colour=INK, bold=False, size=10,
+              align="center", fmt=None, value=None, wrap=False):
+        c = ws.cell(row=row, column=col)
+        if value is not None:
+            c.value = value
+        if fill:
+            c.fill = PatternFill("solid", fgColor=fill)
+        c.font = Font(bold=bold, size=size, color=colour)
+        c.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap)
+        c.border = BOX
+        if fmt:
+            c.number_format = fmt
+        return c
 
-    for r in data["rows"]:
-        ws.append([r["name"]] + [r["cells"].get(b, 0) for b in data["brands"]] + [r["total"]])
-        if r["kind"] == "cluster":
-            for cell in ws[ws.max_row]:
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(bold=True, color=gold, size=10)
+    def nice(iso):
+        if not iso:
+            return ""
+        d = date.fromisoformat(iso)
+        return f"{d.day} {reports_pdf._MONTH_ABBR[d.month - 1]} {d.year}"
 
-    ws.append(["GRAND TOTAL"] + [data["grand"]["cells"].get(b, 0) for b in data["brands"]]
-              + [data["grand"]["total"]])
-    for cell in ws[ws.max_row]:
-        cell.fill = PatternFill("solid", fgColor="FF374151")
-        cell.font = Font(bold=True, color=white, size=10)
+    span_dates = data.get("span") or {}
+    period = f"{nice(f or span_dates.get('min'))} to {nice(t or span_dates.get('max'))}"
+    scope = f"{data['label'].upper()} VIEW"
+    for extra in (bond, warehouse):
+        if extra:
+            scope += f"  \u00b7  {extra}"
 
-    ws.column_dimensions["A"].width = 34
-    for i in range(2, len(data["brands"]) + 3):
-        ws.column_dimensions[ws.cell(1, i).column_letter].width = 15
-    ws.freeze_panes = "B2"
+    # ---- the two bands ----
+    ws.merge_cells(f"A1:{last_col}1")
+    for col in range(1, span + 1):
+        paint(1, col, NAVY)
+    paint(1, 1, NAVY, GOLD, True, 16, value="K.S DISTILLERY")
+    ws.row_dimensions[1].height = 30
+
+    half = max(2, span - 2)
+    for row, height in ((2, 22), (3, 20)):
+        for col in range(1, span + 1):
+            paint(row, col, GOLD)
+        ws.row_dimensions[row].height = height
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=half)
+    ws.merge_cells(start_row=2, start_column=half + 1, end_row=2, end_column=span)
+    paint(2, 1, GOLD, NAVY, True, 11, "left", value="SECONDARY SALES - CUMULATIVE")
+    paint(2, half + 1, GOLD, NAVY, True, 10, "right", value=period)
+    ws.merge_cells(f"A3:{last_col}3")
+    paint(3, 1, GOLD, NAVY, True, 11, value=scope)
+
+    # ---- the header ----
+    head = 4
+    paint(head, 1, NAVY, GOLD, True, 9, "left", value=data["label"].upper(), wrap=True)
+    for i, name in enumerate(brands, start=2):
+        paint(head, i, NAVY, GOLD, True, 9, value=name, wrap=True)
+    paint(head, span, NAVY, GOLD, True, 9, value="TOTAL", wrap=True)
+    ws.row_dimensions[head].height = 40
+
+    # ---- the body ----
+    # A zero is dimmed rather than dropped, exactly as the PDF prints it: the
+    # eye should land on the figures that moved.
+    FIG = "#,##0" if round_off else "#,##0.##"
+    r = head
+    stripe = 0
+    for row in data["rows"]:
+        r += 1
+        cluster = row.get("kind") == "cluster"
+        if cluster:
+            fill, colour, bold = NAVY, GOLD, True
+        else:
+            fill = ZEBRA if stripe % 2 == 0 else "FFFFFFFF"
+            colour, bold = INK, False
+            stripe += 1
+        paint(r, 1, fill, colour, True, 10, "left", value=str(row["name"]))
+        for i, brand in enumerate(brands, start=2):
+            v = row["cells"].get(brand, 0) or 0
+            paint(r, i, fill, colour if (v or cluster) else ZERO, bold, 10,
+                  fmt=FIG, value=v)
+        paint(r, span, fill, colour, True, 10, fmt=FIG, value=row.get("total", 0))
+        ws.row_dimensions[r].height = 17
+
+    # ---- the total ----
+    # The PDF rules the total band off in gold. Without it the last cluster and
+    # the grand total are two navy rows running into each other.
+    RULE = Side(style="medium", color=GOLD)
+    r += 1
+    paint(r, 1, NAVY, GOLD, True, 10, "left", value="GRAND TOTAL")
+    for i, brand in enumerate(brands, start=2):
+        paint(r, i, NAVY, GOLD, True, 10, fmt=FIG,
+              value=data["grand"]["cells"].get(brand, 0) or 0)
+    paint(r, span, NAVY, GOLD, True, 10, fmt=FIG, value=data["grand"]["total"])
+    for col in range(1, span + 1):
+        c = ws.cell(row=r, column=col)
+        c.border = Border(left=HAIR, right=HAIR, top=RULE, bottom=RULE)
+    ws.row_dimensions[r].height = 19
+
+    # ---- the shape of the page ----
+    ws.column_dimensions["A"].width = 26
+    for col in range(2, span):
+        ws.column_dimensions[get_column_letter(col)].width = 14
+    ws.column_dimensions[last_col].width = 12
+    ws.freeze_panes = ws.cell(row=head + 1, column=2)
+
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4,
+                                  header=0.2, footer=0.2)
+    ws.print_area = f"A1:{last_col}{r}"
+    ws.print_title_rows = f"1:{head}"
 
     tmp = Path(tempfile.mkdtemp()) / "Secondary Sales - Cumulative.xlsx"
     wb.save(tmp)
@@ -1594,6 +1696,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.page import PageMargins
 
     NAVY, GOLD, PAPER = "FF0A294F", "FFFFBD30", "FFF5F7FC"
     INK, HAIR = "FF28324A", "FFD9DEE9"
@@ -2039,6 +2142,13 @@ def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "", pe
 
 @app.get("/reports/liquidation/export.xlsx")
 def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", period: str = ""):
+    """The scorecard as a workbook, built to read as the PDF does.
+
+    Same two bands, the same grouped header over four blocks, the same navy
+    channel between them, and the same three tiers of row. A delta keeps its
+    number - the arrow and its colour are a number format, so the cell can
+    still be summed or sorted.
+    """
     require_user(request)
     data = _liquidation(date_from, date_to, period)
     if "error" in data:
@@ -2046,47 +2156,141 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
 
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.page import PageMargins
 
-    navy, gold = "FF0A294F", "FFFFBD30"
+    NAVY, GOLD = "FF0A294F", "FFFFBD30"
+    SLATE, SLATE_2 = "FF2B3440", "FF3C4653"
+    INK, ROW_A, ROW_B = "FF1B2A4A", "FFFFFFFF", "FFF7F9FC"
+    HAIR = Side(style="thin", color="FFD9DEE7")
+    BOX = Border(left=HAIR, right=HAIR, top=HAIR, bottom=HAIR)
+
     now_label, was_label = data["headings"][0], data["headings"][1]
+    groups = ["SHOP LIQUIDATION (KSBC)", "SECONDARY SALES",
+              "FED / BAR INVOICE", "TOTAL LIQUIDATION"]
+
+    # A gutter column between blocks, as the sheet prints: one navy channel,
+    # not a line, so four blocks read as four.
+    GUT = 1.6
+    first = [2 + i * 5 for i in range(len(groups))]     # B, G, L, Q
+    gutters = [c - 1 for c in first[1:]]
+    span = first[-1] + 4 - 1
+    last_col = get_column_letter(span)
+
     wb = Workbook()
     ws = wb.active
     ws.title = "LIQUIDATION"
-    head = ["BOND"]
-    for g in ("SHOP LIQUIDATION", "SECONDARY SALES", "FED / BAR INVOICE", "TOTAL LIQUIDATION"):
-        head += [f"{g} {now_label}", f"{g} {was_label}", f"{g} +/- CS", f"{g} +/- %"]
-    ws.append(head)
-    for cell in ws[1]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(bold=True, color=gold, size=10)
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.sheet_view.showGridLines = False
+
+    def paint(row, col, fill=None, colour=INK, bold=False, size=10,
+              align="center", fmt=None, value=None, wrap=False):
+        c = ws.cell(row=row, column=col)
+        if value is not None:
+            c.value = value
+        if fill:
+            c.fill = PatternFill("solid", fgColor=fill)
+        c.font = Font(bold=bold, size=size, color=colour)
+        c.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap)
+        c.border = BOX
+        if fmt:
+            c.number_format = fmt
+        return c
+
+    # ---- the two bands ----
+    ws.merge_cells(f"A1:{last_col}1")
+    paint(1, 1, NAVY, GOLD, True, 16, "center", value="K.S DISTILLERY")
+    for col in range(2, span + 1):
+        paint(1, col, NAVY)
     ws.row_dimensions[1].height = 30
 
+    half = first[2] - 1
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=half)
+    ws.merge_cells(start_row=2, start_column=half + 1, end_row=2, end_column=span)
+    paint(2, 1, GOLD, NAVY, True, 11, "left", value="BOND LIQUIDATION SCORECARD")
+    paint(2, half + 1, GOLD, NAVY, True, 11, "right", value=data["subtitle"])
+    for col in range(2, span + 1):
+        paint(2, col, GOLD)
+    ws.row_dimensions[2].height = 22
+
+    # ---- the grouped header ----
+    ws.merge_cells(start_row=3, start_column=1, end_row=4, end_column=1)
+    paint(3, 1, NAVY, GOLD, True, 10, "left", value="Bond")
+    paint(4, 1, NAVY)
+    for g, name in zip(first, groups):
+        ws.merge_cells(start_row=3, start_column=g, end_row=3, end_column=g + 3)
+        paint(3, g, NAVY, GOLD, True, 9.5, value=name, wrap=True)
+        for col in range(g + 1, g + 4):
+            paint(3, col, NAVY)
+        for col, label in zip(range(g, g + 4),
+                              (now_label, was_label, "\u25b2 CS", "\u25b2 %")):
+            paint(4, col, NAVY, GOLD, True, 9, value=label)
+    for col in gutters:
+        paint(3, col, NAVY)
+        paint(4, col, NAVY)
+    ws.row_dimensions[3].height = 26
+    ws.row_dimensions[4].height = 16
+
+    # ---- the rows ----
+    # The arrow and its colour live in the number format, so the figure stays a
+    # figure: a nil prints as the dash the sheet prints, not as a nought.
+    CS_FMT = '[Green]"\u25b2"#,##0;[Red]"\u25bc-"#,##0;[Green]"\u25b2"0;@'
+    PC_FMT = '[Green]"\u25b2"0%;[Red]"\u25bc-"0%;[Green]"\u25b2"0%;@'
+    # Green and red are for the white body only. On the navy and slate rows the
+    # cell brings its own colour, and a red figure on navy cannot be read - so
+    # those keep the arrow and take the row's gold.
+    CS_STRONG = '"\u25b2"#,##0;"\u25bc-"#,##0;"\u25b2"0;@'
+    PC_STRONG = '"\u25b2"0%;"\u25bc-"0%;"\u25b2"0%;@'
+    DASH = '#,##0;-#,##0;"-";@'
+
+    r = 4
+    band = 0
     for row in data["rows"]:
-        line = [row["label"]]
-        for now, was in row["blocks"]:
+        r += 1
+        kind = row.get("kind", "bond")
+        if kind == "bond":
+            fill = ROW_A if band % 2 == 0 else ROW_B
+            colour, bold = INK, False
+            band += 1
+        elif kind == "cluster":
+            fill, colour, bold = NAVY, GOLD, True
+        elif row["label"].upper().startswith("AVERAGE"):
+            fill, colour, bold = SLATE_2, GOLD, True
+        else:
+            fill, colour, bold = SLATE, GOLD, True
+
+        paint(r, 1, fill, colour, True, 10, "left", value=str(row["label"]))
+        for g, (now, was) in zip(first, row["blocks"]):
             delta = now - was
-            pct = ((now - was) / was * 100) if was else None
-            line += [round(now), round(was), round(delta),
-                     (round(pct) / 100 if pct is not None else None)]
-        ws.append(line)
-        if row["kind"] != "bond":
-            for cell in ws[ws.max_row]:
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(bold=True, color=gold, size=10)
+            pct = ((now - was) / was) if was else None
+            paint(r, g, fill, colour, bold, 10, fmt=DASH, value=round(now))
+            paint(r, g + 1, fill, colour, bold, 10, fmt=DASH, value=round(was))
+            paint(r, g + 2, fill, colour, bold, 10,
+                  fmt=CS_STRONG if bold else CS_FMT, value=round(delta))
+            paint(r, g + 3, fill, colour, bold, 10,
+                  fmt=PC_STRONG if bold else PC_FMT,
+                  value=None if pct is None else round(pct, 4))
+        for col in gutters:
+            paint(r, col, NAVY)
+        ws.row_dimensions[r].height = 17
 
-    for r in ws.iter_rows(min_row=2, min_col=2):
-        for cell in r:
-            cell.alignment = Alignment(horizontal="center")
-    for col in range(5, ws.max_column + 1, 4):
-        for r in ws.iter_rows(min_row=2, min_col=col, max_col=col):
-            r[0].number_format = "0%"
+    # ---- the shape of the page ----
+    ws.column_dimensions["A"].width = 24
+    for col in range(2, span + 1):
+        ws.column_dimensions[get_column_letter(col)].width = (
+            GUT if col in gutters else 10.5)
+    ws.freeze_panes = ws.cell(row=5, column=2)
 
-    ws.column_dimensions["A"].width = 22
-    for i in range(2, ws.max_column + 1):
-        ws.column_dimensions[ws.cell(1, i).column_letter].width = 13
-    ws.freeze_panes = "B2"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4,
+                                  header=0.2, footer=0.2)
+    ws.print_area = f"A1:{last_col}{r}"
+    ws.print_title_rows = "1:4"
 
     tmp = Path(tempfile.mkdtemp()) / f"Liquidation Summary ({data['period']['short']}).xlsx"
     wb.save(tmp)
@@ -2429,6 +2633,7 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.page import PageMargins
 
     # The same sheet as the PDF, cell for cell: the office should not be able
     # to tell which of the two it is looking at.
@@ -2472,6 +2677,10 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
     ws.unmerge_cells(f"A2:{last_col}2")
     ws.merge_cells(f"A2:{get_column_letter(span - 4)}2")
     ws.merge_cells(f"{get_column_letter(span - 3)}2:{last_col}2")
+    # Merging re-anchors the range, and the fresh anchor comes back unpainted -
+    # which left the right half of the gold band white.
+    for col in range(1, span + 1):
+        ws.cell(row=2, column=col).fill = PatternFill("solid", fgColor=GOLD)
     right = ws.cell(row=2, column=span - 3, value=as_on)
     right.font = Font(bold=True, size=12, color=NAVY)
     right.alignment = Alignment(horizontal="right", vertical="center")
@@ -2492,10 +2701,15 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
 
     for idx, row in enumerate(rows):
         total = idx == len(rows) - 1
-        strong = total or (has_bonds and row.get("kind") == "cluster")
+        # The same three tiers the PDF prints: a bond on the body's colours, a
+        # cluster subtotal on navy with gold figures, and the one row the sheet
+        # adds up to in gold.
+        clus = not total and has_bonds and row.get("kind") == "cluster"
+        strong = total or clus
         top, bottom = r + 1, r + 2
-        for which, tag, rr, fill in (("tgt", "TGT", top, GOLD_D if total else SHADE),
-                                     ("ach", "ACH", bottom, GOLD if total else "FFFFFFFF")):
+        for which, tag, rr, fill in (
+                ("tgt", "TGT", top, GOLD_D if total else NAVY if clus else SHADE),
+                ("ach", "ACH", bottom, GOLD if total else NAVY if clus else "FFFFFFFF")):
             line = [row["label"] if rr == top else None, tag]
             line += [round(float(row[which].get(c["key"], 0) or 0)) for c in cols]
             line.append(round(float(row.get(which + "_total", 0) or 0)))
@@ -2506,14 +2720,18 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
                 c.alignment = Alignment(horizontal="center", vertical="center")
                 if i == 1:
                     c.fill = PatternFill("solid", fgColor=NAVY)
-                    c.font = Font(bold=True, size=10, color=GOLD if total else "FFFFFFFF")
+                    c.font = Font(bold=True, size=10,
+                                  color=GOLD if total or clus else "FFFFFFFF")
                 elif i == span:
-                    c.fill = PatternFill("solid", fgColor=GOLD if total else "FFFFFFFF")
-                    c.font = Font(bold=True, size=9.5, color=INK if total else RED)
-                    c.number_format = "0.0%"
+                    c.fill = PatternFill("solid", fgColor=GOLD if total
+                                         else NAVY if clus else "FFFFFFFF")
+                    c.font = Font(bold=True, size=9.5,
+                                  color=INK if total else GOLD if clus else RED)
+                    c.number_format = "0.00%"
                 else:
                     c.fill = PatternFill("solid", fgColor=fill)
-                    c.font = Font(bold=strong or i in (2, span - 1), size=9.5, color=INK)
+                    c.font = Font(bold=strong or i in (2, span - 1), size=9.5,
+                                  color=GOLD if clus else INK)
 
         ws.merge_cells(start_row=top, start_column=1, end_row=bottom, end_column=1)
         ws.merge_cells(start_row=top, start_column=span, end_row=bottom, end_column=span)
@@ -2521,11 +2739,29 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
         ws.row_dimensions[bottom].height = 18
         r = bottom
 
-    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["A"].width = 22
     ws.column_dimensions["B"].width = 7
-    for i in range(3, span + 1):
-        ws.column_dimensions[get_column_letter(i)].width = 13
+    for i in range(3, span - 1):
+        ws.column_dimensions[get_column_letter(i)].width = 11.5
+    ws.column_dimensions[get_column_letter(span - 1)].width = 13
+    ws.column_dimensions[get_column_letter(span)].width = 10
     ws.freeze_panes = ws.cell(row=head_row + 1, column=3)
+
+    # Twelve columns do not fit a portrait page, and nothing here said so, so
+    # the sheet printed as two - six columns, then the rest, with the house
+    # band sliced down the middle. It is one landscape page wide now, the
+    # header repeats down a long one, and the print area stops where the
+    # figures do.
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4,
+                                  header=0.2, footer=0.2)
+    ws.print_area = f"A1:{last_col}{r}"
+    ws.print_title_rows = f"1:{head_row}"
 
     label = data["period"]["short"].replace(" to ", " - ")
     tmp = Path(tempfile.mkdtemp()) / f"TARGET vs ACHIEVEMENT ({label}).xlsx"

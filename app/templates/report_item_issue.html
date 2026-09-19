@@ -30,18 +30,8 @@
   .warn { background:#FEF3C7; border:1px solid #FDE68A; color:#92400E;
           border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px; }
 
-  /* The two bands the sheet opens with, the same pair as the workbook. */
-  .bands { border:1px solid var(--line); border-bottom:0; border-radius:14px 14px 0 0;
-           overflow:hidden; }
-  .bands .b1 { background:var(--navy); color:var(--gold); text-align:center;
-               font-size:19px; font-weight:800; letter-spacing:.6px; padding:10px 12px; }
-  .bands .b2 { background:var(--gold); color:#0B2C52; font-size:12.5px; font-weight:800;
-               letter-spacing:.8px; text-transform:uppercase; padding:7px 16px;
-               display:flex; align-items:center; gap:12px; }
-  .bands .b2 .r { margin-left:auto; }
-
   .tablewrap { background:var(--card); border:1px solid var(--line);
-               border-radius:0 0 14px 14px; overflow:auto;
+               border-radius:14px; overflow:auto;
                max-height:calc(100vh - 300px); box-shadow:0 1px 2px rgba(16,24,40,.05); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
           table-layout:fixed; }
@@ -155,11 +145,6 @@
 
 <div id="msg"></div>
 
-<div class="bands">
-  <div class="b1">K.S DISTILLERY</div>
-  <div class="b2"><span id="bandL">SECONDARY SALES</span>
-                  <span class="r" id="bandR"></span></div>
-</div>
 <div class="tablewrap"><table id="grid">
   <colgroup></colgroup>
   <thead><tr><th>Warehouse</th></tr></thead>
@@ -251,12 +236,6 @@ async function load(){
   if (d.unknown.length)
     notes.push(`Not in any cluster: ${d.unknown.join(', ')}.`);
   msg.innerHTML = notes.length ? `<div class="warn">${esc(notes.join(' '))}</div>` : '';
-
-  bandL.textContent = 'SECONDARY SALES · ' + monthOf(d.as_on).slice(0,3)
-    + ' ' + String(new Date(d.as_on + 'T00:00:00').getFullYear()).slice(2)
-    + (d.prior_as_on ? ' vs ' + monthOf(d.prior_as_on).slice(0,3)
-        + ' ' + String(new Date(d.prior_as_on + 'T00:00:00').getFullYear()).slice(2) : '');
-  bandR.textContent = 'AS ON ' + longDay(d.as_on);
 
   xl.href = '/reports/secondary-analysis/export.xlsx?' + params().toString();
   render(d);
