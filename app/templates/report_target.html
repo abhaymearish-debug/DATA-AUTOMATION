@@ -10,6 +10,8 @@
               padding:2px 0 12px; margin:-4px 0 0; }
   .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .bar1 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .bar1 .stack { display:flex; flex-direction:column; align-items:flex-start; gap:7px; }
+  .bar1 .stack .act { width:100%; box-sizing:border-box; text-align:center; }
 
   .fbar { display:inline-flex; align-items:stretch; background:var(--card);
           border:1px solid var(--line); border-radius:12px; padding:3px;
@@ -253,9 +255,14 @@
         <span class="fi-v" style="cursor:default" id="tgtMonth">—</span>
       </div>
     </div>
-    <label class="chk"><input type="checkbox" id="round" checked onchange="load()"><span class="sw"></span><span class="t">Round off</span></label>
-    <div class="sp">
+    <!-- Editing the targets and rounding the figures are both things you do to
+         this sheet rather than exports of it, so they stack together beside
+         the filters and leave the downloads to themselves. -->
+    <div class="stack">
       <button type="button" class="act" onclick="openEditor()">Edit targets</button>
+      <label class="chk"><input type="checkbox" id="round" checked onchange="load()"><span class="sw"></span><span class="t">Round off</span></label>
+    </div>
+    <div class="sp">
       <!-- Excel then PDF, the order every other report uses. -->
       <a class="act xl" id="xl" href="#">Download Excel</a>
       <div class="menu" id="pdfMenu">
