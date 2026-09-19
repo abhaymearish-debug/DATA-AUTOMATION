@@ -457,8 +457,9 @@
   .srcitem .w b { font-size:12.5px; font-weight:700; color:var(--ink);
                   letter-spacing:-.1px; font-variant-numeric:tabular-nums;
                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  /* A file with no window of its own leads with its name, and a name is not
-     a date: it gets to wrap onto a second line rather than be cut off. */
+  /* A file with no window of its own leads with its name, or with what it is
+     said in words, and neither is a date: it gets to wrap onto a second line
+     rather than be cut off. */
   .srcitem.nw .w { align-items:flex-start; }
   .srcitem.nw .w b { font-size:12px; line-height:1.35; white-space:normal;
                      overflow:visible; text-overflow:clip; }
@@ -744,11 +745,14 @@ window.ksdSource = function (block, host) {
       const name = String(c.name || '').replace(/\.(xlsx?|csv|pdf)$/i, '');
       // A file that answers a window leads with the window and names itself
       // underneath; one with no window of its own leads with its name.
-      const dated = !!(c.from || c.to || c.title);
-      const lead = dated ? ((c.from || c.to) ? ksdSpan(c.from, c.to) : c.title) : name;
+      const span = !!(c.from || c.to);
+      const dated = span || !!c.title;
+      const lead = span ? ksdSpan(c.from, c.to) : (c.title || name);
       const under = dated ? name : '';
       const tag = c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '';
-      return `<div class="srcitem${dated ? '' : ' nw'}">
+      // Only a date span is short enough to keep on one line. A name or a
+      // said-in-words title wraps instead of being cut off mid-sentence.
+      return `<div class="srcitem${span ? '' : ' nw'}">
           <div class="w"><b title="${esc(lead)}">${esc(lead)}</b>${tag}</div>
           ${under ? `<div class="f" title="${esc(under)}">${esc(under)}</div>` : ''}
         </div>`;

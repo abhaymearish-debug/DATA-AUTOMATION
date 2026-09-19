@@ -75,11 +75,34 @@ def src_block(legs: list, say: str = "") -> dict:
     return {"legs": kept, "say": say} if kept else {"legs": [], "say": ""}
 
 
+def _sec_book_title(name: str) -> str:
+    """What the month's dispatch workbook IS, since its name says otherwise.
+
+    KSD calls that file "<MONTH> 1st - <n>th SECONDARY SALES ANALYSIS.xlsx",
+    which reads exactly like the Secondary Sales - Analysis report in the
+    sidebar - a different report off a different raw (the item issue). The
+    chip led with the file name, so the daily report looked like it was
+    quoting the analysis report at you. It leads with what the file is now,
+    and keeps the name underneath where it belongs.
+    """
+    up = name.upper()
+    m = _MONTH_IN_NAME.search(up)
+    month = m.group(1).title() if m else ""
+    r = _RANGE_IN_NAME.search(up)
+    span = f" {int(r.group(1))}\u2013{int(r.group(2))}" if r else ""
+    return f"{month}{span} dispatches, built from your daily uploads".strip()
+
+
 def src_secondary(sources: list) -> dict:
     """The dispatch leg: the month's built workbook, then the raws after it."""
     book = find_secondary_workbook()
-    items = [{"kind": "built workbook" if (book is not None and n == book.name)
-                      else "raw upload", "name": n} for n in (sources or [])]
+    items = []
+    for n in (sources or []):
+        if book is not None and n == book.name:
+            items.append({"kind": "built workbook",
+                          "title": _sec_book_title(n), "name": n})
+        else:
+            items.append({"kind": "raw upload", "name": n})
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
 
 
@@ -1056,7 +1079,9 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
         return src_block(
             [src_secondary(sources)],
             "A day reports as soon as its raw is uploaded; the month's workbook "
-            "takes over for the days it covers.")
+            "takes over for the days it covers. That workbook is this app's own "
+            "build of those uploads \u2014 not the Secondary Sales - Analysis "
+            "report, which reads a different raw.")
 
     # Shop sales are stored a day at a time, so the grid's provenance is
     # literally the files for the days on screen - which also makes a gap in
