@@ -51,7 +51,9 @@
   .bar1 .stack { display:flex; flex-direction:column; gap:7px;
                  flex:1 1 150px; max-width:262px; }
   .bar1 .searchwrap { width:100%; }
-  .bar1 .stack .chk { padding-left:2px; }
+  /* The stack stretches what is in it, and a pill stretched to the width of
+     the search box is mostly empty pill. It takes the width of its own words. */
+  .bar1 .stack .chk { align-self:flex-start; }
   .bar1 .sp { flex-direction:column; align-items:stretch; gap:7px; }
   .bar1 .sp > * { width:176px; }
   .bar1 .sp .act { width:100%; box-sizing:border-box; text-align:center; }
