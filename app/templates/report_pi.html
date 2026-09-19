@@ -17,6 +17,20 @@
   .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
           color:var(--muted); font-weight:700; }
   .fdiv { width:1px; background:var(--line); margin:8px 0; }
+
+  /* Search sits with the filters - it is one - and the two downloads stack
+     beside it, so the strip stays one block however narrow the window is. */
+  input[type=search].search { border:1px solid var(--line); background:var(--card);
+      border-radius:10px; padding:9px 11px 9px 36px; font:inherit; font-size:13.5px;
+      color:var(--ink); width:100%; box-sizing:border-box; }
+  input[type=search].search:focus { outline:2px solid #C7D2FE; outline-offset:-1px;
+      border-color:var(--blue); }
+  .searchwrap { position:relative; flex:1 1 140px; max-width:262px; }
+  .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
+                    color:var(--muted); font-size:15px; pointer-events:none; }
+  .bar1 .sp { flex-direction:column; align-items:stretch; gap:7px; }
+  .bar1 .sp > * { width:176px; }
+  .bar1 .sp .act { width:100%; box-sizing:border-box; text-align:center; }
   .selw { position:relative; display:flex; align-items:center; }
   .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
                  font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
@@ -170,6 +184,11 @@
         </select><i>&#9662;</i></div>
       </label>
     </div>
+    <div class="searchwrap">
+      <span class="ic">&#8981;</span>
+      <input id="q" class="search" type="search" placeholder="Search bond or shop"
+             autocomplete="off" oninput="onSearch()">
+    </div>
     <div class="sp">
       <a class="act xl" id="xl" href="#">Download Excel</a>
       <a class="act pdf" id="pdf" href="#">Download PDF</a>
@@ -191,6 +210,14 @@
 // Opens the way the workbook prints: all four measures for every brand.
 let view = 'bond', measure = 'all', DATA = null;
 const open = new Set();
+
+// Search runs over what is already on the page - the month's figures are all
+// here - so typing filters instantly instead of going back to the server.
+const term = () => q.value.trim().toLowerCase();
+const hits = (text) => String(text ?? '').toLowerCase().includes(term());
+const shopsOf = (key) => (DATA && DATA.shops && DATA.shops[key]) || [];
+
+function onSearch(){ if (DATA) render(DATA); }
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -346,8 +373,20 @@ function render(d){
   grid.querySelector('thead').innerHTML = head(d);
   const span = 1 + (d.brands.length + 1) * shown().length + (d.prior ? 2 : 0);
 
+  // A search narrows the page to the bonds it matches. The cluster and grand
+  // rows step out while it does: they total the whole book, and printed over
+  // a filtered list they would be read as totals of it.
+  const t = term();
+  const groups = d.rows.filter(r => r.kind === 'group');
+  const rows = !t ? d.rows : groups.filter(
+    r => hits(r.label) || shopsOf(r.key).some(s => hits(s.name)));
+  // A bond that only matched on one of its shops opens itself, or the hit
+  // would be hidden inside a closed row.
+  const showing = new Set(open);
+  if (t) for (const r of rows) if (!hits(r.label)) showing.add(r.key);
+
   let html = '';
-  for (const r of d.rows){
+  for (const r of rows){
     if (r.kind === 'group'){
       const n = r.shops + (r.blank ? ` · ${r.blank} blank` : '');
       html += `<tr class="g" data-key="${esc(r.key)}">
@@ -362,12 +401,18 @@ function render(d){
     }
   }
   grid.querySelector('tbody').innerHTML = html;
-  for (const k of open) paint(k, span);
+  for (const k of showing) paint(k, span);
 
   // The grand total row says all of this. The line only speaks when a brand
-  // code came back that the master data does not know.
-  foot.textContent = d.unknown_codes.length
-    ? `Unknown brand codes: ${d.unknown_codes.join(', ')}` : '';
+  // code came back that the master data does not know - or when a search is
+  // narrowing what is on screen, which the totals no longer describe.
+  const notes = [];
+  if (t) notes.push(rows.length
+    ? `Showing ${rows.length} of ${groups.length} ${d.view === 'warehouse' ? 'warehouses' : 'bonds'} matching “${q.value.trim()}”.`
+    : `Nothing matches “${q.value.trim()}”.`);
+  if (d.unknown_codes.length)
+    notes.push(`Unknown brand codes: ${d.unknown_codes.join(', ')}`);
+  foot.textContent = notes.join('  ·  ');
 }
 
 function toggle(key){
@@ -385,8 +430,13 @@ function toggle(key){
 
 function paint(key, span){
   const row = document.querySelector(`tr.g[data-key="${CSS.escape(key)}"]`);
-  const shops = (DATA.shops || {})[key];
+  let shops = (DATA.shops || {})[key];
   if (!row || !shops) return;
+  // Searching a shop name shows that shop, not the forty it sits with. A bond
+  // matched by its own name keeps all of them.
+  const label = row.querySelector('.lbl');
+  if (term() && !hits(label ? label.textContent : ''))
+    shops = shops.filter(s => hits(s.name));
   row.classList.add('open');
   const html = shops.map(s =>
     `<tr class="shop${s.blank ? ' blank' : ''}" data-of="${esc(key)}">
