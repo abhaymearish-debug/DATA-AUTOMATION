@@ -96,10 +96,13 @@
      sits is what names it, and the card above is the key. */
   .slots { display:flex; gap:4px; margin-top:auto; }
   .slots b { flex:1; height:5px; border-radius:3px; background:var(--line); }
+  /* Not due yet is not missing: a hollow slot, not an empty one. */
+  .slots b.wait { background:none; box-shadow:inset 0 0 0 1px var(--line); }
   .cell.none .slots, .cell.future .slots { visibility:hidden; }
   /* Two lines, so "no Secondary daily, Stock" reads out in full rather than
      truncating - the names are the point, and a count was what this screen
      used to say instead. */
+  .gap.soon { font-style:italic; opacity:.75; }
   .gap { font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.3;
          min-width:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2;
          -webkit-box-orient:vertical; }
@@ -155,6 +158,14 @@ const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
 const iso = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 const today = new Date().toISOString().slice(0,10);
+// The day a stream's raw for `key` can first exist: same day for the stock
+// photograph, the morning after for anything that reports a finished day.
+const dueBy = (key, s) => {
+  const n = Number(s.due_after || 0);
+  if (!n) return key;
+  const [y,m,d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m-1, d + n)).toISOString().slice(0,10);
+};
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
 let month = (CAL.span.last || today).slice(0,7);
@@ -176,45 +187,65 @@ function draw(){
   let html = ['S','M','T','W','T','F','S'].map(d => `<div class="dow">${d}</div>`).join('');
   for (let i = 0; i < first; i++) html += '<div class="cell pad"></div>';
 
-  const tally = {};
-  S.forEach(s => tally[s.key] = 0);
+  const tally = {}, dueDays = {};
+  S.forEach(s => { tally[s.key] = 0; dueDays[s.key] = 0; });
   let full = 0, part = 0, blank = 0, elapsed = 0;
 
   for (let d = 1; d <= last; d++){
     const key = iso(y, m, d);
     const have = CAL.days[key] || [];
-    const future = key > today;
-    const missing = S.filter(s => !have.includes(s.key));
-    if (!future){
+    // Four of these report what happened during the day, so they cannot
+    // exist until it is over. Stock is a photograph and arrives the same
+    // day. A stream that is not due yet is not missing.
+    const due     = S.filter(s => dueBy(key, s) <= today);
+    const waiting = S.filter(s => dueBy(key, s) >  today);
+    const missing = due.filter(s => !have.includes(s.key));
+    const nothingDue = !due.length;
+
+    if (!nothingDue){
       elapsed++;
+      due.forEach(s => dueDays[s.key]++);
       if (!have.length) blank++;
       else if (missing.length) part++;
       else full++;
       have.forEach(k => tally[k] = (tally[k] || 0) + 1);
     }
-    const cls = ['cell', future ? 'future' : (have.length ? (missing.length ? '' : 'full') : 'none'),
+
+    const done = !nothingDue && have.length && !missing.length;
+    const cls = ['cell', nothingDue ? 'future'
+                       : (have.length ? (missing.length ? '' : 'full') : 'none'),
                  key === today ? 'today' : ''].filter(Boolean).join(' ');
 
     // The whole day's state, spelled out, for anyone who hovers.
-    const tip = future ? key
-      : S.map(s => `${have.includes(s.key) ? '✓' : '—'} ${s.label}`).join('\n');
+    const tip = nothingDue ? key : S.map(s => have.includes(s.key) ? `\u2713 ${s.label}`
+        : dueBy(key, s) > today ? `\u00b7 ${s.label} \u2014 not due yet`
+        : `\u2014 ${s.label}`).join('\n');
 
-    const slots = S.map(s => `<b style="${have.includes(s.key)
-        ? 'background:' + s.colour : ''}" title="${esc(s.label)}"></b>`).join('');
+    const slots = S.map(s => {
+      const got = have.includes(s.key);
+      const wait = !got && dueBy(key, s) > today;
+      return `<b class="${wait ? 'wait' : ''}" style="${got ? 'background:' + s.colour : ''}"
+                 title="${esc(s.label)}"></b>`;
+    }).join('');
 
-    // A day short of one stream is routine; it says which, quietly. A day
-    // with nothing at all says so outright.
+    // A day short of one upload says which. A day whose raws cannot exist
+    // yet says that instead - it is not a gap, and calling it one made
+    // every today look like the worst day of the month.
     let note = '';
-    if (!future){
-      if (!have.length) note = '<div class="gap">nothing uploaded</div>';
-      else if (missing.length === 1) note = `<div class="gap">no ${esc(missing[0].short)}</div>`;
-      else if (missing.length) note =
-        `<div class="gap">no ${esc(missing.map(s => s.short).join(', '))}</div>`;
+    if (!nothingDue){
+      if (!have.length && !waiting.length)
+        note = '<div class="gap">nothing uploaded</div>';
+      else if (missing.length)
+        note = `<div class="gap">no ${esc(missing.map(s => s.short).join(', '))}</div>`;
+      else if (waiting.length && have.length)
+        note = `<div class="gap soon">rest due tomorrow</div>`;
+      else if (waiting.length)
+        note = `<div class="gap soon">nothing due yet</div>`;
     }
 
     html += `<div class="${cls}" title="${esc(tip)}">
         <div class="n">${d}${key === today ? '<em>today</em>' : ''}${
-          !future && have.length && !missing.length ? '<span class="tick">✓</span>' : ''}</div>
+          done ? '<span class="tick">\u2713</span>' : ''}</div>
         ${note}
         <div class="slots">${slots}</div>
       </div>`;
@@ -229,16 +260,18 @@ function draw(){
       part ? ` &middot; <b>${part}</b> part` : ''}${
       blank ? ` &middot; <b>${blank}</b> empty` : ''}</div>`;
 
-  // Worst first: the stream you are behind on is the one worth seeing.
-  streams.innerHTML = S.map(s => ({s, n: tally[s.key] || 0}))
-    .sort((a, b) => a.n - b.n)
-    .map(({s, n}) => {
-      const pct = elapsed ? Math.round(n / elapsed * 100) : 0;
-      return `<div class="srow" title="${esc(s.label)}: ${n} of ${elapsed} days">
+  // Worst first, and each against the days it was actually due - stock is
+  // due for today as well, the other four are not, so they do not share a
+  // denominator.
+  streams.innerHTML = S.map(s => ({s, n: tally[s.key] || 0, of: dueDays[s.key] || 0}))
+    .sort((a, b) => (a.of ? a.n / a.of : 1) - (b.of ? b.n / b.of : 1))
+    .map(({s, n, of}) => {
+      const pct = of ? Math.round(n / of * 100) : 0;
+      return `<div class="srow" title="${esc(s.label)}: ${n} of ${of} days due">
           <i style="background:${s.colour}"></i>
           <span class="nm">${esc(s.label.replace(' - ', ' \u00b7 '))}</span>
           <span class="bar"><b style="width:${pct}%;background:${s.colour}"></b></span>
-          <span class="ct">${n}/${elapsed}</span>
+          <span class="ct">${n}/${of}</span>
         </div>`;
     }).join('');
 }

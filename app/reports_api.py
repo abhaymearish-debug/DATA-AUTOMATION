@@ -2049,17 +2049,25 @@ def upload_calendar() -> dict:
         # two cumulatives it meant. Purchase instruction is the one raw that
         # is not daily: KSBC exports it a month at a time, so it has no place
         # on a screen about days.
+        #
+        # `due_after` is how many days must pass before a day's raw can exist
+        # at all. Four of these report what HAPPENED during a day, so the day
+        # has to finish first - the 19th's sales are pulled on the 20th. Stock
+        # is the exception: it is a photograph of the warehouse as it stands,
+        # so today's is available today. Without this the screen marked four
+        # streams missing on every single today, which is not a gap anybody
+        # can close.
         "streams": [
             {"key": "shop_cumulative", "label": "Shop Sales - Cumulative",
-             "short": "Shop cumulative", "colour": "#2563EB"},
+             "short": "Shop cumulative", "colour": "#2563EB", "due_after": 1},
             {"key": "shop_daily", "label": "Shop Sales - Daily",
-             "short": "Shop daily", "colour": "#0EA5E9"},
+             "short": "Shop daily", "colour": "#0EA5E9", "due_after": 1},
             {"key": "secondary", "label": "Secondary Sales - Daily",
-             "short": "Secondary daily", "colour": "#10B981"},
+             "short": "Secondary daily", "colour": "#10B981", "due_after": 1},
             {"key": "item_issue", "label": "Secondary Sales - Analysis",
-             "short": "Secondary analysis", "colour": "#8B5CF6"},
+             "short": "Secondary analysis", "colour": "#8B5CF6", "due_after": 1},
             {"key": "warehouse", "label": "Warehouse Physical Stock",
-             "short": "Stock", "colour": "#F59E0B"},
+             "short": "Stock", "colour": "#F59E0B", "due_after": 0},
         ],
         "span": {"first": min(days) if days else "", "last": max(days) if days else ""},
     }
