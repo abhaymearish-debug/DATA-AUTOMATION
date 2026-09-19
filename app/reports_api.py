@@ -823,18 +823,21 @@ DAILY_KINDS = {
 
 
 def _latest_month(days) -> tuple:
-    """This month as far as it goes, or the newest month that has anything.
+    """This month as far as it actually goes, else the newest month with data.
 
-    The end is the last day uploaded rather than the last day of the month: a
-    report on the 19th should not carry eleven empty columns for days nobody
-    has pulled yet.
+    Both ends are days that exist, not the 1st and the 31st. A window is a
+    claim about what it covers: opening on 1-19 when only the 17th, 18th and
+    19th have been uploaded reads as a month-to-date figure that is missing
+    half the month. Starting at the first day uploaded says what the report
+    can actually answer for, and the gaps inside it are still marked on the
+    screen as days nobody has pulled.
     """
     today = date.today()
     want = (today.year, today.month)
     if not any((d.year, d.month) == want for d in days):
         want = max((d.year, d.month) for d in days)
     inside = [d for d in days if (d.year, d.month) == want]
-    return date(want[0], want[1], 1), max(inside)
+    return min(inside), max(inside)
 
 
 def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
