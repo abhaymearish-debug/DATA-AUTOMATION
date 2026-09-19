@@ -2201,7 +2201,7 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
 
     def paint(row, col, fill=None, colour=FIG_INK, bold=False, size=9.5,
               align="center", fmt=None, value=None, wrap=False, strong=False,
-              plain=False):
+              plain=False, channel=False):
         c = ws.cell(row=row, column=col)
         if value is not None:
             c.value = value
@@ -2211,7 +2211,9 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
         c.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap)
         if not plain:
             left, right = edges(col)
-            band = RULE if strong else HAIR
+            # The channel is one strip from the header to the last row. A top
+            # or bottom edge on it would saw it into twenty-odd pieces.
+            band = None if channel else (RULE if strong else HAIR)
             c.border = Border(left=left, right=right, top=band, bottom=band)
         if fmt:
             c.number_format = fmt
@@ -2248,8 +2250,8 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
                               (now_label, was_label, "\u25b2 CS", "\u25b2 %")):
             paint(4, col, NAVY, GOLD, True, 9.5, value=label, wrap=True)
     for col in gutters:
-        paint(3, col, NAVY)
-        paint(4, col, NAVY)
+        paint(3, col, NAVY, channel=True)
+        paint(4, col, NAVY, channel=True)
     ws.row_dimensions[3].height = 22
     ws.row_dimensions[4].height = 18
 
@@ -2307,8 +2309,16 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
                 paint(r, col + 3, fill, up if pct >= 0 else down, True, size,
                       fmt=PC_FMT, value=round(pct, 4), strong=strong)
         for col in gutters:
-            paint(r, col, NAVY, strong=strong)
+            paint(r, col, NAVY, channel=True)
         ws.row_dimensions[r].height = 20
+
+    # One merged cell per channel - across the header, then down the body - so
+    # each reads as a single strip of navy rather than a stack of cells.
+    for col in gutters:
+        ws.merge_cells(start_row=3, start_column=col, end_row=4, end_column=col)
+        ws.merge_cells(start_row=5, start_column=col, end_row=r, end_column=col)
+        paint(3, col, NAVY, channel=True)
+        paint(5, col, NAVY, channel=True)
 
     # ---- the shape of the page ----
     ws.column_dimensions["A"].width = 24
