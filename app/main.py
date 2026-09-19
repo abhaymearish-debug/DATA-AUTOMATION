@@ -2839,12 +2839,23 @@ def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "
 @app.get("/reports/daily/{kind}/export.xlsx")
 def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = "",
                cluster: str = "", view: str = "bond", round_off: str = ""):
+    """The daily grid as a workbook, in the same dress as its own PDF.
+
+    It used to open on the bare column headings - no mark, no report name, no
+    period - so a file saved to a folder said nothing about itself a month
+    later, and a day nobody had uploaded read as a hard zero exactly like a
+    day that traded nothing. This carries the PDF's title bands, splits the
+    weekday from the date the way the screen does, and greys an uncovered day
+    so it reads as absent rather than as nil.
+    """
     require_user(request)
     round_off = _rounded(round_off)
     _daily_kind(kind)
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.page import PageMargins
 
     cl = int(cluster) if cluster in ("1", "2", "3") else None
     data = reports_api.daily_grid(kind, date_from=date_from, date_to=date_to,
@@ -2852,43 +2863,161 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
     if "error" in data:
         raise HTTPException(404, data["error"])
 
-    navy, gold, white = "FF0A294F", "FFFFBD30", "FFFFFFFF"
+    NAVY, GOLD, WHITE = "FF0A294F", "FFFFBD30", "FFFFFFFF"
+    PAPER, INK, HAIR = "FFF5F7FC", "FF28324A", "FFD9DEE9"
+    ZERO, MUTED = "FF9AA3B4", "FF6B7692"
+    NC_BG, NC_INK = "FFF1F3F8", "FFC2C9D6"          # a day with no raw behind it
+    NC_HEAD = "FF8FA0C4"
+
+    thin = Side(style="thin", color=HAIR)
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    days = data["days"]
+    covered = set(data.get("covered") or [])
+    missing = [d for d in days if d["iso"] not in covered]
+    n_cols = len(days) + 2                           # label + days + total
+    last = get_column_letter(n_cols)
+
     wb = Workbook()
     ws = wb.active
     ws.title = data["title"][:31]
 
-    ws.append([data.get("group_label", "Bond").upper()]
-              + [f"{d['dow']} {d['dom']}" for d in data["days"]] + ["TOTAL"])
-    for cell in ws[1]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(bold=True, color=gold, size=10)
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    ws.row_dimensions[1].height = 30
+    # --- the two bands the PDF wears -------------------------------------
+    # How much room the bands actually have. A one-day sheet is three columns
+    # wide, and a band set to one line there just clips its own title.
+    span_chars = 22 + (len(days) + 1) * 7.5
 
+    def band_height(text: str, per_line: float, base: float) -> float:
+        lines = max(1, -(-len(text) // max(10, int(span_chars / per_line))))
+        return base if lines == 1 else base * 0.8 + lines * 13
+
+    ws.merge_cells(f"A1:{last}1")
+    t = ws["A1"]
+    t.value = "K.S DISTILLERY"
+    t.fill = PatternFill("solid", fgColor=NAVY)
+    t.font = Font(bold=True, color=GOLD, size=14)
+    t.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = band_height("K.S DISTILLERY", 1.15, 30)
+
+    # A window of one day is one date, not the same date printed twice.
+    per = data["period"]
+    label = per["label"]
+    if per.get("from") and per["from"] == per.get("to"):
+        label = label.split(" - ")[0]
+
+    ws.merge_cells(f"A2:{last}2")
+    sub = ws["A2"]
+    sub.value = f"{data['title'].upper()}   \u00b7   {label}"
+    sub.fill = PatternFill("solid", fgColor=GOLD)
+    sub.font = Font(bold=True, color=NAVY, size=11)
+    sub.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[2].height = band_height(sub.value, 0.92, 22)
+
+    # --- what you are looking at, in one line ----------------------------
+    bits = [f"Grouped by {data.get('group_label', 'Bond').lower()}",
+            f"Cluster {cl}" if cl else "All clusters",
+            "cases, rounded to whole numbers" if round_off else "cases, exact"]
+    if missing:
+        # Sixteen day numbers in a row is a wall; "1-16, 18" is the same fact.
+        nums, runs = [int(d["dom"]) for d in missing], []
+        for n in nums:
+            if runs and n == runs[-1][1] + 1:
+                runs[-1][1] = n
+            else:
+                runs.append([n, n])
+        shown = ", ".join(str(a) if a == b else f"{a}\u2013{b}" for a, b in runs)
+        bits.append(f"no raw uploaded for {shown} \u2014 shown as zero")
+    if data.get("unmapped"):
+        bits.append(f"{len(data['unmapped'])} outlet(s) with no bond in master data")
+    ws.merge_cells(f"A3:{last}3")
+    note = ws["A3"]
+    note.value = "   \u00b7   ".join(bits)
+    note.font = Font(size=9, color=MUTED, italic=True)
+    note.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[3].height = band_height(note.value, 0.62, 16)
+
+    # --- header, weekday over date, the way the screen prints it ---------
+    ws.merge_cells(f"A4:A5")
+    ws.cell(4, 1, data.get("group_label", "Bond").upper())
+    ws.merge_cells(f"{last}4:{last}5")
+    ws.cell(4, n_cols, "TOTAL")
+    for i, d in enumerate(days):
+        ws.cell(4, i + 2, d["dow"])
+        ws.cell(5, i + 2, int(d["dom"]) if d["dom"].isdigit() else d["dom"])
+    for r in (4, 5):
+        for c in range(1, n_cols + 1):
+            cell = ws.cell(r, c)
+            cell.fill = PatternFill("solid", fgColor=NAVY)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = box
+            iso = days[c - 2]["iso"] if 2 <= c <= len(days) + 1 else None
+            dim = iso is not None and iso not in covered
+            cell.font = Font(bold=True, size=9 if r == 4 else 10,
+                             color=NC_HEAD if dim else GOLD)
+    ws.cell(4, 1).font = Font(bold=True, size=10, color=GOLD)
+    ws.cell(4, n_cols).font = Font(bold=True, size=10, color=GOLD)
+    ws.row_dimensions[4].height = 17
+    ws.row_dimensions[5].height = 17
+
+    # --- the grid --------------------------------------------------------
     figures = "#,##0" if round_off else "#,##0.##"
+    stripe = 0
+    at = 5
     for r in data["rows"]:
-        ws.append([r["label"]] + r["cells"] + [r["total"]])
-        row = ws[ws.max_row]
-        for cell in row[1:]:
-            cell.number_format = figures
-        for cell in row:
-            cell.alignment = Alignment(horizontal="center")
-            if r["kind"] == "cluster":
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(bold=True, color=gold)
-            elif r["kind"] == "grand":
-                cell.fill = PatternFill("solid", fgColor=gold)
-                cell.font = Font(bold=True, color=navy)
-        row[0].alignment = Alignment(horizontal="left")
-        row[-1].font = Font(bold=True, color=(gold if r["kind"] == "cluster"
-                                              else navy if r["kind"] == "grand" else "FF0F192D"))
+        at += 1
+        ws.append([r["label"]] + list(r["cells"]) + [r["total"]])
+        kind_ = r["kind"]
+        if kind_ == "bond":
+            stripe += 1
+            band = PAPER if stripe % 2 == 0 else None
+        else:
+            stripe = 0
+            band = None
+        for c in range(1, n_cols + 1):
+            cell = ws.cell(at, c)
+            cell.border = box
+            cell.alignment = Alignment(horizontal="left" if c == 1 else "center")
+            if c > 1:
+                cell.number_format = figures
+            iso = days[c - 2]["iso"] if 2 <= c <= len(days) + 1 else None
+            dim = iso is not None and iso not in covered
+            nil = c > 1 and not (cell.value or 0)
+            if kind_ == "cluster":
+                cell.fill = PatternFill("solid", fgColor="FF16305F" if dim else NAVY)
+                cell.font = Font(bold=True, size=10,
+                                 color="FF7C89A6" if (dim or nil) else GOLD)
+            elif kind_ == "grand":
+                cell.fill = PatternFill("solid", fgColor="FFF0D08A" if dim else GOLD)
+                cell.font = Font(bold=True, size=10,
+                                 color="FF9A8340" if (dim or nil) else NAVY)
+            else:
+                if dim:
+                    cell.fill = PatternFill("solid", fgColor=NC_BG)
+                elif band:
+                    cell.fill = PatternFill("solid", fgColor=band)
+                cell.font = Font(size=10, bold=c == n_cols,
+                                 color=NC_INK if dim else ZERO if nil else INK)
 
-    ws.freeze_panes = "B2"
-    ws.column_dimensions["A"].width = 22
-    for i in range(2, len(data["days"]) + 3):
-        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = 7
+    # --- shape -----------------------------------------------------------
+    ws.freeze_panes = "B6"
+    # Wide enough for the longest name on the sheet - a warehouse view carries
+    # longer labels than a bond one - but not so wide it pushes the days off.
+    widest = max((len(str(r["label"])) for r in data["rows"]), default=18)
+    ws.column_dimensions["A"].width = min(34, max(22, widest + 3))
+    for i in range(2, n_cols + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 7.5
+    ws.column_dimensions[last].width = 9.5
 
-    out = Path(tempfile.mkdtemp()) / f"{data['title']}.xlsx"
+    ws.print_title_rows = "1:5"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4)
+    ws.sheet_view.showGridLines = False
+
+    suffix = f" (Cluster {cl})" if cl else ""
+    out = Path(tempfile.mkdtemp()) / f"{data['title']}{suffix}.xlsx"
     wb.save(out)
     return FileResponse(out, filename=out.name)
 
