@@ -126,8 +126,11 @@
   .hbar label { font-size:11px; letter-spacing:.6px; text-transform:uppercase;
                 color:var(--muted); font-weight:700; }
   .hbar input[type=date] { width:auto; padding:7px 10px; }
+  .hbar select { width:auto; padding:7px 10px; }
+  .hbar label { white-space:nowrap; }
   .hbar .to { font-size:12px; color:var(--muted); }
-  .hbar .count { margin-left:auto; font-size:12px; color:var(--muted); }
+  .hbar .count { margin-left:auto; font-size:12px; color:var(--muted);
+                 white-space:nowrap; }
 
   .hrun .cov { font-size:14.5px; font-weight:700; letter-spacing:.2px; }
   .hrun .sub { font-size:12px; color:var(--muted); margin-top:3px; }
@@ -379,11 +382,15 @@
       <button type="button" onclick="closeHistory()">&times;</button></header>
     <div class="body scroll">
       <div class="hbar">
-        <label for="hFrom">Dates covered</label>
+        <label for="hFrom" id="hLbl">Dates covered</label>
         <input type="date" id="hFrom" onchange="drawHistory()">
+        <!-- Months, not a month picker: Safari has no native one, and a
+             stream filed monthly only ever has a handful of them anyway. -->
+        <select id="hFromM" hidden onchange="drawHistory()"></select>
         <span class="to">to</span>
         <input type="date" id="hTo" onchange="drawHistory()">
-        <button class="act" onclick="hFrom.value=''; hTo.value=''; drawHistory()">Clear</button>
+        <select id="hToM" hidden onchange="drawHistory()"></select>
+        <button class="act" onclick="clearHistoryFilter()">Clear</button>
         <span class="count" id="hCount"></span>
       </div>
       <div id="hBody"></div>
@@ -976,7 +983,13 @@ function openHistory(c){
   historyCard = c;
   historyStream = c.stream;
   hTitle.textContent = c.title + ' — history';
-  hFrom.value = ''; hTo.value = '';
+  // A day picker over a stream filed by month asks a question it cannot
+  // answer, so the filter takes the shape of what is behind it.
+  const month = wantsMonth(c);
+  hLbl.textContent = month ? 'Months covered' : 'Dates covered';
+  hFrom.hidden = hTo.hidden = month;
+  hFromM.hidden = hToM.hidden = !month;
+  hFrom.value = hTo.value = hFromM.value = hToM.value = '';
   hCount.textContent = '';
   hBody.innerHTML = '<p class="empty">Loading…</p>';
   hVeil.classList.add('on');
@@ -992,7 +1005,7 @@ function closeHistory(){ hVeil.classList.remove('on'); historyStream = null; }
 // answer is shown rather than assumed.
 async function delDate(day){
   if (!historyCard) return;
-  if (!confirm(`Delete everything uploaded for ${niceDate(day)}?\n\n`
+  if (!confirm(`Delete everything uploaded for ${whenWords(day)}?\n\n`
              + `The raw file(s) and the record of those runs are removed. `
              + `This cannot be undone.`)) return;
   const fd = new FormData();
@@ -1040,15 +1053,48 @@ function niceDate(isoDay){
   return new Date(y, m-1, d).toLocaleDateString('en-GB',
     { day:'numeric', month:'short', year:'numeric' });
 }
+
+// The purchase instruction has no date in it. KSBC exports it a month at a
+// time, every sheet in a pull says the same month, and the app files it under
+// that month - so "1 Sep 2026" was the key showing through, not a fact. This
+// screen says September 2026, and its filter picks months.
+function niceMonth(isoDay){
+  const [y,m] = String(isoDay).split('-').map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString('en-GB',
+    { month:'long', year:'numeric' });
+}
+function byMonth(){ return historyCard ? wantsMonth(historyCard) : false; }
+
+// Newest first, the way the list below reads, with a blank meaning no bound.
+function fillMonthPickers(keys){
+  const months = [...new Set(keys.map(k => k.slice(0, 7)))].sort().reverse();
+  const sig = months.join('|');
+  for (const sel of [hFromM, hToM]){
+    if (sel.dataset.sig === sig) continue;
+    const had = sel.value;
+    sel.dataset.sig = sig;
+    sel.innerHTML = `<option value="">Any month</option>`
+      + months.map(m => `<option value="${m}">${escapeHtml(niceMonth(m + '-01'))}</option>`).join('');
+    if (months.includes(had)) sel.value = had;
+  }
+}
+function whenWords(isoDay){ return byMonth() ? niceMonth(isoDay) : niceDate(isoDay); }
 function clock(iso){
   return new Date(iso).toLocaleTimeString('en-GB',
     { hour:'numeric', minute:'2-digit', hour12:true });
 }
 
+function clearHistoryFilter(){
+  hFrom.value = hTo.value = hFromM.value = hToM.value = '';
+  drawHistory();
+}
+
 function drawHistory(){
   // A range, because the question is usually "what went in that week?" rather
   // than one exact day. Either end on its own works as an open bound.
-  const from = hFrom.value, to = hTo.value;
+  const month = byMonth();
+  const from = month ? hFromM.value : hFrom.value;
+  const to   = month ? hToM.value   : hTo.value;
 
   const byDate = new Map();
   for (const j of historyJobs){
@@ -1056,17 +1102,25 @@ function drawHistory(){
     if (!key) continue;
     (byDate.get(key) || byDate.set(key, []).get(key)).push(j);
   }
-  const days = [...byDate.keys()].sort().reverse()
-    .filter(d => (!from || d >= from) && (!to || d <= to));
+  // The two month selects are built from the months actually filed, so the
+  // filter can never ask for one that was never uploaded.
+  if (month) fillMonthPickers([...byDate.keys()]);
 
+  // In month mode the filter values are YYYY-MM, so the key is cut to match.
+  const cut = d => month ? d.slice(0, 7) : d;
+  const days = [...byDate.keys()].sort().reverse()
+    .filter(d => (!from || cut(d) >= from) && (!to || cut(d) <= to));
+
+  const unit = month ? 'month' : 'date';
   hCount.textContent = (from || to)
-    ? `${days.length} of ${byDate.size} dates`
-    : `${byDate.size} date${byDate.size === 1 ? '' : 's'} covered`;
+    ? `${days.length} of ${byDate.size} ${unit}s`
+    : `${byDate.size} ${unit}${byDate.size === 1 ? '' : 's'} covered`;
 
   if (!days.length){
-    const span = from && to ? `${niceDate(from)} – ${niceDate(to)}`
-               : from ? `on or after ${niceDate(from)}`
-               : to ? `on or before ${niceDate(to)}` : '';
+    const say = v => month ? niceMonth(v + '-01') : niceDate(v);
+    const span = from && to ? `${say(from)} – ${say(to)}`
+               : from ? `on or after ${say(from)}`
+               : to ? `on or before ${say(to)}` : '';
     hBody.innerHTML = span
       ? `<p class="empty">Nothing uploaded <b>${escapeHtml(span)}</b>.</p>`
       : '<p class="empty">Nothing uploaded for this type yet.</p>';
@@ -1088,8 +1142,9 @@ function drawHistory(){
     // What the file actually holds. A KSBC secondary pull is cumulative, so a
     // raw dated the 16th can carry every dispatch since the 1st - and a report
     // covering a fortnight off one upload looks invented until this says so.
-    let span = lead.covers_to && lead.covers_to !== day
-      ? `${niceDate(day)} – ${niceDate(lead.covers_to)}` : niceDate(day);
+    let span = month ? niceMonth(day)
+             : lead.covers_to && lead.covers_to !== day
+               ? `${niceDate(day)} – ${niceDate(lead.covers_to)}` : niceDate(day);
     let holds = '';
     if (lead.spans_from && lead.spans_from < day){
       span = `${niceDate(lead.spans_from)} – ${niceDate(day)}`;
