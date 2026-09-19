@@ -399,6 +399,12 @@
      full width of the page - an invisible strip from the chip to the right
      edge, and hovering anywhere along it opened the panel. */
   .srcline { position:relative; display:flex; width:fit-content; max-width:100%; }
+  /* `display:flex` above beats the browser's own rule for [hidden], so every
+     `srcLine.hidden = true` in this app has been doing nothing at all: a
+     report with no figures still showed a Source chip, listing the files it
+     would have read if it had had any. A provenance panel for figures that
+     are not on the screen is worse than no panel. */
+  .srcline[hidden] { display:none; }
 
   .srcchip { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
              border:1px solid var(--line); border-radius:999px;

@@ -223,10 +223,9 @@ function draw(){
                  key === today ? 'today' : ''].filter(Boolean).join(' ');
 
     // The whole day's state, spelled out, for anyone who hovers.
-    // A cumulative day is answered by a pull that usually covers a fortnight
-    // either side of it, so the tick on its own invites the question this
-    // now answers in place: which file is speaking for this day.
-    const pull = (CAL.periods || []).find(p => p.from <= key && key <= p.to);
+    // The pull taken on this day, named by the window it covers - "from the
+    // 1 - 12 Aug pull" says both that you took it and how far back it reaches.
+    const pull = (CAL.periods || []).find(p => p.to === key);
     // "1 - 16 Aug 2026", not "1 Aug 2026 to 16 Aug 2026" - the month and the
     // year are the same at both ends, and saying them twice in a tooltip
     // that is already five lines long is five words nobody reads.
@@ -294,7 +293,7 @@ function draw(){
   // apart, so it is only printed where it differs from the days.
   const monthFrom = iso(y, m, 1), monthTo = iso(y, m, last);
   const filesOf = key => key !== 'shop_cumulative' ? (tally[key] || 0)
-    : (CAL.periods || []).filter(p => p.from <= monthTo && p.to >= monthFrom).length;
+    : (CAL.periods || []).filter(p => monthFrom <= p.to && p.to <= monthTo).length;
 
   streams.innerHTML = S.map(s => ({s, n: tally[s.key] || 0, of: dueDays[s.key] || 0,
                                    f: filesOf(s.key)}))

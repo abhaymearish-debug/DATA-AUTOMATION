@@ -2446,10 +2446,14 @@ def upload_calendar() -> dict:
     for p in cumulative_periods():
         periods.append({"from": p["start"].isoformat(), "to": p["end"].isoformat(),
                         "short": p["short"], "name": p["path"].name})
-        day = p["start"]
-        while day <= p["end"]:
-            cover[day].add("shop_cumulative")
-            day += timedelta(days=1)
+        # The day the pull was taken for, not every day it reaches back over.
+        # A cumulative always runs from the start of the half-month to the day
+        # you pulled it, so marking its whole span made two files answer for a
+        # whole month and the row read 31/31 beside a Shop Daily row of 4/31
+        # that meant four uploads. The office takes one of these a day - 1-1,
+        # then 1-2, then 1-3 - so the end date is the day it speaks for, and a
+        # day with no pull of its own is a day the pull was not taken.
+        cover[p["end"]].add("shop_cumulative")
 
     days = {d.isoformat(): sorted(v) for d, v in cover.items() if v}
     return {
