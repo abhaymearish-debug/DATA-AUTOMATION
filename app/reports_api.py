@@ -587,6 +587,33 @@ def secondary_covered_days() -> set:
     return days
 
 
+def _named_window(name: str, near: date | None):
+    """The window a secondary file names, as dates. None if it names none.
+
+    "SEPTEMBER 1st - 18th SECONDARY SALES ANALYSIS.xlsx" -> 1 to 18 September.
+    "RAW DATA SEPTEMBER 17 SECONDARY SALES.xlsx"         -> the 17th, both ends.
+    The year is not on either, so it comes from a dated line in the file.
+    """
+    up = name.upper()
+    m = _MONTH_IN_NAME.search(up)
+    if not m:
+        return None
+    month = _MONTHS_UP.index(m.group(1)) + 1
+    year = near.year if near else datetime.now().year
+    r = _RANGE_IN_NAME.search(up)
+    if r:
+        first, last = int(r.group(1)), int(r.group(2))
+    else:
+        one = _RAW_SEC_RE.match(name)
+        if not one:
+            return None
+        first = last = int(one.group(2))
+    try:
+        return date(year, month, first), date(year, month, last)
+    except ValueError:
+        return None
+
+
 def secondary_lines() -> tuple[list, list]:
     """Every dispatch line the app can answer for, and what it read.
 
@@ -601,16 +628,25 @@ def secondary_lines() -> tuple[list, list]:
     sources: list = []
 
     def entry(name: str, rows: list) -> dict:
-        """A source, with the days it actually answered for.
+        """A source, with the days it ANSWERS FOR - not the days it has lines.
 
         Carried so the Source chip can drop a file that contributed nothing to
         the window on screen. Without it every secondary report named every
         dispatch file the app had ever seen, whatever window you asked for.
+
+        The window comes off the file's own name where it carries one, because
+        a day with no dispatch still has a file behind it. Reading min..max of
+        the lines instead made "SEPTEMBER 1st - 18th" read as "2 - 18 Sep" the
+        moment nothing moved on the 1st - which looks exactly like the 1st was
+        never uploaded, and it was.
         """
         days = sorted(l["date"] for l in rows if l.get("date"))
+        span = _named_window(name, days[-1] if days else None)
+        if not span and days:
+            span = (days[0], days[-1])
         return {"name": name,
-                "from": days[0].isoformat() if days else "",
-                "to": days[-1].isoformat() if days else ""}
+                "from": span[0].isoformat() if span else "",
+                "to": span[1].isoformat() if span else ""}
 
     book = find_secondary_workbook()
     if book is not None:
