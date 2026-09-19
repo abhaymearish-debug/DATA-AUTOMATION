@@ -26,6 +26,7 @@ two can never drift apart in appearance.
 
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -90,6 +91,18 @@ def trimmed(text: str) -> str:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def whole(v) -> int:
+    """Half away from zero, the way the office rounds - never banker's.
+
+    Python's round() and its "%.0f" both round a tie to the even number, so
+    448.5 came out 448 where the office's own sheet says 449, and the browser
+    and Excel - which both round half up - printed 449 for the very same cell.
+    Figures land on a half often enough in these files for that to be a visible
+    disagreement between a report and its own PDF.
+    """
+    return int(Decimal(str(float(v or 0))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
 def cases(v, round_off: bool) -> str:
     """A case count as the reports print it.
 
@@ -98,14 +111,14 @@ def cases(v, round_off: bool) -> str:
     cases, which is what somebody reading the sheet out loud wants.
     """
     n = float(v or 0)
-    return f"{n:,.0f}" if round_off else trimmed(f"{n:,.2f}")
+    return f"{whole(n):,}" if round_off else trimmed(f"{n:,.2f}")
 
 
 def _fmt(v: float, round_off: bool) -> str:
     if not v:
         return "0"
-    if round_off or abs(v - round(v)) < 0.005:
-        return f"{round(v):,.0f}"
+    if round_off or abs(v - whole(v)) < 0.005:
+        return f"{whole(v):,}"
     return trimmed(f"{v:,.2f}")
 
 
@@ -918,7 +931,7 @@ def _ta_num(v, round_off: bool = True) -> str:
         n = float(v or 0)
     except (TypeError, ValueError):
         return "0"
-    return f"{int(round(n))}" if round_off else trimmed(f"{n:.2f}")
+    return f"{whole(n)}" if round_off else trimmed(f"{n:.2f}")
 
 
 def _ta_centre(c, x0: float, x1: float, y: float, text: str,

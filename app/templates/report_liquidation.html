@@ -100,18 +100,18 @@
    be half a case, so the figures carry two places until somebody asks for
    round numbers to read out. #}
 {% macro fig(v, rnd) -%}
-  {% if v|round|int == 0 and v|round(2) == 0 %}<span class="nil">-</span>
-  {%- elif rnd %}{{ v|round|int }}{% else %}{{ '%.2f'|format(v)|trim0 }}{% endif %}
+  {% if v|cases == 0 and v|cases(2) == 0 %}<span class="nil">-</span>
+  {%- elif rnd %}{{ v|cases }}{% else %}{{ '%.2f'|format(v)|trim0 }}{% endif %}
 {%- endmacro %}
 
 {% macro delta(now, was, pct, rnd) -%}
-  {% if now|round(2) == 0 and was|round(2) == 0 %}<span class="nil">-</span>
+  {% if now|cases(2) == 0 and was|cases(2) == 0 %}<span class="nil">-</span>
   {%- elif pct and was|round(6) == 0 %}<span class="nil">-</span>
   {%- else %}
     {% set d = ((now - was) / was * 100) if pct else (now - was) %}
     {% set up = d >= 0 %}
     <span class="d {{ 'up' if up else 'dn' }}"><span class="ar">{{ '▲' if up else '▼' }}</span>{%
-      if rnd %}{{ (d|abs)|round|int }}{% elif pct %}{{ '%.1f'|format(d|abs)|trim0 }}{%
+      if rnd %}{{ (d|abs)|cases }}{% elif pct %}{{ '%.1f'|format(d|abs)|trim0 }}{%
       else %}{{ '%.2f'|format(d|abs)|trim0 }}{% endif %}{{ '%' if pct else '' }}</span>
   {%- endif %}
 {%- endmacro %}

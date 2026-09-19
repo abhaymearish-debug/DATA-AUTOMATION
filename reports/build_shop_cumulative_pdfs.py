@@ -76,13 +76,20 @@ def w(text, font, size):
     return pdfmetrics.stringWidth(str(text), font, size)
 
 
-def money(value: float) -> str:
-    """Up to two decimals, rounded half up - the way the office's clerk rounds.
+ROUND_OFF = False
 
-    A figure that lands on a whole case prints as one: "5.00" is 5 with noise
-    on the end, and a column of them is noise all the way down.
+
+def money(value: float, round_off: bool | None = None) -> str:
+    """Rounded half up - the way the office's clerk rounds, never banker's.
+
+    Whole cases when the sheet is rounded off, up to two decimals otherwise.
+    A figure that lands on a whole case prints as one either way: "5.00" is 5
+    with noise on the end, and a column of them is noise all the way down.
     """
-    out = f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,.2f}"
+    whole = ROUND_OFF if round_off is None else round_off
+    step = Decimal("1") if whole else Decimal("0.01")
+    got = Decimal(str(value or 0)).quantize(step, rounding=ROUND_HALF_UP)
+    out = f"{got:,.0f}" if whole else f"{got:,.2f}"
     return out.rstrip("0").rstrip(".") if "." in out else out
 
 
@@ -328,7 +335,14 @@ def main() -> int:
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--period", default="")
     ap.add_argument("--verify", action="store_true")
+    ap.add_argument("--round-off", action="store_true",
+                    help="whole cases, the way the screen shows them with the switch on")
     a = ap.parse_args()
+
+    # money() reads this, so every figure on every page follows the switch
+    # without threading a flag through the layout.
+    global ROUND_OFF
+    ROUND_OFF = bool(a.round_off)
 
     if not a.raw and not a.lines:
         print("ERROR: give either --raw (a cumulative file) or --lines (a rebuilt window).")

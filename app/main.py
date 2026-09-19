@@ -48,7 +48,21 @@ def _trim0(text: str) -> str:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def _cases(value, places: int = 0):
+    """Round half away from zero, the way the office rounds.
+
+    Jinja's own |round filter is Python's round(), which rounds a tie to the
+    even number: |round on 20.5 gave 20 where the browser and Excel both print
+    21 for the same figure. Templates use this instead.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    step = Decimal(1).scaleb(-places)
+    got = Decimal(str(float(value or 0))).quantize(step, rounding=ROUND_HALF_UP)
+    return int(got) if places == 0 else float(got)
+
+
 templates.env.filters["trim0"] = _trim0
+templates.env.filters["cases"] = _cases
 
 # The brand mark, and anywhere else the UI needs a file rather than markup.
 # Mounted rather than inlined so the browser caches it once instead of
@@ -1999,6 +2013,10 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
 
     argv = ["python3", str(APP_REPORTS / "build_shop_cumulative_pdfs.py"),
             "--outdir", str(outdir), "--period", chosen["long"]]
+    # The office books ignored the switch entirely and always printed the exact
+    # figure, so the same report read 103.5 in the PDF and 104 on the screen.
+    if round_off:
+        argv.append("--round-off")
     if win["source"] == "cumulative":
         argv += ["--raw", str(chosen["path"])]
     else:

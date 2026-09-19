@@ -589,7 +589,7 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
             extra.setdefault(k, {"bond": l["bond"], "warehouse": l["warehouse"]})
 
     def rounded(v: float) -> float:
-        return round(v) if round_off else round(v, 2)
+        return half_up(v) if round_off else round(v, 2)
 
     rows = []
     if cluster_of is not None:
@@ -687,7 +687,7 @@ def brandwise_shops(view: str = "bond", key: str = "", date_from=None, date_to=N
         names[code] = l["shop"] or code
 
     def rounded(v: float) -> float:
-        return round(v) if round_off else round(v, 2)
+        return half_up(v) if round_off else round(v, 2)
 
     shops = []
     for code in sorted(grid, key=lambda c: -sum(grid[c].values())):
@@ -2187,7 +2187,7 @@ def _tva_row(label: str, kind: str, cluster: int | None,
     what a bond actually sold need not be.
     """
     def show(v: float) -> float:
-        return round(v) if round_off else round(v, 2)
+        return half_up(v) if round_off else round(v, 2)
 
     ach_true = {k: sum(grid.get(b, {}).get(k, 0.0) for b in bonds) for k in cols}
     tgt_true = {k: sum(tgt.get(b, {}).get(k, 0.0) for b in bonds) for k in cols}
@@ -2426,7 +2426,7 @@ def _ii_day_sale(period: str, prior: str) -> dict:
             return None
         for row in grid.get("rows", []):
             if row.get("kind") == "grand":
-                return round(float(row.get("total", 0) or 0))
+                return half_up(float(row.get("total", 0) or 0))
         return None
 
     a, b = one(period), one(prior)
