@@ -43,6 +43,10 @@
   input[type=search].search:focus { outline:2px solid #C7D2FE; outline-offset:-1px;
       border-color:var(--blue); }
   .searchwrap { position:relative; }
+  /* In the filter row the search gives way before the buttons wrap: it keeps
+     its width while there is room and shrinks when there is not. */
+  .bar1 .searchwrap { flex:1 1 150px; max-width:268px; }
+  .bar1 .searchwrap .search { min-width:0; width:100%; box-sizing:border-box; }
   .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
                     color:var(--muted); font-size:15px; pointer-events:none; }
   .menu { position:relative; display:inline-block; }
@@ -84,7 +88,7 @@
 
   /* .fitem sets display:flex, which beats the UA rule behind [hidden] - so
      say it here, or a hidden filter stays on screen. */
-  .fitem[hidden], .fdiv[hidden], .lede[hidden], .bar2[hidden],
+  .fitem[hidden], .fdiv[hidden], .lede[hidden], .bar2[hidden], #bar2[hidden],
   .bar1 .sp[hidden] { display:none !important; }
 
   .seg { display:inline-flex; background:var(--row); border-radius:9px; padding:2px; gap:2px; }
@@ -253,6 +257,13 @@
         </select><i>▾</i></div>
       </label>
     </div>
+    <!-- The search sits with the filters: it is a filter, and a second strip
+         under them was a whole row of chrome for one box. It keeps the id the
+         page hides it by when there is nothing to search. -->
+    <div class="searchwrap" id="bar2">
+      <span class="ic">⌕</span>
+      <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
+    </div>
     <div class="sp" id="dlBar">
       <a class="act xl" id="dlXl" href="#">Download Excel</a>
       <div class="menu" id="pdfMenu">
@@ -264,13 +275,6 @@
             <span class="sub">exactly what is on screen</span></a>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="bar2" id="bar2">
-    <div class="searchwrap">
-      <span class="ic">⌕</span>
-      <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
     </div>
   </div>
 </div>

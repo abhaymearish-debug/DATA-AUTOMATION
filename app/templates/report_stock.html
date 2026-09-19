@@ -70,6 +70,10 @@
 
   input[type=search].search { min-width:268px; padding-left:36px; padding-right:34px; }
   .searchwrap { position:relative; }
+  /* In the filter row the search gives way before the buttons wrap: it keeps
+     its width while there is room and shrinks when there is not. */
+  .bar1 .searchwrap { flex:1 1 150px; max-width:268px; }
+  .bar1 .searchwrap .search { min-width:0; width:100%; box-sizing:border-box; }
   .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
                     color:var(--muted); font-size:15px; pointer-events:none; }
   .searchwrap kbd { position:absolute; right:9px; top:50%; transform:translateY(-50%);
@@ -258,6 +262,11 @@
         </select><i>▾</i></div>
       </div>
     </div>
+    <div class="searchwrap">
+      <span class="ic">⌕</span>
+      <input id="q" class="search" type="search" placeholder="Search brand, pack or warehouse" autocomplete="off">
+      <kbd>/</kbd>
+    </div>
     <div class="sp">
       <div class="menu" id="xlMenu">
         <button class="btn xl" onclick="toggleMenu('xlMenu')">Download Excel ▾</button>
@@ -270,14 +279,6 @@
           <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="bar2">
-    <div class="searchwrap">
-      <span class="ic">⌕</span>
-      <input id="q" class="search" type="search" placeholder="Search brand, pack or warehouse" autocomplete="off">
-      <kbd>/</kbd>
     </div>
   </div>
 </div>

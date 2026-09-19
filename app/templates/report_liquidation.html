@@ -38,13 +38,26 @@
   thead th.gut { width:8px; padding:0; background:var(--navy);
                  border-left:1px solid var(--gold); border-right:1px solid var(--gold); }
   thead th:first-child { left:0; z-index:4; text-align:left; padding-left:14px; }
+  /* Ruled the way the rest of the reports are: a line between every column,
+     dark on the navy header so it reads as a seam rather than a scratch. */
+  thead tr:last-child th { border-left:1px solid rgba(255,255,255,.10); }
+  thead tr:last-child th:first-child, thead tr:last-child th.gut,
+  thead tr:last-child th.gut + th { border-left:0; }
 
   tbody td { padding:0 5px; height:30px; text-align:center; white-space:nowrap;
-             font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); }
+             font-variant-numeric:tabular-nums;
+             border-bottom:1px solid var(--line); border-left:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
-                         padding-left:14px; font-weight:600; }
+                         padding-left:14px; font-weight:600; border-left:0; }
+  /* The gold rules either side of the channel are the seam there, so the grid
+     does not draw a second line beside them. */
+  tbody td.gut, tbody td.gut + td { border-left:0; }
   tbody td.gut { padding:0; border-left:1px solid var(--gold);
                  border-right:1px solid var(--gold); }
+  /* On a dark row a light grid reads as damage; it becomes a seam in the row's
+     own colour. */
+  tr.cluster td { border-left-color:#22407F; }
+  tr.total td, tr.average td { border-left-color:rgba(255,255,255,.12); }
 
   tr.bond td { background:var(--card); }
   tr.bond.alt td { background:var(--row); }
@@ -59,6 +72,9 @@
      gold lines with the row colour between them. It wins outright now rather
      than by being written last, so a new row style cannot rub it out again. */
   thead th.gut, tbody td.gut { background:var(--navy) !important; }
+  /* And it runs unbroken: the row rule crossed the channel every thirty
+     pixels, which read as a ladder rather than one column. */
+  tbody td.gut { border-bottom:0 !important; }
 
   .d { display:inline-flex; align-items:center; gap:4px; font-weight:700; }
   .d .ar { font-size:9px; line-height:1; }
