@@ -813,6 +813,21 @@ DAILY_KINDS = {
 }
 
 
+def _latest_month(days) -> tuple:
+    """This month as far as it goes, or the newest month that has anything.
+
+    The end is the last day uploaded rather than the last day of the month: a
+    report on the 19th should not carry eleven empty columns for days nobody
+    has pulled yet.
+    """
+    today = date.today()
+    want = (today.year, today.month)
+    if not any((d.year, d.month) == want for d in days):
+        want = max((d.year, d.month) for d in days)
+    inside = [d for d in days if (d.year, d.month) == want]
+    return date(want[0], want[1], 1), max(inside)
+
+
 def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
                cluster: int | None = None, view: str = "bond") -> dict:
     """Bond (or warehouse) x day grid with cluster subtotals and a grand total."""
@@ -867,10 +882,17 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
             covered.add(d)
             d += timedelta(days=1)
 
-    # Opened with no window of its own, the report runs across what has been
-    # uploaded - including a day inside it that sold nothing.
-    lo = _as_date(date_from) or (min(covered) if covered else span_lo)
-    hi = _as_date(date_to) or (max(covered) if covered else span_hi)
+    # Opened with no window of its own, the report opens on THIS month. Running
+    # across everything uploaded meant a September report opened on 1 August,
+    # because August's raws are still there - and nobody opens a daily report
+    # to read last month. If this month holds nothing yet, it falls back to the
+    # newest month that does, so the page is never blank on purpose.
+    days = covered or {span_lo, span_hi}
+    if not date_from and not date_to:
+        lo, hi = _latest_month(days)
+    else:
+        lo = _as_date(date_from) or (min(days) if days else span_lo)
+        hi = _as_date(date_to) or (max(days) if days else span_hi)
 
     # Bond is our own mapping; warehouse is KSBC's. Grouping by either asks
     # the same question of the same lines, so only the key and the cluster
