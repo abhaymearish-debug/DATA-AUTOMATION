@@ -269,7 +269,42 @@
   .chk input:focus-visible ~ .sw { box-shadow:0 0 0 3px rgba(37,99,235,.3); }
 
   /* ------------------------------------------------------------------
-     The filter strip, with the edges taken off.
+     The filter strip, dressed.
+
+     Seven reports build the same bar - a .fbar of .fitem cells, each a small
+     caps label over the value it controls - so the look lives here once. Two
+     classes deep so a page's own single-class rule does not win.
+
+     The changes are small on purpose: a hair more room in each cell, a label
+     that reads as a label rather than as small text, a divider that fades out
+     before it reaches the edge, and a segmented control that sits in a track
+     instead of floating on the card. */
+
+  .controls .fbar { border-radius:14px;
+                    background:linear-gradient(180deg, var(--card),
+                               color-mix(in srgb, var(--card) 93%, var(--bg)));
+                    box-shadow:0 1px 2px rgba(16,24,40,.05),
+                               0 10px 26px -18px rgba(16,24,40,.5); }
+  .fbar .fitem { padding:8px 16px; border-radius:11px; }
+  .fbar .fi-k { font-size:9px; letter-spacing:.9px; font-weight:800;
+                color:var(--muted); opacity:.9; }
+  .fbar .fi-v, .fbar .selw select { font-size:14px; letter-spacing:-.1px; font-weight:700; }
+  /* A rule that stops short of the rounded corners reads as a seam rather
+     than as a line drawn across the box. */
+  .controls .fdiv { margin:9px 0; background:linear-gradient(180deg, transparent,
+                    var(--line) 20%, var(--line) 80%, transparent); }
+  .fbar .selw i, .fbar .fi-v i { font-size:8px; opacity:.6; }
+
+  .fbar .seg { background:color-mix(in srgb, var(--row) 70%, var(--bg));
+               border:1px solid color-mix(in srgb, var(--line) 65%, transparent);
+               border-radius:10px; padding:3px; gap:3px; }
+  .fbar .seg button { padding:6px 13px; border-radius:8px; font-size:12.5px; }
+  .fbar .seg button.on { background:var(--card);
+                         box-shadow:0 1px 2px rgba(16,24,40,.16),
+                                    0 0 0 1px color-mix(in srgb, var(--line) 55%, transparent); }
+
+  /* ------------------------------------------------------------------
+     And the motion on it.
 
      Every report builds the same strip out of the same parts - a .fbar of
      .fitem cells, a segmented .seg, the buttons on the right - so the motion
