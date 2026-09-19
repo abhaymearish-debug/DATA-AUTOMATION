@@ -320,6 +320,13 @@ ST_HEADINGS = ["ITEM NAME", "PACK", "PHYSICAL", "ALLOTABLE", "PENDING"]
 ST_INK = colors.Color(0.059, 0.098, 0.176)
 ST_ZERO = colors.Color(0.784, 0.804, 0.843)
 ST_ROWS_PER_PAGE = 18
+# The grid. A hairline between cells so a long name and its figures stay on
+# one line for the eye, and a gold rule closing the two navy bands - the
+# header and the total - the way the office's own sheets rule a block.
+ST_HAIR = colors.Color(0.855, 0.871, 0.898)
+ST_GOLD_DIM = colors.Color(0.42, 0.40, 0.33)   # gold at a whisper, over navy
+ST_LW_GRID = 0.4
+ST_LW_GOLD = 1.3
 
 
 def _col_x(i: int) -> float:
@@ -353,6 +360,7 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
     c.drawCentredString(A4_W / 2, y - 15.5, warehouse)
     y -= ST_BAND_H
 
+    head_top = y
     c.setFillColor(NAVY)
     c.rect(0, y - ST_HEAD_H, A4_W, ST_HEAD_H, stroke=0, fill=1)
     c.setFillColor(GOLD)
@@ -361,6 +369,7 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
     for i in range(1, len(ST_COLS)):
         c.drawCentredString(_col_x(i) + ST_COLS[i] / 2, y - 19.0, ST_HEADINGS[i])
     y -= ST_HEAD_H
+    body_top = y
 
     for i, r in enumerate(rows):
         if i % 2 == 0:
@@ -381,7 +390,11 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
             c.drawCentredString(_col_x(j) + ST_COLS[j] / 2, base, _fmt(v, True))
         y -= ST_ROW_H
 
+    body_bottom = y
+
+    total_top = total_bottom = None
     if totals is not None:
+        total_top = y
         c.setFillColor(NAVY)
         c.rect(0, y - ST_ROW_H, A4_W, ST_ROW_H, stroke=0, fill=1)
         c.setFillColor(GOLD)
@@ -390,6 +403,44 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
         for j, key in enumerate(("physical", "allotable", "pending"), start=2):
             c.drawCentredString(_col_x(j) + ST_COLS[j] / 2, y - 19.2,
                                 _fmt(totals.get(key, 0), True))
+        total_bottom = y - ST_ROW_H
+
+    # The grid goes on last, over the bands and the zebra, so nothing paints
+    # over it. Columns run the whole table; rows only cross the body, where
+    # the figures are - a navy band is one piece, not five cells.
+    edges = [_col_x(i) for i in range(1, len(ST_COLS))]
+    bottom = total_bottom if total_bottom is not None else body_bottom
+
+    c.setLineWidth(ST_LW_GRID)
+    c.setStrokeColor(ST_HAIR)
+    for x in edges:
+        c.line(x, body_top, x, body_bottom)
+    n = len(rows)
+    for k in range(1, n):
+        yy = body_top - k * ST_ROW_H
+        c.line(0, yy, A4_W, yy)
+
+    # Inside the navy the same columns carry on, in a gold so dim it reads as
+    # a seam rather than as a line drawn across the band.
+    c.setStrokeColor(ST_GOLD_DIM)
+    for x in edges:
+        c.line(x, head_top, x, body_top)
+        if total_top is not None:
+            c.line(x, total_top, x, total_bottom)
+
+    # And the gold lining: a rule above and below each navy band.
+    c.setLineWidth(ST_LW_GOLD)
+    c.setStrokeColor(GOLD)
+    for yy in (head_top, body_top):
+        c.line(0, yy, A4_W, yy)
+    if total_top is not None:
+        for yy in (total_top, total_bottom):
+            c.line(0, yy, A4_W, yy)
+    else:
+        # A continuation page closes on a hairline; the total comes later.
+        c.setLineWidth(ST_LW_GRID)
+        c.setStrokeColor(ST_HAIR)
+        c.line(0, bottom, A4_W, bottom)
 
     c.setFillColor(colors.Color(0.45, 0.48, 0.55))
     c.setFont("Helvetica", 8)

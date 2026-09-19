@@ -2505,42 +2505,137 @@ def stock_pdf(request: Request, scope: str = "cluster", cluster: str = "1",
 
 @app.get("/reports/warehouse-stock/export.xlsx")
 def stock_xlsx(request: Request, as_of: str = "", cluster: str = "", warehouse: str = ""):
+    """The stock position as a workbook, in the same dress as its PDF.
+
+    The earlier version was a flat dump with a navy strip on top: no title
+    anyone could read six months later, no borders, nothing to tell a stock
+    line from a warehouse total except its colour, and no grand total at all.
+    This keeps the grouping people actually work with - every warehouse folds
+    away - while the autofilter still gives the flat view to anyone who wants
+    to pivot.
+    """
     require_user(request)
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.page import PageMargins
 
     cl = int(cluster) if cluster in ("1", "2", "3") else None
     data = reports_api.warehouse_stock(as_of=as_of, cluster=cl, warehouse=warehouse)
     if "error" in data:
         raise HTTPException(404, data["error"])
+    if not data["warehouses"]:
+        raise HTTPException(404, "No stock rows for that filter.")
 
-    navy, gold, white = "FF0A294F", "FFFFBD30", "FFFFFFFF"
+    NAVY, GOLD, PAPER = "FF0A294F", "FFFFBD30", "FFF5F7FC"
+    INK, HAIR, ZERO = "FF28324A", "FFD9DEE9", "FF9AA3B4"
+    thin = Side(style="thin", color=HAIR)
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    headings = ["WAREHOUSE", "ITEM NAME", "PACK", "PHYSICAL", "ALLOTABLE", "PENDING"]
+    last_col = get_column_letter(len(headings))
+
     wb = Workbook()
     ws = wb.active
     ws.title = "WAREHOUSE STOCK"
-    ws.append(["WAREHOUSE", "ITEM NAME", "PACK", "PHYSICAL", "ALLOTABLE", "PENDING"])
-    for cell in ws[1]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(bold=True, color=gold, size=10)
+
+    # A stock position is a photograph of one day, so the day belongs in the
+    # title - a sheet filed without it is worth nothing a week later.
+    day = data["date"]
+    try:
+        day = date.fromisoformat(data["date"]).strftime("%d %b %Y")
+    except (TypeError, ValueError):
+        pass
+    ws.merge_cells(f"A1:{last_col}1")
+    t = ws["A1"]
+    t.value = f"WAREHOUSE STOCK REPORT   ·   {day}"
+    t.fill = PatternFill("solid", fgColor=NAVY)
+    t.font = Font(bold=True, color=GOLD, size=13)
+    t.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    # "All warehouses · 28 warehouses" said it twice. The scope only earns a
+    # word of its own when it is actually narrowing something.
+    houses = len(data["warehouses"])
+    items = sum(len(w["rows"]) for w in data["warehouses"])
+    scope = warehouse.title() if warehouse else f"Cluster {cl}" if cl else ""
+    count = (f"{houses} warehouse{'' if houses == 1 else 's'}   ·   " if not warehouse else "")
+    ws.merge_cells(f"A2:{last_col}2")
+    sub = ws["A2"]
+    sub.value = ((f"{scope}   ·   " if scope else "")
+                 + f"{count}{items} items   ·   cases")
+    sub.fill = PatternFill("solid", fgColor=GOLD)
+    sub.font = Font(bold=True, color=NAVY, size=10)
+    sub.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 20
+
+    ws.append(headings)
+    for cell in ws[3]:
+        cell.fill = PatternFill("solid", fgColor=NAVY)
+        cell.font = Font(bold=True, color=GOLD, size=10)
         cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 24
+        cell.border = box
+    ws.row_dimensions[3].height = 22
 
     for wh in data["warehouses"]:
-        for r in wh["rows"]:
+        for i, r in enumerate(wh["rows"]):
             ws.append([wh["name"], r["brand"], r["pack"],
                        r["physical"], r["allotable"], r["pending"]])
+            row = ws.max_row
+            # One outline level, so a warehouse folds to its total the way the
+            # screen folds it.
+            ws.row_dimensions[row].outlineLevel = 1
+            band = PatternFill("solid", fgColor=PAPER) if i % 2 else None
+            for cell in ws[row]:
+                cell.border = box
+                cell.font = Font(size=10, color=INK)
+                if band:
+                    cell.fill = band
+            # A nil reads as nil, not as a figure: dimmed here, the way the
+            # PDF greys it, so a column of zeros does not compete with stock.
+            for c in range(4, 7):
+                if not (ws.cell(row=row, column=c).value or 0):
+                    ws.cell(row=row, column=c).font = Font(size=10, color=ZERO)
+
         ws.append([wh["name"], "TOTAL", "", wh["totals"]["physical"],
                    wh["totals"]["allotable"], wh["totals"]["pending"]])
         for cell in ws[ws.max_row]:
-            cell.fill = PatternFill("solid", fgColor=navy)
-            cell.font = Font(bold=True, color=gold, size=10)
+            cell.fill = PatternFill("solid", fgColor=NAVY)
+            cell.font = Font(bold=True, color=GOLD, size=10)
+            cell.border = box
 
-    ws.column_dimensions["A"].width = 20
-    ws.column_dimensions["B"].width = 38
-    for col in ("C", "D", "E", "F"):
-        ws.column_dimensions[col].width = 13
-    ws.freeze_panes = "A2"
+    grand = data["grand"]
+    ws.append(["", "GRAND TOTAL", "", grand["physical"],
+               grand["allotable"], grand["pending"]])
+    for cell in ws[ws.max_row]:
+        cell.fill = PatternFill("solid", fgColor=GOLD)
+        cell.font = Font(bold=True, color=NAVY, size=11)
+        cell.border = box
+
+    for row in ws.iter_rows(min_row=4, min_col=4):
+        for cell in row:
+            cell.alignment = Alignment(horizontal="right")
+            cell.number_format = "#,##0"
+    for row in ws.iter_rows(min_row=4, min_col=1, max_col=3):
+        for cell in row:
+            cell.alignment = Alignment(horizontal="left" if cell.column == 2 else "center")
+
+    for col, wide in {"A": 20, "B": 38, "C": 11, "D": 13, "E": 13, "F": 13}.items():
+        ws.column_dimensions[col].width = wide
+    ws.freeze_panes = "D4"
+    ws.auto_filter.ref = f"A3:{last_col}{ws.max_row - 1}"
+    ws.sheet_properties.outlinePr.summaryBelow = True
+    ws.sheet_view.showGridLines = False
+
+    # Printed, it should come out as one readable column of pages rather than
+    # a sheet cut down the middle.
+    ws.print_title_rows = "1:3"
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4)
 
     label = warehouse or (f"Cluster {cl}" if cl else "All Warehouses")
     tmp = Path(tempfile.mkdtemp()) / f"Warehouse Stock Report - {label}.xlsx"
