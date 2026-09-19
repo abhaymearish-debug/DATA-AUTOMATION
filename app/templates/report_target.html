@@ -143,7 +143,7 @@
   .veil { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
           align-items:center; justify-content:center; z-index:60; padding:20px; }
   .veil.on { display:flex; }
-  .sheet { background:var(--card); border-radius:14px; width:100%; max-width:1020px;
+  .sheet { background:var(--card); border-radius:14px; width:100%; max-width:1240px;
            max-height:88vh; display:flex; flex-direction:column;
            box-shadow:0 24px 60px rgba(16,24,40,.28); }
   .sheet header { display:flex; align-items:center; gap:12px; padding:16px 20px 13px;
@@ -158,31 +158,61 @@
   .sheet footer .sp { margin-left:auto; display:flex; gap:8px; }
   .sheet .err { color:var(--bad); font-size:12.5px; }
 
-  table.edit { width:100%; font-size:13px; }
-  table.edit thead th { position:sticky; top:0; background:var(--head); color:var(--ink);
-                        font-size:9.5px; letter-spacing:.5px; text-transform:uppercase;
-                        font-weight:700; padding:11px 8px; text-align:center;
-                        border-bottom:1px solid var(--line); z-index:2; }
-  table.edit thead th:first-child { text-align:left; padding-left:20px; left:0; z-index:3;
-                                    min-width:168px; }
-  table.edit thead th:last-child { right:0; z-index:3; }
-  table.edit td { padding:0 4px; height:38px; text-align:center;
-                  border-bottom:1px solid var(--line); }
-  table.edit td.b { text-align:left; padding-left:20px; font-weight:600; position:sticky;
-                    left:0; background:var(--card); z-index:1; }
+  table.edit { width:100%; font-size:13px; border-collapse:separate; border-spacing:0; }
+  /* The header has to be opaque and above everything, or a row scrolling under
+     it shows through and reads as a rendering fault. */
+  table.edit thead th { position:sticky; top:0; z-index:5; background:var(--navy);
+                        color:var(--gold); font-size:9.5px; letter-spacing:.5px;
+                        text-transform:uppercase; font-weight:700; padding:11px 8px;
+                        text-align:center; line-height:1.3; white-space:normal;
+                        border-bottom:1px solid #22407F;
+                        border-left:1px solid rgba(255,255,255,.10); }
+  table.edit thead th:first-child { text-align:left; padding-left:20px; left:0; z-index:7;
+                                    min-width:176px; border-left:0;
+                                    box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
+  table.edit thead th:last-child { right:0; z-index:7;
+                                   box-shadow:-7px 0 9px -7px rgba(0,0,0,.45); }
+
+  table.edit td { padding:0 5px; height:40px; text-align:center;
+                  border-bottom:1px solid var(--line);
+                  border-left:1px solid var(--line); }
+  table.edit td.b { text-align:left; padding-left:20px; font-weight:650; position:sticky;
+                    left:0; background:var(--card); z-index:3; border-left:0;
+                    border-right:1px solid var(--line); white-space:nowrap;
+                    box-shadow:7px 0 9px -7px rgba(16,24,40,.26); }
   table.edit td.t { position:sticky; right:0; background:var(--card); font-weight:750;
-                    font-variant-numeric:tabular-nums; }
-  table.edit input { width:72px; border:1px solid transparent; border-radius:8px;
-                     background:var(--row); padding:7px 8px; font:inherit; font-size:13px;
-                     text-align:center; color:var(--ink); font-variant-numeric:tabular-nums; }
+                    z-index:3; font-variant-numeric:tabular-nums;
+                    box-shadow:-7px 0 9px -7px rgba(16,24,40,.26); }
+  table.edit tbody tr:hover td, table.edit tbody tr:hover td.b { background:var(--hover); }
+
+  /* A spinner on every one of a hundred and twenty cells is a hundred and
+     twenty arrows nobody clicks, and it crowds the figure. */
+  table.edit input { width:68px; border:1px solid transparent; border-radius:8px;
+                     background:var(--row); padding:8px 9px; font:inherit; font-size:13px;
+                     text-align:center; color:var(--ink); font-variant-numeric:tabular-nums;
+                     appearance:textfield; -moz-appearance:textfield; }
+  table.edit input::-webkit-outer-spin-button,
+  table.edit input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   table.edit input:hover { border-color:var(--line); }
   table.edit input:focus { outline:none; border-color:var(--blue); background:var(--card);
-                           box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+                           box-shadow:0 0 0 3px rgba(37,99,235,.14); }
+  table.edit input.has { font-weight:700; }
+
   table.edit tr.sub td { background:var(--navy); color:var(--gold); font-weight:700;
-                         font-size:12px; }
+                         font-size:12.5px; border-left-color:#22407F;
+                         font-variant-numeric:tabular-nums; }
   table.edit tr.sub td.b, table.edit tr.sub td.t { background:var(--navy); color:var(--gold); }
-  table.edit tr.all td { background:var(--gold); color:#1B2A4A; font-weight:800; }
+  table.edit tr.sub:hover td, table.edit tr.sub:hover td.b { background:var(--navy); }
+  /* The network total is the one figure worth never losing, so it stays on
+     screen while the bonds scroll under it. */
+  table.edit tr.all td { position:sticky; bottom:0; z-index:4; background:var(--gold);
+                         color:#1B2A4A; font-weight:800; height:46px;
+                         border-left-color:rgba(27,42,74,.20);
+                         font-variant-numeric:tabular-nums; }
+  table.edit tr.all td.b { z-index:6; }
+  table.edit tr.all td.t { z-index:6; }
   table.edit tr.all td.b, table.edit tr.all td.t { background:var(--gold); color:#1B2A4A; }
+  table.edit tr.all:hover td, table.edit tr.all:hover td.b { background:var(--gold); }
 
   @media (max-width:900px){
     .bar1 .sp { margin-left:0; width:100%; }
@@ -435,7 +465,8 @@ async function loadTargets(month){
       body += `<tr data-bond="${esc(bond)}" data-cl="${cid}"><td class="b">${esc(bond)}</td>` +
         ED.families.map(f =>
           `<td><input type="number" min="0" step="1" data-k="${f.key}"
-             value="${cells[f.key] ?? ''}" placeholder="0" oninput="sumUp()"></td>`).join('') +
+             value="${cells[f.key] ?? ''}" placeholder="0" inputmode="numeric"
+             onfocus="this.select()" oninput="sumUp()"></td>`).join('') +
         `<td class="t" data-row-total>0</td></tr>`;
     }
     body += `<tr class="sub" data-sub="${cid}"><td class="b">Cluster ${cid}</td>` +
@@ -445,7 +476,24 @@ async function loadTargets(month){
   body += `<tr class="all"><td class="b">Grand total</td>` +
     ED.families.map(f => `<td data-k="${f.key}">0</td>`).join('') + `<td class="t">0</td></tr>`;
   edGrid.querySelector('tbody').innerHTML = body;
+  edGrid.onkeydown = edKeys;
   sumUp();
+}
+
+/* A hundred and twenty cells is a lot of reaching for the mouse, so Enter and
+   the arrow keys walk the column the way a spreadsheet does. */
+function edKeys(e){
+  const k = e.key;
+  if (!['Enter', 'ArrowDown', 'ArrowUp'].includes(k)) return;
+  const inp = e.target.closest('input[data-k]');
+  if (!inp) return;
+  e.preventDefault();
+  const col = inp.dataset.k;
+  const rows = [...edGrid.querySelectorAll('tbody tr[data-bond]')];
+  const here = rows.indexOf(inp.closest('tr'));
+  const next = rows[here + (k === 'ArrowUp' ? -1 : 1)];
+  const cell = next && next.querySelector(`input[data-k="${col}"]`);
+  if (cell){ cell.focus(); cell.select(); }
 }
 
 function monthName(m){
@@ -467,6 +515,8 @@ function sumUp(){
       grand[inp.dataset.k] = (grand[inp.dataset.k] || 0) + v;
     });
     tr.querySelector('[data-row-total]').textContent = row.toLocaleString('en-IN');
+    tr.querySelectorAll('input[data-k]').forEach(inp =>
+      inp.classList.toggle('has', !!(+inp.value)));
   });
   edGrid.querySelectorAll('tbody tr.sub').forEach(tr => {
     const t = totals[tr.dataset.sub] || {};
