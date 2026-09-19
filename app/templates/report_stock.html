@@ -268,15 +268,14 @@
       <kbd>/</kbd>
     </div>
     <div class="sp">
-      <div class="menu" id="xlMenu">
-        <button class="btn xl" onclick="toggleMenu('xlMenu')">Download Excel ▾</button>
-        <div class="items"><a onclick="dlXlsx()">Current view</a></div>
-      </div>
+      <!-- Excel had a menu with one item in it, which is not a choice; it
+           downloads what is on screen, the way every other report's does. -->
+      <button class="btn xl" onclick="dlXlsx()">Download Excel</button>
       <div class="menu" id="pdfMenu">
         <button class="btn pdf" onclick="toggleMenu('pdfMenu')">Download PDF ▾</button>
         <div class="items">
-          <a onclick="dlPdf('clusters')">All clusters<span class="sub">3 files, one per ASM cluster</span></a>
-          <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
+          <a onclick="dlPdf('current')">This report<span class="sub">one file, everything on screen</span></a>
+          <a onclick="dlPdf('clusters')">Split by cluster<span class="sub">one folder, a PDF per ASM cluster</span></a>
         </div>
       </div>
     </div>
@@ -548,18 +547,14 @@ document.addEventListener('click', e => { if (!e.target.closest('#calWrap')) clo
 function grab(url){ const a = document.createElement('a'); a.href = url;
                     document.body.appendChild(a); a.click(); a.remove(); }
 function dlXlsx(){ grab('/reports/warehouse-stock/export.xlsx?' + params()); closeMenus(); }
+// One request either way. The split used to fire three downloads a second
+// apart and leave the person to find them; the server now sends one folder.
 function dlPdf(scope){
   closeMenus();
-  if (scope === 'current'){
-    const p = params(); p.set('scope','current');
-    grab('/reports/warehouse-stock/export.pdf?' + p); return;
-  }
-  foot.textContent = 'Preparing three cluster PDFs…';
-  [1,2,3].forEach((c,i) => setTimeout(() => {
-    const p = params(); p.set('scope','cluster'); p.set('cluster', c);
-    grab('/reports/warehouse-stock/export.pdf?' + p);
-    if (c === 3) setTimeout(render, 1500);
-  }, i * 900));
+  const p = params(); p.set('scope', scope);
+  if (scope === 'clusters') foot.textContent = 'Building the three cluster PDFs…';
+  grab('/reports/warehouse-stock/export.pdf?' + p);
+  if (scope === 'clusters') setTimeout(render, 2500);
 }
 
 load();

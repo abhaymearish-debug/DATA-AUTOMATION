@@ -1455,26 +1455,62 @@ def brandwise_pdf(
         )
         return FileResponse(out, filename=out.name)
 
-    if cluster not in (1, 2, 3):
+    # scope="clusters" is all three at once. One request, one folder - the
+    # page used to fire three downloads a second apart and hope the browser
+    # allowed them all.
+    wanted = [1, 2, 3] if scope == "clusters" else [cluster]
+    if any(c not in (1, 2, 3) for c in wanted):
         raise HTTPException(400, "Cluster must be 1, 2 or 3.")
 
-    argv = ["python3", str(APP_REPORTS / "build_secondary_brandwise_pdfs.py"),
-            "--base", str(config.CLAUDE_ROOT), "--workbook", str(workbook),
-            "--outdir", str(outdir), "--cluster", str(cluster)]
-    if date_from:
-        argv += ["--from", date_from]
-    if date_to:
-        argv += ["--to", date_to]
+    built = []
+    for c in wanted:
+        into = outdir / f"c{c}"
+        into.mkdir(parents=True, exist_ok=True)
+        argv = ["python3", str(APP_REPORTS / "build_secondary_brandwise_pdfs.py"),
+                "--base", str(config.CLAUDE_ROOT), "--workbook", str(workbook),
+                "--outdir", str(into), "--cluster", str(c)]
+        if date_from:
+            argv += ["--from", date_from]
+        if date_to:
+            argv += ["--to", date_to]
 
-    proc = subprocess.run(argv, capture_output=True, text=True,
-                          timeout=config.STEP_TIMEOUT_SECONDS)
-    if proc.returncode != 0:
-        raise HTTPException(500, f"PDF build failed: {(proc.stderr or proc.stdout)[-400:]}")
+        proc = subprocess.run(argv, capture_output=True, text=True,
+                              timeout=config.STEP_TIMEOUT_SECONDS)
+        if proc.returncode != 0:
+            raise HTTPException(500, f"PDF build failed: {(proc.stderr or proc.stdout)[-400:]}")
+        built += list(into.glob("*.pdf"))
 
-    pdfs = list(outdir.glob("*.pdf"))
-    if not pdfs:
-        raise HTTPException(404, f"No dispatches for cluster {cluster} in the selected range.")
-    return FileResponse(pdfs[0], filename=pdfs[0].name)
+    if not built:
+        where = "any cluster" if len(wanted) > 1 else f"cluster {wanted[0]}"
+        raise HTTPException(404, f"No dispatches for {where} in the selected range.")
+    span = _asked_period(date_from, date_to, "")
+    label = f" ({span['short']})" if span else ""
+    return _as_folder(built, f"Secondary Sales - Cumulative{label}")
+
+
+
+def _as_folder(files: list, name: str):
+    """Several PDFs as one zip, because fifteen downloads is not a delivery.
+
+    A report that splits into a file per cluster - or per bond - used to fire
+    one download per file, spaced out because browsers throttle them, and the
+    person ended up hunting fifteen PDFs through their Downloads folder. One
+    archive opens as one folder with everything in it, named and in order.
+    """
+    import tempfile, zipfile
+
+    keep = [Path(f) for f in files if Path(f).is_file()]
+    if not keep:
+        raise HTTPException(404, "Nothing to export for that selection.")
+    if len(keep) == 1:
+        return FileResponse(keep[0], filename=keep[0].name)
+
+    safe = _safe_name(name)
+    bundle = Path(tempfile.mkdtemp()) / f"{safe}.zip"
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(keep, key=lambda x: x.name):
+            z.write(f, f"{safe}/{f.name}")
+    return FileResponse(bundle, filename=bundle.name)
 
 
 @app.get("/api/jobs")
@@ -2483,6 +2519,23 @@ def stock_pdf(request: Request, scope: str = "cluster", cluster: str = "1",
     require_user(request)
     import tempfile
 
+    outdir = Path(tempfile.mkdtemp())
+
+    # scope="clusters" builds all three in one go and hands back a folder,
+    # rather than firing three downloads a second apart.
+    if scope == "clusters":
+        built = []
+        for c in (1, 2, 3):
+            got = reports_api.warehouse_stock(as_of=as_of, cluster=c)
+            if "error" in got or not got["warehouses"]:
+                continue
+            out = outdir / f"Warehouse Stock Report - Cluster {c}.pdf"
+            reports_pdf.build_stock_pdf(got, out)
+            built.append(out)
+        if not built:
+            raise HTTPException(404, "No stock rows for any cluster on that date.")
+        return _as_folder(built, "Warehouse Stock Report - All Clusters")
+
     if scope == "current":
         cl = int(cluster) if cluster in ("1", "2", "3") else None
         data = reports_api.warehouse_stock(as_of=as_of, cluster=cl, warehouse=warehouse)
@@ -2498,7 +2551,7 @@ def stock_pdf(request: Request, scope: str = "cluster", cluster: str = "1",
     if not data["warehouses"]:
         raise HTTPException(404, f"No stock rows for {label} on that date.")
 
-    out = Path(tempfile.mkdtemp()) / f"Warehouse Stock Report - {label}.pdf"
+    out = outdir / f"Warehouse Stock Report - {label}.pdf"
     reports_pdf.build_stock_pdf(data, out)
     return FileResponse(out, filename=out.name)
 
