@@ -2249,7 +2249,7 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
         paint(2, col, GOLD, plain=True)
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=half)
     ws.merge_cells(start_row=2, start_column=half + 1, end_row=2, end_column=span)
-    paint(2, 1, GOLD, NAVY, True, 12, "left", value="BOND LIQUIDATION SCORECARD",
+    paint(2, 1, GOLD, NAVY, True, 12, "left", value="LIQUIDATION SUMMARY",
           plain=True)
     paint(2, half + 1, GOLD, NAVY, True, 12, "right", value=data["subtitle"],
           plain=True)

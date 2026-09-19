@@ -205,7 +205,7 @@ def build(data: dict, subtitle: str, out: Path, round_off: bool = False) -> int:
     page_h = TITLE_H + SUB_H + HEAD_H + ROW_H * len(rows)
 
     c = pdfcanvas.Canvas(str(out), pagesize=(PAGE_W, page_h))
-    c.setTitle("Liquidation Summary - Bond Liquidation Scorecard")
+    c.setTitle("Liquidation Summary")
 
     y = page_h
     c.setFillColor(NAVY)
@@ -219,7 +219,9 @@ def build(data: dict, subtitle: str, out: Path, round_off: bool = False) -> int:
     c.rect(0, y - SUB_H, PAGE_W, SUB_H, stroke=0, fill=1)
     c.setFillColor(NAVY_T)
     c.setFont(BOLD, F_SUB)
-    c.drawString(INSET, y - BASE_SUB, "BOND LIQUIDATION SCORECARD")
+    # The report is called Liquidation Summary everywhere else - on the nav, in
+    # the filename, in the chat about it - so the band says that too.
+    c.drawString(INSET, y - BASE_SUB, "LIQUIDATION SUMMARY")
     c.drawRightString(PAGE_W - INSET, y - BASE_SUB, subtitle)
     y -= SUB_H
 
