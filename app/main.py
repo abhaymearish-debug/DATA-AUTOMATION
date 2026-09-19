@@ -36,6 +36,20 @@ from .pipelines import (
 app = FastAPI(title="KSD Report Transformer")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
+
+def _trim0(text: str) -> str:
+    """Drop a decimal point that has nothing but zeros after it.
+
+    "5.00" is 5 with noise on the end, and a column of them is noise all the
+    way down. Right to left, so "1,000.00" loses its zeros and then its point
+    and stops at the nought it needs - it does not become "1,".
+    """
+    text = str(text)
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+templates.env.filters["trim0"] = _trim0
+
 # The brand mark, and anywhere else the UI needs a file rather than markup.
 # Mounted rather than inlined so the browser caches it once instead of
 # re-downloading it inside every page.
@@ -1855,7 +1869,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     # cells are addressed directly, which is the same work done once.
     wide = len(headings)
     figures_at = wide - 3          # the four measures always close the row
-    figures = "#,##0" if round_off else "#,##0.00"
+    figures = "#,##0" if round_off else "#,##0.##"
     at = 3
 
     # Setting a cell's font, fill, border and format costs a recursive hash of
@@ -2163,7 +2177,7 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
             for cell in ws[ws.max_row]:
                 cell.fill = PatternFill("solid", fgColor=navy)
                 cell.font = Font(bold=True, color=gold, size=10)
-    figures = "#,##0" if round_off else "#,##0.00"
+    figures = "#,##0" if round_off else "#,##0.##"
     for row in ws.iter_rows(min_row=2, min_col=2):
         for cell in row:
             cell.alignment = Alignment(horizontal="center")
@@ -2831,7 +2845,7 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     ws.row_dimensions[1].height = 30
 
-    figures = "#,##0" if round_off else "#,##0.00"
+    figures = "#,##0" if round_off else "#,##0.##"
     for r in data["rows"]:
         ws.append([r["label"]] + r["cells"] + [r["total"]])
         row = ws[ws.max_row]
@@ -3109,7 +3123,7 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
                     c.font = Font(bold=strong or i in (2, span - 1), size=9.5,
                                   color=GOLD if clus else INK)
                     if i > 2:
-                        c.number_format = "#,##0" if round_off else "#,##0.00"
+                        c.number_format = "#,##0" if round_off else "#,##0.##"
 
         ws.merge_cells(start_row=top, start_column=1, end_row=bottom, end_column=1)
         ws.merge_cells(start_row=top, start_column=span, end_row=bottom, end_column=span)
@@ -3370,7 +3384,7 @@ def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
                 if value is not None:
                     c.number_format = "0.0%" if round_off else "0.00%"
             elif i > 1:
-                c.number_format = "#,##0" if round_off else "#,##0.00"
+                c.number_format = "#,##0" if round_off else "#,##0.##"
         ws.row_dimensions[r].height = 17
 
     ws.column_dimensions["A"].width = 22

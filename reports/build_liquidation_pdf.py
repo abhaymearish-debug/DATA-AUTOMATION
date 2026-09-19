@@ -92,7 +92,9 @@ def money(v: float, places: str = "0.01") -> str:
     reads the same here as it does in the workbook and on the screen.
     """
     q = Decimal(str(v)).quantize(Decimal(places), rounding=ROUND_HALF_UP)
-    return f"{q:f}"
+    # A figure that lands whole prints whole: "5.00" is 5 with noise after it.
+    out = f"{q:f}"
+    return out.rstrip("0").rstrip(".") if "." in out else out
 
 
 def group_x(i: int) -> float:

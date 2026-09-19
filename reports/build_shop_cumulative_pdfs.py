@@ -77,8 +77,13 @@ def w(text, font, size):
 
 
 def money(value: float) -> str:
-    """Two decimals, rounded half up - the way the office's clerk rounds."""
-    return f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,.2f}"
+    """Up to two decimals, rounded half up - the way the office's clerk rounds.
+
+    A figure that lands on a whole case prints as one: "5.00" is 5 with noise
+    on the end, and a column of them is noise all the way down.
+    """
+    out = f"{Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,.2f}"
+    return out.rstrip("0").rstrip(".") if "." in out else out
 
 
 # -------------------------------------------------------------------- data --

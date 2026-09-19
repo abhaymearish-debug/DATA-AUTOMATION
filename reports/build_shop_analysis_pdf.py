@@ -206,12 +206,21 @@ def make_row(label, v, prev_sales, days, prev_days, kind, places: int = 0):
 
 # ------------------------------------------------------------------ render --
 def shown(v) -> str:
-    """A cell as it prints: whole when it was rounded, two places when not."""
-    return f"{v:.2f}" if isinstance(v, float) else str(v)
+    """A cell as it prints: whole when it was rounded, up to two places when not.
+
+    A figure that lands on a whole case prints as one - "5.00" is 5 with
+    noise on the end, and a column of them is noise all the way down.
+    """
+    if not isinstance(v, float):
+        return str(v)
+    out = f"{v:.2f}"
+    return out.rstrip("0").rstrip(".") if "." in out else out
 
 
 def pct(value, places: int = 0) -> str:
-    return "-" if value is None else f"{whole(value, places)}%"
+    # whole() hands back a float at two places, so 62 arrives as 62.0 - and
+    # "62.0%" is the same noise the cells had.
+    return "-" if value is None else f"{shown(whole(value, places))}%"
 
 
 def triangle(c, cx, base, up, colour):

@@ -653,9 +653,10 @@ function tog(btn) {
 // same flag, so the screen and the download never disagree.
 window.ksdCases = function (value, round) {
   const v = Number(value || 0);
-  return v.toLocaleString('en-IN', round
-    ? {maximumFractionDigits: 0}
-    : {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  // Decimals only where there are decimals. A shop can be issued half a
+  // case and the figure should say so, but "5.00" is just 5 with noise on
+  // the end, and a column of them is noise all the way down.
+  return v.toLocaleString('en-IN', {maximumFractionDigits: round ? 0 : 2});
 };
 
 // Round off is the default - whole cases are what the office reads out - so

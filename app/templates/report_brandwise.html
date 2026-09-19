@@ -353,10 +353,10 @@ async function toggleGroup(name){
 }
 
 function num(v){
-  if (!v) return round.checked ? '0' : '0.00';
+  if (!v) return '0';
   return round.checked
     ? Math.round(v).toLocaleString('en-IN')
-    : v.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+    : v.toLocaleString('en-IN', {maximumFractionDigits:2});
 }
 
 function dl(kind){

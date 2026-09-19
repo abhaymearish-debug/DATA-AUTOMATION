@@ -80,14 +80,25 @@ def _wrap(text: str, size: float, max_w: float) -> list[str]:
     return lines
 
 
+def trimmed(text: str) -> str:
+    """Drop a decimal point that has nothing but zeros after it.
+
+    "5.00" is 5 with noise on the end, and a column of them is noise all the
+    way down. Right-to-left, so "1,000.00" loses its two zeros and then its
+    point and stops at the nought it needs - it does not become "1,".
+    """
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
 def cases(v, round_off: bool) -> str:
     """A case count as the reports print it.
 
-    Off, two places - a shop can be issued half a case and the figure should
-    say so. On, whole cases, which is what somebody reading the sheet out
-    loud wants.
+    Off, up to two places - a shop can be issued half a case and the figure
+    should say so - but only where there is something to say. On, whole
+    cases, which is what somebody reading the sheet out loud wants.
     """
-    return f"{float(v or 0):,.0f}" if round_off else f"{float(v or 0):,.2f}"
+    n = float(v or 0)
+    return f"{n:,.0f}" if round_off else trimmed(f"{n:,.2f}")
 
 
 def _fmt(v: float, round_off: bool) -> str:
@@ -95,7 +106,7 @@ def _fmt(v: float, round_off: bool) -> str:
         return "0"
     if round_off or abs(v - round(v)) < 0.005:
         return f"{round(v):,.0f}"
-    return f"{v:,.2f}"
+    return trimmed(f"{v:,.2f}")
 
 
 def page_size(labels: list[str], columns: list[str], rows: int) -> tuple[float, float, float]:
@@ -907,7 +918,7 @@ def _ta_num(v, round_off: bool = True) -> str:
         n = float(v or 0)
     except (TypeError, ValueError):
         return "0"
-    return f"{int(round(n))}" if round_off else f"{n:.2f}"
+    return f"{int(round(n))}" if round_off else trimmed(f"{n:.2f}")
 
 
 def _ta_centre(c, x0: float, x1: float, y: float, text: str,

@@ -101,7 +101,7 @@
    round numbers to read out. #}
 {% macro fig(v, rnd) -%}
   {% if v|round|int == 0 and v|round(2) == 0 %}<span class="nil">-</span>
-  {%- elif rnd %}{{ v|round|int }}{% else %}{{ '%.2f'|format(v) }}{% endif %}
+  {%- elif rnd %}{{ v|round|int }}{% else %}{{ '%.2f'|format(v)|trim0 }}{% endif %}
 {%- endmacro %}
 
 {% macro delta(now, was, pct, rnd) -%}
@@ -111,8 +111,8 @@
     {% set d = ((now - was) / was * 100) if pct else (now - was) %}
     {% set up = d >= 0 %}
     <span class="d {{ 'up' if up else 'dn' }}"><span class="ar">{{ '▲' if up else '▼' }}</span>{%
-      if rnd %}{{ (d|abs)|round|int }}{% elif pct %}{{ '%.1f'|format(d|abs) }}{%
-      else %}{{ '%.2f'|format(d|abs) }}{% endif %}{{ '%' if pct else '' }}</span>
+      if rnd %}{{ (d|abs)|round|int }}{% elif pct %}{{ '%.1f'|format(d|abs)|trim0 }}{%
+      else %}{{ '%.2f'|format(d|abs)|trim0 }}{% endif %}{{ '%' if pct else '' }}</span>
   {%- endif %}
 {%- endmacro %}
 
