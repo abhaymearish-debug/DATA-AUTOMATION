@@ -113,7 +113,6 @@
   #list { background:var(--card); border:1px solid var(--line); border-radius:12px;
           overflow:hidden; box-shadow:0 1px 2px rgba(16,24,40,.05); }
   .bd { background:var(--card); border-bottom:1px solid var(--line); }
-  #list > .bd:last-child { border-bottom:0; }
 
   /* A bond row is a line of figures, not a card: 42px reads as a table and
      fits three more bonds on the screen. The header above it takes the height
@@ -174,6 +173,53 @@
   td.z { color:var(--zero); font-weight:400; }
   tr.tot td { background:var(--row); font-weight:700; height:36px;
               border-top:1px solid var(--line); }
+
+
+  /* ---------- clusters ----------
+     Fifteen bonds listed flat make you count; the business is run in three
+     clusters, so the page groups them the way the ASMs are split. The band
+     is the same shape as a bond row - chevron, name, four figures - a level
+     up, and it folds its whole cluster away.
+
+     It stays light on purpose. The page already has one navy band at the top
+     and one gold at the foot; three dark bands in between would turn a table
+     into a stack of headings. A navy wash and a navy rail say subtotal
+     without taking the eye off the figures. */
+  .cl-g { border-bottom:1px solid var(--line); }
+  #list > .cl-g:last-child, #list > .bd:last-child { border-bottom:0; }
+  .cl-g .bd:last-child { border-bottom:0; }
+  .cl { position:relative; display:flex; align-items:stretch; gap:11px;
+        min-height:40px; padding:0 15px 0 16px; cursor:pointer; user-select:none;
+        background:color-mix(in srgb, var(--navy) 7%, var(--card));
+        border-bottom:1px solid color-mix(in srgb, var(--navy) 14%, var(--card));
+        transition:background .14s ease; }
+  .cl:hover { background:color-mix(in srgb, var(--navy) 11%, var(--card)); }
+  .cl::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+                background:var(--navy); opacity:.55; }
+  .cl .chev, .cl .nm, .cl .cnt { align-self:center; }
+  .cl .chev { font-size:9px; width:10px; color:var(--navy); opacity:.6;
+              transition:transform .16s; }
+  .cl-g.shut .chev { transform:rotate(-90deg); }
+  .cl-g.shut .cl-b { display:none; }
+  .cl .nm { width:var(--namew); flex:none; font-size:11px; font-weight:800;
+            letter-spacing:.9px; text-transform:uppercase; color:var(--navy);
+            white-space:nowrap; }
+  .cl .cnt { font-size:10.5px; font-weight:700; color:var(--muted); letter-spacing:.2px; }
+  .cl .mini { margin-left:auto; display:flex; font-variant-numeric:tabular-nums; }
+  .cl .mini > div { width:var(--numw); display:flex; align-items:center;
+                    justify-content:center; font-size:14px; font-weight:800;
+                    color:var(--navy);
+                    border-left:1px solid color-mix(in srgb, var(--navy) 13%, transparent); }
+  /* Dark theme: the navy IS the page background there, so the wash lifts
+     instead of settling and the text takes the gold the header uses. */
+  :root[data-theme="dark"] .cl { background:color-mix(in srgb, var(--navy-3) 55%, var(--card));
+                                 border-bottom-color:var(--line); }
+  :root[data-theme="dark"] .cl:hover { background:color-mix(in srgb, var(--navy-3) 75%, var(--card)); }
+  :root[data-theme="dark"] .cl::before { background:var(--gold); opacity:.65; }
+  :root[data-theme="dark"] .cl .nm,
+  :root[data-theme="dark"] .cl .mini > div { color:var(--gold); }
+  :root[data-theme="dark"] .cl .chev { color:var(--gold); }
+  :root[data-theme="dark"] .cl .mini > div { border-left-color:rgba(255,255,255,.12); }
 
   /* The last row of the table, not a card after it. */
   /* The total closes the table the way the header opens it, so the two bands
@@ -313,6 +359,8 @@
 /* Bonds start collapsed: fifteen bars read at a glance, and a shop list is
    something you go looking for rather than something you scroll past. */
 let DATA = null, openBonds = new Set(), filledBonds = false;
+// Which clusters the person has folded away. Empty means all three open.
+const shutClusters = new Set();
 /* Brand and pack lines are fetched a shop at a time - the whole book is five
    and a half thousand of them, and nobody opens all of them at once. */
 let openShops = new Set(), shopCache = {};
@@ -514,34 +562,45 @@ function render(){
   if (!bonds.length){
     html += '<div class="bd"><div class="empty">Nothing matches that filter.</div></div>';
   }
+
+  /* The book is run in three clusters, so it is read in three clusters. A
+     warehouse whose shops straddle two carries no cluster and falls to the
+     end under its own heading rather than into one it only half belongs to.
+     With a single group on screen - one cluster picked, or one bond - the
+     band would only repeat the grand total, so it is not drawn. */
+  const CL_ORDER = [1, 2, 3, 0];
+  const CL_NAME = {1: 'Cluster 1', 2: 'Cluster 2', 3: 'Cluster 3', 0: 'No cluster'};
+  const byCluster = new Map();
   for (const g of bonds){
-    const open = openBonds.has(g.bond) || (term && term.length > 1);
-    html += `<div class="bd${open ? '' : ' shut'}" data-bond="${esc(g.bond)}">
-      <div class="bd-h" onclick="toggle('${esc(g.bond)}')">
-        <span class="chev">▼</span>
-        <span class="nm">${esc(g.bond.charAt(0) + g.bond.slice(1).toLowerCase())}</span>
-        <div class="mini">
-          <div><span class="k">Opening</span><div class="n">${num(g.totals[0])}</div></div>
-          <div><span class="k">Receipt</span><div class="n">${num(g.totals[1])}</div></div>
-          <div><span class="k">Sales</span><div class="n sold">${num(g.totals[2])}</div></div>
-          <div><span class="k">Closing</span><div class="n">${num(g.totals[3])}</div></div>
-        </div>
-      </div>
-      <div class="bd-b"><table>
-        <colgroup><col><col class="num"><col class="num"><col class="num"><col class="last"></colgroup>
-        <tbody>`;
-    for (const s of g.shops){
-      const open = openShops.has(s.code);
-      html += `<tr class="shop${open ? ' on' : ''}" onclick="toggleShop('${esc(s.code)}')">` +
-              `<td class="item"><span class="tw">${open ? '▾' : '▸'}</span>` +
-              `<span class="code">${esc(s.code)}</span>${esc(s.name)}</td>` +
-              s.values.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') + '</tr>';
-      if (open) html += detailRows(s.code);
-    }
-    html += `<tr class="tot"><td class="item">Total</td>` +
-            g.totals.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') +
-            `</tr></tbody></table></div></div>`;
+    const c = CL_NAME[g.cluster] ? Number(g.cluster) : 0;
+    if (!byCluster.has(c)) byCluster.set(c, []);
+    byCluster.get(c).push(g);
   }
+  const groups = CL_ORDER.filter(c => byCluster.has(c)).map(c => [c, byCluster.get(c)]);
+  const banded = groups.length > 1;
+
+  for (const [cid, members] of groups){
+    if (banded){
+      const ct = [0,1,2,3].map(k => members.reduce((sum, g) => sum + g.totals[k], 0));
+      const shut = shutClusters.has(cid);
+      html += `<div class="cl-g${shut ? ' shut' : ''}" data-cl="${cid}">
+        <div class="cl" onclick="toggleCluster(${cid})">
+          <span class="chev">▼</span>
+          <span class="nm">${esc(CL_NAME[cid])}</span>
+          <span class="cnt">${members.length} ${DATA.group_by === 'warehouse'
+              ? (members.length === 1 ? 'warehouse' : 'warehouses')
+              : (members.length === 1 ? 'bond' : 'bonds')}</span>
+          <div class="mini">
+            <div>${num(ct[0])}</div><div>${num(ct[1])}</div>
+            <div>${num(ct[2])}</div><div>${num(ct[3])}</div>
+          </div>
+        </div>
+        <div class="cl-b">`;
+    }
+    html += bondCards(members, term);
+    if (banded) html += '</div></div>';
+  }
+
   if (bonds.length){
     // Totals what is showing, not the whole book, so a filtered view still ties out.
     const shown = [0,1,2,3].map(k => bonds.reduce((sum, g) => sum + g.totals[k], 0));
@@ -559,6 +618,51 @@ function render(){
   // Say which files answered this window - stitching 1-16 to 17-24 is normal
   // here, not an edge case, so it should be visible rather than implied.
   ksdSource(DATA.source_block);
+}
+
+// One bond's row and the shop table folded under it. Lifted out of render()
+// when clusters went in, because it is now drawn once per cluster rather
+// than once per page.
+function bondCards(list, term){
+  let html = '';
+  for (const g of list){
+    const open = openBonds.has(g.bond) || (term && term.length > 1);
+    html += `<div class="bd${open ? '' : ' shut'}" data-bond="${esc(g.bond)}">
+      <div class="bd-h" onclick="toggle('${esc(g.bond)}')">
+        <span class="chev">▼</span>
+        <span class="nm">${esc(g.bond.charAt(0) + g.bond.slice(1).toLowerCase())}</span>
+        <div class="mini">
+          <div><span class="k">Opening</span><div class="n">${num(g.totals[0])}</div></div>
+          <div><span class="k">Receipt</span><div class="n">${num(g.totals[1])}</div></div>
+          <div><span class="k">Sales</span><div class="n sold">${num(g.totals[2])}</div></div>
+          <div><span class="k">Closing</span><div class="n">${num(g.totals[3])}</div></div>
+        </div>
+      </div>
+      <div class="bd-b"><table>
+        <colgroup><col><col class="num"><col class="num"><col class="num"><col class="last"></colgroup>
+        <tbody>`;
+    for (const s of g.shops){
+      const shopOpen = openShops.has(s.code);
+      html += `<tr class="shop${shopOpen ? ' on' : ''}" onclick="toggleShop('${esc(s.code)}')">` +
+              `<td class="item"><span class="tw">${shopOpen ? '▾' : '▸'}</span>` +
+              `<span class="code">${esc(s.code)}</span>${esc(s.name)}</td>` +
+              s.values.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') + '</tr>';
+      if (shopOpen) html += detailRows(s.code);
+    }
+    html += `<tr class="tot"><td class="item">Total</td>` +
+            g.totals.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') +
+            `</tr></tbody></table></div></div>`;
+  }
+  return html;
+}
+
+// A cluster folds like a bond does, and stays folded across a reload - the
+// person who only works Cluster 2 should not have to shut the other two
+// every time the window changes.
+function toggleCluster(cid){
+  if (shutClusters.has(cid)) shutClusters.delete(cid); else shutClusters.add(cid);
+  const el = document.querySelector(`.cl-g[data-cl="${cid}"]`);
+  if (el) el.classList.toggle('shut', shutClusters.has(cid));
 }
 
 function detailRows(code){
