@@ -16,8 +16,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (bootstrap, auth, bondmap, config, pi as pi_mod, promote as promote_mod,
-               reports_api, reports_pdf, targets as targets_mod)
+from . import (bootstrap, auth, bondmap, config, itemissue, pi as pi_mod,
+               promote as promote_mod, reports_api, reports_pdf,
+               targets as targets_mod)
 from .jobs import STORE, Job, JobContext, JobStatus, run_pipeline
 from .pipelines import (
     MONTH_NAMES,
@@ -60,6 +61,8 @@ UPLOAD_CARDS = [
      "mode": "range", "icon": "calendar", "ready": True},
     {"id": "secondary", "title": "Secondary Sales - Daily", "stream": "secondary_sales",
      "mode": "day", "icon": "truck", "ready": True},
+    {"id": "item_issue", "title": "Secondary Sales - Analysis", "stream": "item_issue",
+     "mode": "batch", "icon": "truck", "ready": True},
     {"id": "pi_variance", "title": "Purchase Instruction", "stream": "purchase_instruction",
      "mode": "batch", "icon": "clipboard", "ready": True},
 ]
@@ -557,6 +560,21 @@ async def build(
             job.covers = f"{got['month']}-01"
             job.note = (f"{got['label']}: {got['shops']} shops"
                         + (f", {got['blank']} with no instruction" if got["blank"] else ""))
+
+        elif stream_key == "item_issue":
+            # Same reasoning as the instruction: every export states the range
+            # it covers, and twenty-eight of them agreeing beats a typed date.
+            staged = []
+            for upload in files:
+                target = scratch_dir / (upload.filename or "issue.xls")
+                _save_upload(upload, target)
+                staged.append(target)
+            got = itemissue.store(staged)
+            if "error" in got:
+                raise UploadRejected(got["error"])
+            placed = sorted((itemissue.root() / got["period"]).glob("*.xls*"))
+            job.covers = got["period"].split("_")[1]
+            job.note = f"{got['label']}: {got['warehouses']} warehouses"
 
         ctx.uploaded = placed
         job.uploaded_names = [p.name for p in placed]
@@ -2385,6 +2403,177 @@ def target_achievement_pdf(request: Request, date_from: str = "", date_to: str =
         for pdf in made:
             z.write(pdf, pdf.name)
     return FileResponse(bundle, filename=bundle.name, media_type="application/zip")
+
+
+# ---------------------------------------------------------------------------
+# Secondary sales analysis - item issue
+# ---------------------------------------------------------------------------
+
+
+@app.get("/reports/secondary-analysis", response_class=HTMLResponse)
+def item_issue_page(request: Request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        request, "report_item_issue.html",
+        {"user": user, "page": "item_issue", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", [])},
+    )
+
+
+@app.get("/api/secondary-analysis")
+def item_issue_data(request: Request, period: str = "", prior: str = "",
+                    cluster: int = 0):
+    require_user(request)
+    return JSONResponse(reports_api.item_issue(period=period, prior=prior,
+                                               cluster=cluster or None))
+
+
+@app.post("/api/secondary-analysis/industry")
+async def item_issue_industry(request: Request):
+    """The industry figure is typed, because no export carries it."""
+    user = require_user(request)
+    body = await request.json()
+    period = (body.get("period") or "").strip()
+    if not period or not itemissue.period_of(period):
+        raise HTTPException(400, "Which period is this industry figure for?")
+    try:
+        cases = float(body.get("cases") or 0)
+        prior = float(body.get("prior") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Industry figures have to be numbers.")
+    if cases < 0 or prior < 0:
+        raise HTTPException(400, "Industry figures cannot be negative.")
+    saved = itemissue.industry_set(period, cases, prior,
+                                   by=getattr(user, "email", "") or str(user))
+    return JSONResponse(saved)
+
+
+@app.get("/reports/secondary-analysis/export.xlsx")
+def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
+                    cluster: int = 0):
+    """The sheet as it prints, in the house colours."""
+    require_user(request)
+    data = reports_api.item_issue(period=period, prior=prior, cluster=cluster or None)
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+
+    import tempfile
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    NAVY, GOLD, INK, CREAM = "FF0A294F", "FFFFBD30", "FF1B2A4A", "FFFFFCF0"
+    RED, GREEN = "FFB42318", "FF1B7F3B"
+    LINE = Side(style="thin", color="FFC7C7C7")
+    BOX = Border(left=LINE, right=LINE, top=LINE, bottom=LINE)
+
+    def day(iso):
+        if not iso:
+            return ""
+        d = date.fromisoformat(iso)
+        return f"{d.day} {reports_pdf._MONTH_ABBR[d.month - 1]} {d.year}"
+
+    heads = (["WAREHOUSE"]
+             + ["STN", "GTN", "TOTAL", "C FED", "BAR", "TO DATE"]
+             + ["STN", "GTN", "TOTAL", "C FED", "BAR", "TO DATE"]
+             + ["CASES", "%", "LAST MONTH"])
+    span = len(heads)
+    last_col = get_column_letter(span)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Secondary Analysis"
+    ws.sheet_view.showGridLines = False
+
+    def band(row, text, fill, colour, size, align="center", height=None):
+        ws.cell(row=row, column=1, value=text)
+        ws.merge_cells(f"A{row}:{last_col}{row}")
+        for col in range(1, span + 1):
+            c = ws.cell(row=row, column=col)
+            c.fill = PatternFill("solid", fgColor=fill)
+            c.font = Font(bold=True, size=size, color=colour)
+            c.alignment = Alignment(horizontal=align, vertical="center")
+        if height:
+            ws.row_dimensions[row].height = height
+
+    band(1, "K.S DISTILLERY", NAVY, GOLD, 18, height=32)
+    band(2, f"SECONDARY SALES \u00b7 {data['period_label'].upper()}", GOLD, NAVY, 12,
+         align="left", height=22)
+    ws.unmerge_cells(f"A2:{last_col}2")
+    ws.merge_cells(f"A2:{get_column_letter(span - 3)}2")
+    ws.merge_cells(f"{get_column_letter(span - 2)}2:{last_col}2")
+    right = ws.cell(row=2, column=span - 2, value=f"AS ON {day(data['as_on'])}")
+    right.font = Font(bold=True, size=12, color=NAVY)
+    right.alignment = Alignment(horizontal="right", vertical="center")
+
+    # the two period banners over their blocks
+    ws.cell(row=3, column=2, value=f"{data['period_label'].upper()}")
+    ws.merge_cells(start_row=3, start_column=2, end_row=3, end_column=7)
+    ws.cell(row=3, column=8,
+            value=(data["prior_label"].upper() if data["prior"] else "NO PRIOR PULL"))
+    ws.merge_cells(start_row=3, start_column=8, end_row=3, end_column=13)
+    ws.cell(row=3, column=14, value="DIFFERENCE")
+    ws.merge_cells(start_row=3, start_column=14, end_row=3, end_column=15)
+    for col in range(1, span + 1):
+        c = ws.cell(row=3, column=col)
+        c.fill = PatternFill("solid", fgColor=NAVY)
+        c.font = Font(bold=True, size=9.5, color=GOLD)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = BOX
+
+    for i, label in enumerate(heads, start=1):
+        c = ws.cell(row=4, column=i, value=label)
+        c.fill = PatternFill("solid", fgColor=NAVY)
+        c.font = Font(bold=True, size=9.5, color="FFFFFFFF")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = BOX
+    ws.row_dimensions[4].height = 26
+
+    r = 4
+    for row in data["rows"]:
+        r += 1
+        cur, pri = row["cur"], row["prior"]
+        line = ([row["label"]]
+                + [cur["stn"], cur["gtn"], cur["total"], cur["cfed"], cur["bar"], cur["all"]]
+                + [pri["stn"], pri["gtn"], pri["total"], pri["cfed"], pri["bar"], pri["all"]]
+                + [row["diff"],
+                   (row["pct"] / 100) if row["pct"] is not None else None,
+                   row["last_month"]])
+        total = row["kind"] == "grand"
+        band_row = row["kind"] == "cluster"
+        for i, value in enumerate(line, start=1):
+            c = ws.cell(row=r, column=i, value=value)
+            c.border = BOX
+            c.alignment = Alignment(horizontal="left" if i == 1 else "center",
+                                    vertical="center")
+            if total:
+                c.fill = PatternFill("solid", fgColor=NAVY)
+                c.font = Font(bold=True, size=10, color=GOLD)
+            elif band_row:
+                c.fill = PatternFill("solid", fgColor=GOLD)
+                c.font = Font(bold=True, size=10, color=INK)
+            else:
+                if 8 <= i <= 13 or i == span:
+                    c.fill = PatternFill("solid", fgColor=CREAM)
+                colour = INK
+                if i == 14 and isinstance(value, (int, float)):
+                    colour = GREEN if value > 0 else RED if value < 0 else INK
+                c.font = Font(bold=(i in (7, 13)), size=10, color=colour)
+            if i == 15 and value is not None:
+                c.number_format = "0.00%"
+        ws.row_dimensions[r].height = 17
+
+    ws.column_dimensions["A"].width = 22
+    for i in range(2, span + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 11
+    ws.freeze_panes = ws.cell(row=5, column=2)
+
+    tmp = (Path(tempfile.mkdtemp())
+           / f"SECONDARY SALES ANALYSIS ({data['period_label']}).xlsx")
+    wb.save(tmp)
+    return FileResponse(tmp, filename=tmp.name)
 
 
 # ---------------------------------------------------------------------------

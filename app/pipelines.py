@@ -346,9 +346,20 @@ PURCHASE_INSTRUCTION = Stream(
     steps=(),
 )
 
+ITEM_ISSUE = Stream(
+    key="item_issue",
+    label="Item Issue Consolidation",
+    blurb="KSBC's issue consolidation, one file per warehouse, for one date range.",
+    input_dir="ITEM ISSUE/_periods",
+    extensions=(".xls", ".xlsx"),
+    multi_file=True,
+    steps=(),
+)
+
 STREAMS: dict[str, Stream] = {
     s.key: s for s in (SHOP_SALES, SHOP_SALES_DAILY, SHOP_SALES_CUMULATIVE,
-                       SECONDARY_SALES, WAREHOUSE_STOCK, PURCHASE_INSTRUCTION)
+                       SECONDARY_SALES, WAREHOUSE_STOCK, PURCHASE_INSTRUCTION,
+                       ITEM_ISSUE)
 }
 
 

@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block title %}Secondary Sales - Analysis{% endblock %}
+{% block heading %}Secondary Sales - Analysis{% endblock %}
+
+{% block head %}
+<style>
+  .controls { position:sticky; top:0; z-index:30; background:var(--bg);
+              padding:2px 0 12px; margin:-4px 0 0; }
+  .bar1 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar1 .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .fbar { display:inline-flex; align-items:stretch; background:var(--card);
+          border:1px solid var(--line); border-radius:12px; padding:3px;
+          box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .fitem { display:flex; flex-direction:column; justify-content:center; gap:1px;
+           padding:7px 15px; border-radius:9px; }
+  .fitem:hover { background:var(--hover); }
+  .fi-k { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+          color:var(--muted); font-weight:700; }
+  .fdiv { width:1px; background:var(--line); margin:8px 0; }
+  .selw { position:relative; display:flex; align-items:center; }
+  .selw select { appearance:none; -webkit-appearance:none; border:0; background:none;
+                 font:inherit; font-size:13.5px; font-weight:650; color:var(--ink);
+                 padding:0 18px 0 0; cursor:pointer; }
+  .selw select:focus { outline:none; }
+  .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
+            color:var(--muted); pointer-events:none; }
+
+  .banner { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
+            border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
+  .warn { background:#FEF3C7; border:1px solid #FDE68A; color:#92400E;
+          border-radius:11px; padding:12px 15px; font-size:13px; margin-bottom:11px; }
+
+  /* The two bands the sheet opens with, the same pair as the workbook. */
+  .bands { border:1px solid var(--line); border-bottom:0; border-radius:14px 14px 0 0;
+           overflow:hidden; }
+  .bands .b1 { background:var(--navy); color:var(--gold); text-align:center;
+               font-size:19px; font-weight:800; letter-spacing:.6px; padding:10px 12px; }
+  .bands .b2 { background:var(--gold); color:#0B2C52; font-size:12.5px; font-weight:800;
+               letter-spacing:.8px; text-transform:uppercase; padding:7px 16px;
+               display:flex; align-items:center; gap:12px; }
+  .bands .b2 .r { margin-left:auto; }
+
+  .tablewrap { background:var(--card); border:1px solid var(--line);
+               border-radius:0 0 14px 14px; overflow:auto;
+               max-height:calc(100vh - 300px); box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
+          table-layout:fixed; }
+  col.c-nm { width:190px; } col.c-fig { width:82px; }
+  col.c-tot { width:92px; } col.c-pct { width:92px; } col.c-last { width:100px; }
+
+  thead th { position:sticky; background:var(--navy); color:var(--gold); text-align:center;
+             vertical-align:middle; font-weight:700; font-size:9.5px; letter-spacing:.5px;
+             text-transform:uppercase; line-height:1.28; padding:9px 6px;
+             border-bottom:1px solid #22407F;
+             border-left:1px solid rgba(255,255,255,.10); }
+  thead tr:first-child th { top:0; z-index:3; }
+  thead tr:nth-child(2) th { top:32px; z-index:3; }
+  thead tr:first-child th:first-child { left:0; z-index:5; text-align:left;
+                                        padding-left:16px; border-left:0;
+                                        box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
+  thead th.grp { border-left:1px solid rgba(255,255,255,.28); }
+
+  tbody td { height:34px; padding:0 7px; text-align:center; white-space:nowrap;
+             font-variant-numeric:tabular-nums; color:var(--ink);
+             border-bottom:1px solid var(--line);
+             border-left:1px solid var(--line); }
+  tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
+                         background:var(--card); font-weight:650; padding-left:16px;
+                         border-left:0; border-right:1px solid var(--line);
+                         box-shadow:7px 0 9px -7px rgba(16,24,40,.26); }
+  /* The prior month sits on its own ground, the way the sheet prints it. */
+  tbody td.prior { background:#FFFCF0; }
+  tbody td.edge { border-left:1px solid #D9DEE8; }
+  tbody td.run { font-weight:750; }
+  tbody tr.w:hover td, tbody tr.w:hover td:first-child { background:var(--hover); }
+
+  tbody tr.cl td, tbody tr.cl td:first-child { background:var(--gold); color:#1B2A4A;
+      font-weight:800; border-left-color:rgba(27,42,74,.20); }
+  tbody tr.gt td, tbody tr.gt td:first-child { background:var(--navy); color:var(--gold);
+      font-weight:800; height:40px; letter-spacing:.3px; border-left-color:#22407F; }
+  tbody tr.gt td:first-child { text-align:center; }
+
+  .up { color:#1B7F3B; font-weight:750; }
+  .dn { color:#B42318; font-weight:750; }
+  tr.cl .up, tr.cl .dn { color:#1B2A4A; }
+  tr.gt .up, tr.gt .dn { color:var(--gold); }
+  .nil { color:#9AA3B2; }
+
+  /* The two typed-in lines under the table. */
+  tbody tr.foot td { height:38px; background:var(--card); font-weight:700; }
+  tbody tr.foot td:first-child { background:var(--card); }
+  tbody tr.foot td.prior { background:#FFFCF0; }
+  tbody tr.foot .ed { border:0; background:none; font:inherit; font-size:12px;
+                      font-weight:700; color:var(--blue); cursor:pointer;
+                      text-decoration:underline; margin-left:8px; }
+
+  .veil { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
+          align-items:center; justify-content:center; z-index:60; padding:20px; }
+  .veil.on { display:flex; }
+  .sheet { background:var(--card); border-radius:14px; width:100%; max-width:460px;
+           box-shadow:0 24px 60px rgba(16,24,40,.28); }
+  .sheet header { display:flex; align-items:center; gap:12px; padding:16px 20px 13px;
+                  border-bottom:1px solid var(--line); }
+  .sheet header h4 { margin:0; font-size:15.5px; font-weight:700; }
+  .sheet header .sub { font-size:12px; color:var(--muted); }
+  .sheet header .x { margin-left:auto; background:none; border:0; font-size:20px;
+                     color:var(--muted); cursor:pointer; line-height:1; }
+  .sheet .body { padding:18px 20px; display:grid; gap:14px; }
+  .sheet label { display:grid; gap:5px; font-size:10px; letter-spacing:.7px;
+                 text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .sheet input { border:1px solid var(--line); border-radius:9px; padding:10px 12px;
+                 font:inherit; font-size:14px; background:var(--row); color:var(--ink);
+                 font-variant-numeric:tabular-nums;
+                 appearance:textfield; -moz-appearance:textfield; }
+  .sheet input::-webkit-outer-spin-button,
+  .sheet input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .sheet input:focus { outline:none; border-color:var(--blue); background:var(--card);
+                       box-shadow:0 0 0 3px rgba(37,99,235,.14); }
+  .sheet footer { display:flex; align-items:center; gap:10px; padding:13px 20px;
+                  border-top:1px solid var(--line); }
+  .sheet footer .sp { margin-left:auto; display:flex; gap:8px; }
+  .sheet .err { color:var(--bad); font-size:12.5px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="controls">
+  <div class="bar1">
+    <div class="fbar">
+      <label class="fitem">
+        <span class="fi-k">Period</span>
+        <div class="selw"><select id="fPeriod" onchange="load()"></select><i>&#9662;</i></div>
+      </label>
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Against</span>
+        <div class="selw"><select id="fPrior" onchange="load()"></select><i>&#9662;</i></div>
+      </label>
+      <span class="fdiv"></span>
+      <label class="fitem">
+        <span class="fi-k">Cluster</span>
+        <div class="selw"><select id="fCluster" onchange="load()">
+          <option value="0">All clusters</option>
+          <option value="1">Cluster 1</option>
+          <option value="2">Cluster 2</option>
+          <option value="3">Cluster 3</option>
+        </select><i>&#9662;</i></div>
+      </label>
+    </div>
+    <div class="sp">
+      <a class="act xl" id="xl" href="#">Download Excel</a>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+
+<div class="bands">
+  <div class="b1">K.S DISTILLERY</div>
+  <div class="b2"><span id="bandL">SECONDARY SALES</span>
+                  <span class="r" id="bandR"></span></div>
+</div>
+<div class="tablewrap"><table id="grid">
+  <colgroup></colgroup>
+  <thead><tr><th>Warehouse</th></tr></thead>
+  <tbody><tr><td>Loading&hellip;</td></tr></tbody>
+</table></div>
+
+<div class="veil" id="indVeil" onclick="if(event.target===this)closeInd()">
+  <div class="sheet">
+    <header>
+      <div><h4>Industry total</h4>
+        <div class="sub" id="indSub">Cases &middot; not in any export, so it is typed</div></div>
+      <button type="button" class="x" onclick="closeInd()">&times;</button>
+    </header>
+    <div class="body">
+      <label>This period<input type="number" min="0" step="1" id="indCur"></label>
+      <label id="indPriorWrap">Prior period<input type="number" min="0" step="1" id="indPrior"></label>
+    </div>
+    <footer>
+      <span class="err" id="indErr"></span>
+      <div class="sp">
+        <button type="button" class="act" onclick="closeInd()">Cancel</button>
+        <button type="button" class="act primary" id="indSave" onclick="saveInd()">Save</button>
+      </div>
+    </footer>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let DATA = null;
+
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = n => (n === null || n === undefined)
+  ? '<span class="nil">&ndash;</span>' : Number(n).toLocaleString('en-IN');
+
+function params(){
+  const p = new URLSearchParams();
+  if (fPeriod.value) p.set('period', fPeriod.value);
+  if (fPrior.value)  p.set('prior', fPrior.value);
+  if (+fCluster.value) p.set('cluster', fCluster.value);
+  return p;
+}
+
+const shortDay = iso => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getDate()}${d.toLocaleString('en-GB',{month:'short'})}`;
+};
+const monthOf = iso => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.toLocaleString('en-GB',{month:'long'})} ${d.getFullYear()}`.toUpperCase();
+};
+const longDay = iso => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getDate()} ${d.toLocaleString('en-GB',{month:'long'})} ${d.getFullYear()}`;
+};
+
+async function load(){
+  let d;
+  try {
+    const res = await fetch('/api/secondary-analysis?' + params().toString());
+    d = await res.json();
+  } catch (e) {
+    msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
+    return;
+  }
+  if (d.error){
+    msg.innerHTML = `<div class="banner">${esc(d.error)}</div>`;
+    grid.querySelector('thead').innerHTML = '<tr><th>Warehouse</th></tr>';
+    grid.querySelector('tbody').innerHTML = '<tr><td>No data</td></tr>';
+    return;
+  }
+  DATA = d;
+
+  fPeriod.innerHTML = d.periods.map(p =>
+    `<option value="${p.key}"${p.key === d.period ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
+  fPrior.innerHTML = `<option value="">Nothing</option>` + d.periods
+    .filter(p => p.key !== d.period)
+    .map(p => `<option value="${p.key}"${p.key === d.prior ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
+
+  const notes = [];
+  if (!d.prior)
+    notes.push('Only one pull is stored, so there is nothing to compare this one with yet. '
+             + 'Upload last month’s export and the comparison fills itself in.');
+  if (d.unknown.length)
+    notes.push(`Not in any cluster: ${d.unknown.join(', ')}.`);
+  msg.innerHTML = notes.length ? `<div class="warn">${esc(notes.join(' '))}</div>` : '';
+
+  bandL.textContent = 'SECONDARY SALES · ' + monthOf(d.as_on).slice(0,3)
+    + ' ' + String(new Date(d.as_on + 'T00:00:00').getFullYear()).slice(2)
+    + (d.prior_as_on ? ' vs ' + monthOf(d.prior_as_on).slice(0,3)
+        + ' ' + String(new Date(d.prior_as_on + 'T00:00:00').getFullYear()).slice(2) : '');
+  bandR.textContent = 'AS ON ' + longDay(d.as_on);
+
+  xl.href = '/reports/secondary-analysis/export.xlsx?' + params().toString();
+  render(d);
+}
+
+function head(d){
+  const cur = `${monthOf(d.as_on)} - as on ${longDay(d.as_on)}`;
+  const prior = d.prior_as_on
+    ? `${monthOf(d.prior_as_on)} - as on ${longDay(d.prior_as_on)}` : 'NO PRIOR PULL';
+  return `<tr>
+      <th rowspan="2">Warehouse</th>
+      <th class="grp" colspan="6">${esc(cur)}</th>
+      <th class="grp" colspan="6">${esc(prior)}</th>
+      <th class="grp" colspan="2">Difference</th>
+      <th class="grp" rowspan="2">Last month${d.last_label ? '<br>(' + esc(shortDay(d.last_key.split('_')[1])) + ')' : ''}</th>
+    </tr><tr>
+      <th>STN</th><th>GTN</th><th>Total</th><th>C&nbsp;Fed</th><th>Bar</th>
+      <th>${esc(shortDay(d.as_on))}</th>
+      <th class="grp">STN</th><th>GTN</th><th>Total</th><th>C&nbsp;Fed</th><th>Bar</th>
+      <th>${esc(shortDay(d.prior_as_on))}</th>
+      <th class="grp">Cases</th><th>%</th>
+    </tr>`;
+}
+
+function block(b, cls){
+  const c = cls ? ` class="${cls}"` : '';
+  const e = cls ? ` class="${cls} edge"` : ' class="edge"';
+  const r = cls ? ` class="${cls} run"` : ' class="run"';
+  return `<td${e}>${num(b.stn)}</td><td${c}>${num(b.gtn)}</td><td${c}>${num(b.total)}</td>`
+       + `<td${c}>${num(b.cfed)}</td><td${c}>${num(b.bar)}</td><td${r}>${num(b.all)}</td>`;
+}
+
+function movement(r){
+  const cls = r.diff > 0 ? 'up' : r.diff < 0 ? 'dn' : '';
+  const pct = (r.pct === null || r.pct === undefined)
+    ? '<span class="nil">&ndash;</span>'
+    : `${r.pct > 0 ? '' : ''}${r.pct.toFixed(2)}%`;
+  return `<td class="edge ${cls}">${num(r.diff)}</td><td class="${cls}">${pct}</td>`;
+}
+
+function render(d){
+  grid.querySelector('colgroup').innerHTML =
+    `<col class="c-nm">` + `<col class="c-fig">`.repeat(12)
+    + `<col class="c-tot"><col class="c-pct"><col class="c-last">`;
+  grid.style.minWidth = (190 + 12 * 82 + 92 + 92 + 100) + 'px';
+  grid.querySelector('thead').innerHTML = head(d);
+
+  let html = '';
+  for (const r of d.rows){
+    const cls = r.kind === 'warehouse' ? 'w' : r.kind === 'cluster' ? 'cl' : 'gt';
+    html += `<tr class="${cls}"><td>${esc(r.label)}</td>`
+          + block(r.cur, '') + block(r.prior, 'prior') + movement(r)
+          + `<td class="prior">${num(r.last_month)}</td></tr>`;
+  }
+
+  // Day sale and industry: neither is in the export, so they sit under the
+  // table rather than pretending to be part of it.
+  const ds = d.day_sale || {};
+  const dsCls = ds.diff > 0 ? 'up' : ds.diff < 0 ? 'dn' : '';
+  html += `<tr class="foot"><td>Day sale</td>
+      <td colspan="6">${num(ds.cur)}</td>
+      <td class="prior" colspan="6">${num(ds.prior)}</td>
+      <td class="edge ${dsCls}">${num(ds.diff)}</td>
+      <td class="${dsCls}">${ds.pct === null || ds.pct === undefined
+          ? '<span class="nil">&ndash;</span>' : ds.pct.toFixed(2) + '%'}</td>
+      <td class="prior"></td></tr>`;
+
+  const ind = d.industry || {};
+  const iDiff = (ind.cases || 0) - (ind.prior || 0);
+  const iPct = ind.prior ? (iDiff / ind.prior * 100) : null;
+  const iCls = iDiff > 0 ? 'up' : iDiff < 0 ? 'dn' : '';
+  html += `<tr class="foot"><td>Industry total
+        <button type="button" class="ed" onclick="openInd()">edit</button></td>
+      <td colspan="6">${num(ind.cases || 0)}</td>
+      <td class="prior" colspan="6">${num(ind.prior || 0)}</td>
+      <td class="edge ${iCls}">${num(iDiff)}</td>
+      <td class="${iCls}">${iPct === null ? '<span class="nil">&ndash;</span>'
+          : iPct.toFixed(2) + '%'}</td>
+      <td class="prior"></td></tr>`;
+
+  grid.querySelector('tbody').innerHTML = html;
+}
+
+/* ---------------- the industry figure ---------------- */
+function openInd(){
+  if (!DATA) return;
+  indVeil.classList.add('on');
+  indErr.textContent = '';
+  indCur.value = DATA.industry.cases || '';
+  indPrior.value = DATA.industry.prior || '';
+  indSub.textContent = `Cases for ${DATA.period_label}`
+    + (DATA.industry.updated
+        ? ` · last saved ${DATA.industry.updated.slice(0,10).split('-').reverse().join('-')}`
+          + (DATA.industry.by ? ` by ${DATA.industry.by}` : '')
+        : ' · not set yet');
+  indCur.focus();
+}
+function closeInd(){ indVeil.classList.remove('on'); }
+
+async function saveInd(){
+  indSave.disabled = true; indSave.textContent = 'Saving…'; indErr.textContent = '';
+  try {
+    const res = await fetch('/api/secondary-analysis/industry', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({period: DATA.period,
+                            cases: +indCur.value || 0,
+                            prior: +indPrior.value || 0}),
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.detail || 'Could not save.');
+    closeInd();
+    load();
+  } catch (e){
+    indErr.textContent = e.message;
+  } finally {
+    indSave.disabled = false; indSave.textContent = 'Save';
+  }
+}
+
+load();
+</script>
+{% endblock %}

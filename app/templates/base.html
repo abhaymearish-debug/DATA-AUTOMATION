@@ -283,7 +283,7 @@
     <div class="kids">
       <a class="item {% if page == 'secondary_daily' %}active{% endif %}" href="/reports/daily/secondary">Daily</a>
       <a class="item {% if page == 'brandwise' %}active{% endif %}" href="/reports/brandwise">Cumulative</a>
-      <a class="item soon">Analysis<span class="tag">soon</span></a>
+      <a class="item {% if page == 'item_issue' %}active{% endif %}" href="/reports/secondary-analysis">Analysis</a>
     </div>
 
     <a class="item {% if page == 'liquidation' %}active{% endif %}" href="/reports/liquidation">

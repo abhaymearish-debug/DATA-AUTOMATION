@@ -1845,3 +1845,166 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
         "target_meta": targets_mod.meta(month),
         "cluster": cluster or 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Secondary sales analysis - item issue, month against month
+# ---------------------------------------------------------------------------
+#
+# The export spells one warehouse differently from the master data, and a name
+# that matches nothing would drop a whole warehouse out of the network total
+# without saying so. Known differences are mapped; anything else is reported.
+ITEM_ISSUE_ALIASES = {
+    "PATHANAMTHITA": "PATHANAMTHITTA",
+}
+
+
+def _ii_name(raw: str) -> str:
+    name = (raw or "").strip().upper()
+    return ITEM_ISSUE_ALIASES.get(name, name)
+
+
+def _ii_row(label: str, kind: str, members: list[str], cur: dict, prior: dict,
+            last: dict) -> dict:
+    """One line: the period, the one before it, and the distance between them."""
+    from . import itemissue as ii
+
+    def block(source):
+        legs = {k: 0 for k, _ in ii.LEGS}
+        for name in members:
+            cell = source.get(name)
+            if not cell:
+                continue
+            for k, _ in ii.LEGS:
+                legs[k] += int(cell.get(k, 0) or 0)
+        legs["total"] = legs["stn"] + legs["gtn"]
+        legs["all"] = legs["total"] + legs["cfed"] + legs["bar"]
+        return legs
+
+    a, b = block(cur), block(prior)
+    lastmonth = block(last)["all"] if last else None
+
+    diff = a["all"] - b["all"]
+    # A rise from nothing has no percentage - there is nothing to be a
+    # percentage of - so it is left empty rather than printed as infinity.
+    pct = (diff / b["all"] * 100) if b["all"] else None
+
+    return {"label": label, "kind": kind, "cur": a, "prior": b,
+            "diff": diff, "pct": pct, "last_month": lastmonth}
+
+
+def item_issue(period: str = "", prior: str = "", cluster: int | None = None) -> dict:
+    """The secondary sales analysis: one pull against the month before it."""
+    from . import itemissue as ii
+
+    have = ii.periods()
+    if not have:
+        return {"error": "No item issue export has been uploaded yet. Upload a "
+                         "pull on the Raw Data Upload page."}
+
+    keys = [p["key"] for p in have]
+    period = period if period in keys else keys[0]
+    span = ii.period_of(period)
+    cur_end = span[1] if span else None
+
+    # Default comparison: the newest stored pull that ended before this one's
+    # month began - which is last month, however far into it they pulled.
+    if prior not in keys:
+        prior = ""
+        if cur_end:
+            first_of_month = cur_end.replace(day=1)
+            for p in have:
+                if p["key"] == period:
+                    continue
+                if date.fromisoformat(p["end"]) < first_of_month:
+                    prior = p["key"]
+                    break
+
+    # LAST MONTH is the prior month taken whole, where such a pull exists.
+    last_key = ""
+    if cur_end:
+        prev_end = cur_end.replace(day=1) - timedelta(days=1)
+        prev_start = prev_end.replace(day=1)
+        want = ii.period_key(prev_start, prev_end)
+        if want in keys:
+            last_key = want
+
+    cur_raw = {_ii_name(k): v for k, v in ii.load(period).items()}
+    prior_raw = {_ii_name(k): v for k, v in ii.load(prior).items()} if prior else {}
+    last_raw = {_ii_name(k): v for k, v in ii.load(last_key).items()} if last_key else {}
+
+    clusters = WAREHOUSE_CLUSTERS
+    known = {w for members in clusters.values() for w in members}
+    unknown = sorted((set(cur_raw) | set(prior_raw)) - known)
+
+    rows: list[dict] = []
+    shown: list[str] = []
+    for cid in sorted(clusters):
+        if cluster in (1, 2, 3) and cid != cluster:
+            continue
+        members = [w for w in clusters[cid]]
+        for name in members:
+            rows.append(_ii_row(name, "warehouse", [name], cur_raw, prior_raw, last_raw))
+        rows.append(_ii_row(f"CLUSTER - {cid}", "cluster", members,
+                            cur_raw, prior_raw, last_raw))
+        shown += members
+
+    if cluster in (None, 0):
+        for name in unknown:
+            rows.append(_ii_row(name, "warehouse", [name], cur_raw, prior_raw, last_raw))
+        shown += unknown
+        rows.append(_ii_row("TOTAL", "grand", shown, cur_raw, prior_raw, last_raw))
+
+    industry = ii.industry_get(period)
+
+    return {
+        "period": period,
+        "period_label": ii.period_label(period),
+        "prior": prior,
+        "prior_label": ii.period_label(prior) if prior else "",
+        "last_key": last_key,
+        "last_label": ii.period_label(last_key) if last_key else "",
+        "periods": have,
+        "columns": [{"key": k, "label": label} for k, label in ii.LEGS],
+        "rows": rows,
+        "as_on": cur_end.isoformat() if cur_end else "",
+        "prior_as_on": (ii.period_of(prior)[1].isoformat() if prior else ""),
+        "day_sale": _ii_day_sale(period, prior),
+        "industry": {"cases": industry.get("cases", 0),
+                     "prior": industry.get("prior", 0),
+                     "updated": industry.get("updated", ""),
+                     "by": industry.get("by", "")},
+        "unknown": unknown,
+        "cluster": cluster or 0,
+    }
+
+
+def _ii_day_sale(period: str, prior: str) -> dict:
+    """The last day of each window, taken from the secondary sales already held.
+
+    The item issue export is cumulative over its range and says nothing about
+    any single day, so this comes from the daily secondary figures the app
+    already carries rather than from the pull.
+    """
+    from . import itemissue as ii
+
+    def one(key: str):
+        span = ii.period_of(key) if key else None
+        if not span:
+            return None
+        day = span[1]
+        try:
+            grid = daily_grid("secondary", day, day)
+        except Exception:
+            return None
+        if "error" in grid:
+            return None
+        for row in grid.get("rows", []):
+            if row.get("kind") == "grand":
+                return round(float(row.get("total", 0) or 0))
+        return None
+
+    a, b = one(period), one(prior)
+    diff = (a - b) if (a is not None and b is not None) else None
+    pct = (diff / b * 100) if (diff is not None and b) else None
+    return {"cur": a, "prior": b, "diff": diff, "pct": pct}
