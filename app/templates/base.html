@@ -535,6 +535,17 @@
                               var(--tint, var(--line)) 18%, transparent); }
   .srcitem .card::before { content:''; width:5px; height:5px; border-radius:50%;
                            flex:none; background:var(--tint, var(--chip-ink)); }
+  /* An absence, drawn as one: a hollow node and a quieter line, so a day
+     nobody uploaded never reads as a day that traded nothing. */
+  .srcitem.miss::before { background:var(--card);
+                          box-shadow:0 0 0 2px var(--bad), 0 0 0 4.5px var(--card); }
+  .srcitem.miss .w b { color:var(--muted); font-weight:650; }
+  .srcitem.miss:hover { background:color-mix(in srgb, var(--bad) 5%, transparent); }
+  .srcitem .card.miss { color:var(--bad);
+                        background:color-mix(in srgb, var(--bad) 9%, transparent);
+                        box-shadow:inset 0 0 0 1px
+                                   color-mix(in srgb, var(--bad) 20%, transparent); }
+  .srcitem .card.miss::before { background:var(--bad); }
   .srcitem .f { margin-top:3px; font-size:10.5px; line-height:1.45;
                 color:var(--muted); letter-spacing:.1px;
                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -827,9 +838,9 @@ window.ksdSource = function (block, host) {
     // on all eighteen rows. Eighteen identical pills down a panel is a paint
     // chart, not an answer. A leg that mixes cards keeps them on the rows,
     // because there the card is what tells one row from another.
-    const cards = [...new Set(l.items.map(c => c.stream || ''))];
+    const cards = [...new Set(l.items.filter(c => !c.miss).map(c => c.stream || ''))];
     const one = cards.length === 1 && cards[0];
-    const legTint = one ? (l.items.find(c => c.tint) || {}).tint : null;
+    const legTint = one ? (l.items.find(c => c.tint && !c.miss) || {}).tint : null;
     const head = (one || legs.length > 1)
       ? `<div class="leg"${legTint ? ` style="--tone:${esc(legTint)}"` : ''}>` +
         `${esc(one || l.leg)}</div>`
@@ -848,13 +859,16 @@ window.ksdSource = function (block, host) {
       // The card carries the colour the Status Calendar gives that stream, so
       // the same upload reads as the same thing in both places.
       const tint = c.tint ? ` style="--tint:${esc(c.tint)}"` : '';
-      const card = one ? ''
+      // A gap is not a file: it is the days in the window that no file
+      // answers for. It says so in its own right rather than borrowing a card.
+      const card = c.miss ? `<span class="card miss">not uploaded</span>`
+        : one ? ''
         : c.stream ? `<span class="card"${tint}>${esc(c.stream)}</span>`
         : (c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '');
       // A count or a word about the file, where there is one to say - never
       // the file name, which would only repeat the date above it.
       const note = c.detail ? `<div class="f">${esc(c.detail)}</div>` : '';
-      return `<div class="srcitem${span ? '' : ' nw'}"${tint}>
+      return `<div class="srcitem${span ? '' : ' nw'}${c.miss ? ' miss' : ''}"${tint}>
           <div class="w"><b title="${esc(name || lead)}">${esc(lead)}</b>${card}</div>
           ${note}
         </div>`;

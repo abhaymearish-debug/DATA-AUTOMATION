@@ -75,6 +75,19 @@ STREAM_TINT = {
 CHAIN_STREAM = {"cumulative": STREAM["shop_cumulative"], "daily": STREAM["shop_daily"]}
 
 
+def src_chain_days(chain: list) -> set:
+    """Every day the files in a chain actually answer for."""
+    out: set = set()
+    for seg in chain or []:
+        try:
+            a = date.fromisoformat(str(seg["from"])[:10])
+            b = date.fromisoformat(str(seg["to"])[:10])
+        except (KeyError, TypeError, ValueError):
+            continue
+        out |= {a + timedelta(days=i) for i in range((b - a).days + 1)}
+    return out
+
+
 def src_windows(chain: list) -> list:
     """Chain segments - the files that tile a window - as the chip reads them."""
     out = []
@@ -100,6 +113,36 @@ def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
         if tint:
             it["tint"] = tint
     return {"leg": label, "tone": tone, "items": items}
+
+
+def src_days(days) -> str:
+    """A run of dates as you would say them: 1-16, 18."""
+    nums, runs = sorted({d.day for d in days}), []
+    for n in nums:
+        if runs and n == runs[-1][1] + 1:
+            runs[-1][1] = n
+        else:
+            runs.append([n, n])
+    return ", ".join(str(a) if a == b else f"{a}\u2013{b}" for a, b in runs)
+
+
+def src_gap(lo, hi, covered) -> dict | None:
+    """The days in the asked window that no upload answers for.
+
+    Without this the panel named the files it had and said nothing about the
+    days it did not - so a window of 1 to 18 read the same whether every day
+    was in or the 16th had never been uploaded, and the zeros in that column
+    looked like a day nobody sold anything.
+    """
+    if not lo or not hi:
+        return None
+    want = {lo + timedelta(days=i) for i in range((hi - lo).days + 1)}
+    missing = want - set(covered or ())
+    if not missing or missing == want:
+        return None
+    return {"kind": "gap", "miss": True,
+            "title": f"{src_days(missing)} {lo.strftime('%b %Y')}",
+            "name": ""}
 
 
 def src_block(legs: list, say: str = "") -> dict:
@@ -1190,8 +1233,11 @@ def _latest_month(days) -> tuple:
 def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
     """What answered a daily grid - one day at a time, or a month's raws."""
     if kind == "secondary":
-        return src_block(
-            [src_secondary(sources, lo, hi)])
+        leg = src_secondary(sources, lo, hi)
+        gap = src_gap(lo, hi, secondary_covered_days())
+        if gap:
+            leg["items"].append(gap)
+        return src_block([leg])
 
     # Shop sales are stored a day at a time, so the grid's provenance is
     # literally the files for the days on screen - which also makes a gap in
@@ -1201,6 +1247,9 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
         items = [{"from": d.isoformat(), "to": d.isoformat(), "kind": "daily upload",
                   "stream": STREAM["shop_daily"], "name": files[d].name}
                  for d in sorted(files)]
+        gap = src_gap(lo, hi, files)
+        if gap:
+            items.append(gap)
         return src_block(
             [src_leg("Shop sales (KSBC)", items, "what the shops sold")])
     if book is not None and not book.is_dir():
@@ -1999,14 +2048,20 @@ def _liq_source(start: date, end: date, p_start, p_end) -> dict:
         plan = plan_window(a, b)
         return src_windows(plan.get("chain", []))
 
-    legs = [src_leg("Shop sales (KSBC)", shop(start, end),
+    now = shop(start, end)
+    hole = src_gap(start, end, src_chain_days(plan_window(start, end).get("chain", [])))
+    legs = [src_leg("Shop sales (KSBC)", now + ([hole] if hole and now else []),
                     f"{period_for(start, end)['short']}")]
     if p_start:
         was = shop(p_start, p_end)
         if was:
             legs.append(src_leg("Compared against",
                                 was, period_for(p_start, p_end)["short"], "green"))
-    legs.append(src_secondary(sec, start, end))
+    sec_leg = src_secondary(sec, start, end)
+    gap = src_gap(start, end, secondary_covered_days())
+    if gap and sec_leg.get("items"):
+        sec_leg["items"].append(gap)
+    legs.append(sec_leg)
     return src_block(legs)
 
 
@@ -2250,11 +2305,17 @@ def _tva_source(sources: dict, lo=None, hi=None) -> dict:
     the dispatch raws. Targets are typed in rather than uploaded, so the
     sentence at the foot says so rather than naming a file that does not exist.
     """
-    legs = [src_leg("Shop sales (KSBC)", src_windows(sources.get("chain", [])),
+    shop = src_windows(sources.get("chain", []))
+    hole = src_gap(lo, hi, src_chain_days(sources.get("chain", [])))
+    legs = [src_leg("Shop sales (KSBC)", shop + ([hole] if hole and shop else []),
                     "what the shops sold")]
     invoice = sources.get("invoice") or []
     if invoice:
-        legs.append(src_secondary(invoice, lo, hi))
+        leg = src_secondary(invoice, lo, hi)
+        gap = src_gap(lo, hi, secondary_covered_days())
+        if gap and leg.get("items"):
+            leg["items"].append(gap)
+        legs.append(leg)
     return src_block(legs)
 
 

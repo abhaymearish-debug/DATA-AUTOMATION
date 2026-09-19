@@ -1767,8 +1767,12 @@ def _shop_source(win: dict, prev: dict | None = None) -> dict:
     that reads these files, so both shop reports build it the same way.
     """
     now = reports_api.src_windows(win.get("chain", []))
-    legs = [reports_api.src_leg("Shop sales (KSBC)", now,
-                                win["period"]["short"] if win.get("period") else "")]
+    per = win.get("period") or {}
+    hole = reports_api.src_gap(per.get("start"), per.get("end"),
+                               reports_api.src_chain_days(win.get("chain", [])))
+    legs = [reports_api.src_leg("Shop sales (KSBC)",
+                                now + ([hole] if hole and now else []),
+                                per.get("short", ""))]
     if prev and prev.get("chain"):
         legs.append(reports_api.src_leg(
             "Compared against", reports_api.src_windows(prev["chain"]),
