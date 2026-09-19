@@ -513,12 +513,14 @@ def source_for(month: str, prior: str = "") -> dict:
             return {}
         filed = load(key)
         blank = sum(1 for d in filed if _blank_of(d))
-        note = f"{len(files)} shop sheet{'' if len(files) == 1 else 's'} filed"
-        if blank:
-            note += f", {blank} returned blank"
+        # How many sheets is the row's own count now. The one thing the count
+        # cannot say is that some of those sheets came back with nothing on
+        # them, which is why that half of the sentence stays.
+        note = f"{blank} returned blank" if blank else ""
         return _r.src_leg(label, [{"title": month_label(key),
                                    "kind": "purchase instruction",
                                    "stream": _r.STREAM["purchase"],
+                                   "files": len(files),
                                    "detail": note}], tone=tone)
 
     legs = [l for l in (leg(month, "This month"),

@@ -246,9 +246,11 @@ def source_for(key: str, prior: str = "") -> dict:
         return _r.src_leg(label, [{
             "from": span[0].isoformat(), "to": span[1].isoformat(),
             "kind": "item issue", "stream": _r.STREAM["item_issue"],
-            "detail": f"{len(files)} warehouse export"
-                      f"{'' if len(files) == 1 else 's'}"
-                      + (f" · {len(houses)} warehouses" if len(houses) > 1 else ""),
+            # The count itself is on the row, said the same way it is said on
+            # every other report; what only this leg can add is how many
+            # warehouses those exports came off.
+            "files": len(files),
+            "detail": f"across {len(houses)} warehouses" if len(houses) > 1 else "",
         }], tone=tone)
 
     legs = [l for l in (leg(key, "This period"),

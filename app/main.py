@@ -1759,7 +1759,8 @@ def shop_cumulative_api(request: Request, date_from: str = "", date_to: str = ""
 
 
 
-def _shop_source(win: dict, prev: dict | None = None) -> dict:
+def _shop_source(win: dict, prev: dict | None = None,
+                 prev_span: tuple | None = None) -> dict:
     """Which uploads answered a shop window - and the one it is set against.
 
     A window to the 18th is normally 1-16 stitched to 17-18, because KSBC caps
@@ -1771,12 +1772,19 @@ def _shop_source(win: dict, prev: dict | None = None) -> dict:
     hole = reports_api.src_gap(per.get("start"), per.get("end"),
                                reports_api.src_chain_days(win.get("chain", [])))
     legs = [reports_api.src_leg("Shop sales (KSBC)",
-                                now + ([hole] if hole and now else []),
+                                now + ([hole] if hole else []),
                                 per.get("short", ""))]
     if prev and prev.get("chain"):
         legs.append(reports_api.src_leg(
             "Compared against", reports_api.src_windows(prev["chain"]),
             prev["period"]["short"] if prev.get("period") else "", "green"))
+    elif prev_span:
+        # The month back was asked for and nothing answers it. Every row on
+        # this report prints a dash in its last-month column because of that,
+        # and this is the only place that says why.
+        legs.append(reports_api.src_leg(
+            "Compared against", [reports_api.src_missing(*prev_span)],
+            "", "green"))
     return reports_api.src_block(legs)
 
 
@@ -2081,16 +2089,29 @@ def _previous_window(period: dict):
     Matched on the day numbers rather than on elapsed days: 'the first half of
     last month' is the comparison the trade actually makes.
     """
+    span = _previous_span(period)
+    if not span:
+        return None
+    prev = reports_api.resolve_window(*span)
+    return None if "error" in prev else prev
+
+
+def _previous_span(period: dict):
+    """The window a month back as asked for - uploaded or not.
+
+    _previous_window answers None for a month nobody uploaded, which is the
+    right answer for the figures and the wrong one for the Source: a
+    comparison against a month with no files behind it is exactly the thing
+    worth saying out loud, and to say it the panel needs the dates that were
+    asked for rather than the ones that were found.
+    """
     start, end = period["start"], period["end"]
     month = start.month - 1 or 12
     year = start.year - (1 if start.month == 1 else 0)
     try:
-        back_from = date(year, month, start.day)
-        back_to = date(year, month, end.day)
+        return date(year, month, start.day), date(year, month, end.day)
     except ValueError:
         return None
-    prev = reports_api.resolve_window(back_from, back_to)
-    return None if "error" in prev else prev
 
 
 def _analysis_basis(chosen: dict, prev: dict | None) -> dict:
@@ -2169,7 +2190,8 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
          "round_off": bool(round_off),
          "calendar": _calendar_days(),
          "source": win.get("source", ""), "chain": win.get("chain", []),
-         "source_block": (_shop_source(win, _previous_window(chosen))
+         "source_block": (_shop_source(win, _previous_window(chosen),
+                                       _previous_span(chosen))
                           if chosen else {"legs": []}),
          "no_data": win.get("error", ""),
          "asked": _asked_period(date_from, date_to, period),

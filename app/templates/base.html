@@ -513,6 +513,18 @@
   .srcitem.nw .w b { font-size:12.5px; line-height:1.35; white-space:normal;
                      overflow:visible; text-overflow:clip; }
   .srcitem.nw::before { top:11px; }
+  /* How many raw files stand behind the line. A span like "1 - 18 Sep" is one
+     line and eighteen uploads, and which of those two numbers you are looking
+     at is worth never having to guess. Tabular figures so a column of them
+     lines up, and quiet enough that it reads as a footnote to the date rather
+     than as a figure off the report. */
+  .srcitem .ct, .srcleg .leg .ct { flex:none; font-variant-numeric:tabular-nums;
+                color:var(--muted); font-weight:700; letter-spacing:.2px; }
+  .srcitem .ct { margin-left:auto; font-size:10.5px; }
+  .srcleg .leg .ct { margin-left:auto; font-size:8.5px; letter-spacing:.9px;
+                opacity:.85; }
+  /* With a count between them, the card is no longer the thing pushed right. */
+  .srcitem .w .ct + .card, .srcitem .w .ct + .tag { margin-left:10px; }
   .srcitem .tag { margin-left:auto; flex:none; font-size:8.5px; font-weight:750;
                   letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
                   background:color-mix(in srgb, var(--chip) 62%, transparent);
@@ -820,10 +832,18 @@ window.ksdSource = function (block, host) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const legs = ((block && block.legs) || []).filter(l => l && (l.items || []).length);
-  const count = legs.reduce((n, l) => n + l.items.length, 0);
-  line.hidden = !count;
+  const lines = legs.reduce((n, l) => n + l.items.length, 0);
+  // The badge counts files, not lines. A window answered by eighteen daily
+  // uploads shows as one line on the panel, and "18" on the chip is the thing
+  // that says the window was answered day by day rather than in one pull.
+  // Lines are still what decides whether there is a panel at all, because a
+  // window with nothing behind it has lines to show and no files to count.
+  const files = legs.reduce((n, l) => n + (l.items || [])
+    .reduce((m, c) => m + (Number(c.files) || 0), 0), 0);
+  line.hidden = !lines;
   line.classList.remove('on', 'rt');
-  if (!count) { line.innerHTML = ''; return; }
+  if (!lines) { line.innerHTML = ''; return; }
+  const said = n => n + (n === 1 ? ' file' : ' files');
 
   // The tag beside a file says what kind of file it is in one word. The
   // long form stays on the server, where it is the honest description.
@@ -841,9 +861,18 @@ window.ksdSource = function (block, host) {
     const cards = [...new Set(l.items.filter(c => !c.miss).map(c => c.stream || ''))];
     const one = cards.length === 1 && cards[0];
     const legTint = one ? (l.items.find(c => c.tint && !c.miss) || {}).tint : null;
+    // The count is said once per leg and never twice. Where the leg is one
+    // row, the row is the file and says so itself; where it is several, only
+    // the head can give the total. The one row that cannot say it is a single
+    // file - "1 file" is not worth a line of its own - so the head says that.
+    const counted = l.items.filter(c => (Number(c.files) || 0) > 0);
+    const legFiles = counted.reduce((m, c) => m + Number(c.files), 0);
+    const headCt = counted.length > 1 || (counted.length === 1 && legFiles === 1)
+      ? legFiles : 0;
     const head = (one || legs.length > 1)
       ? `<div class="leg"${legTint ? ` style="--tone:${esc(legTint)}"` : ''}>` +
-        `${esc(one || l.leg)}</div>`
+        `${esc(one || l.leg)}` +
+        (headCt ? `<span class="ct">${said(headCt)}</span>` : '') + `</div>`
       : '';
     const rows = l.items.map(c => {
       const name = String(c.name || '').replace(/\.(xlsx?|csv|pdf)$/i, '');
@@ -868,8 +897,13 @@ window.ksdSource = function (block, host) {
       // A count or a word about the file, where there is one to say - never
       // the file name, which would only repeat the date above it.
       const note = c.detail ? `<div class="f">${esc(c.detail)}</div>` : '';
+      // Only where the line stands for more than one file. Writing "1 file"
+      // against every single-file row would put the word "file" down the
+      // panel eighteen times to say nothing.
+      const ct = (Number(c.files) || 0) > 1
+        ? `<span class="ct">${said(Number(c.files))}</span>` : '';
       return `<div class="srcitem${span ? '' : ' nw'}${c.miss ? ' miss' : ''}"${tint}>
-          <div class="w"><b title="${esc(name || lead)}">${esc(lead)}</b>${card}</div>
+          <div class="w"><b title="${esc(name || lead)}">${esc(lead)}</b>${ct}${card}</div>
           ${note}
         </div>`;
     }).join('');
@@ -898,7 +932,7 @@ window.ksdSource = function (block, host) {
          <path d="M3 12.5 12 17l9-4.5"></path>
          <path d="M3 17 12 21.5 21 17"></path>
        </svg>
-       <span>Source</span>${dots}${count > 1 ? `<span class="n">${count}</span>` : ''}
+       <span>Source</span>${dots}${files > 1 ? `<span class="n">${files}</span>` : ''}
      </button>
      <div class="srcpop"><div class="body">${body}</div></div>`;
 

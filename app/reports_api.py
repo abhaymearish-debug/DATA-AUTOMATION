@@ -88,6 +88,43 @@ def src_chain_days(chain: list) -> set:
     return out
 
 
+def src_fold(items: list) -> list:
+    """Adjacent day files, said as the run of days they are.
+
+    Shop sales are stored a day at a time, so a fortnight is fourteen files
+    and used to be fourteen lines: the window read out loud. One line saying
+    "1 - 14 Sep" with fourteen against it is the same fact, and it is how the
+    secondary report has always said it. Only day-at-a-time uploads fold.
+    A cumulative window is stitched out of separate pulls, and which pull
+    covered which half is a thing worth still being able to see.
+    """
+    out: list = []
+    for it in items or []:
+        prev = out[-1] if out else None
+        joins = (prev and not prev.get("miss") and not it.get("miss")
+                 and prev.get("kind") == it.get("kind") == "daily upload"
+                 and prev.get("stream") == it.get("stream")
+                 and prev.get("to") and it.get("from"))
+        if joins:
+            try:
+                gap = (date.fromisoformat(it["from"])
+                       - date.fromisoformat(prev["to"])).days
+            except ValueError:
+                gap = 9
+            if gap == 1:
+                first = prev.get("first") or prev.get("name") or ""
+                last = it.get("name") or ""
+                prev["to"] = it["to"]
+                prev["first"] = first
+                prev["files"] = int(prev.get("files") or 1) + int(it.get("files") or 1)
+                prev["name"] = f"{first} \u2026 {last}" if first and last else (first or last)
+                continue
+        out.append(dict(it))
+    for it in out:
+        it.pop("first", None)
+    return out
+
+
 def src_windows(chain: list) -> list:
     """Chain segments - the files that tile a window - as the chip reads them."""
     out = []
@@ -98,7 +135,7 @@ def src_windows(chain: list) -> list:
                     "kind": SRC_KIND.get(kind, kind),
                     "stream": CHAIN_STREAM.get(kind, ""),
                     "name": name})
-    return out
+    return src_fold(out)
 
 
 def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
@@ -108,11 +145,35 @@ def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
     again. The rows under it already carry their dates, and the heading already
     names the card they came off, so the note was a third telling.
     """
+    # Two streams can both come up empty for the same window - a comparison
+    # month with neither shop files nor dispatch raws behind it - and "not
+    # uploaded" printed twice against the same dates reads as a rendering
+    # fault rather than as one plain fact.
+    seen, kept = set(), []
+    for it in items or []:
+        if it.get("miss"):
+            key = (it.get("from"), it.get("to"), it.get("title"))
+            if key in seen:
+                continue
+            seen.add(key)
+        kept.append(it)
+    items = kept
+    n = 0
     for it in items or []:
         tint = STREAM_TINT.get(it.get("stream", ""))
         if tint:
             it["tint"] = tint
-    return {"leg": label, "tone": tone, "items": items}
+        # How many raw files stand behind the row. One per row, unless the row
+        # is a run of days collapsed into a span - or an absence, which is no
+        # files by definition. Runs are why the chip cannot just count rows:
+        # "1 - 18 Sep" is one line and eighteen files, and the number of files
+        # is what tells you the window was answered file by file.
+        if it.get("miss"):
+            it["files"] = 0
+        else:
+            it["files"] = int(it.get("files") or 1)
+        n += it["files"]
+    return {"leg": label, "tone": tone, "items": items, "files": n}
 
 
 def src_days(days) -> str:
@@ -140,9 +201,22 @@ def src_gap(lo, hi, covered) -> dict | None:
     missing = want - set(covered or ())
     if not missing or missing == want:
         return None
-    return {"kind": "gap", "miss": True,
+    return {"kind": "gap", "miss": True, "files": 0,
             "title": f"{src_days(missing)} {lo.strftime('%b %Y')}",
             "name": ""}
+
+
+def src_missing(lo, hi) -> dict:
+    """A whole window with nothing behind it, said as one entry.
+
+    A leg with no files used to be dropped, so a report that reads two streams
+    and only has one of them looked as though it had only ever wanted one -
+    and a comparison against a month nobody uploaded simply was not mentioned.
+    """
+    it = {"kind": "gap", "miss": True, "files": 0, "name": ""}
+    if lo and hi:
+        it["from"], it["to"] = lo.isoformat(), hi.isoformat()
+    return it
 
 
 def src_block(legs: list, say: str = "") -> dict:
@@ -155,7 +229,9 @@ def src_block(legs: list, say: str = "") -> dict:
     already showed, and it was the longest thing in the panel.
     """
     kept = [l for l in legs if l and l.get("items")]
-    return {"legs": kept} if kept else {"legs": []}
+    if not kept:
+        return {"legs": []}
+    return {"legs": kept, "files": sum(int(l.get("files") or 0) for l in kept)}
 
 
 def _sec_book_title(name: str) -> str:
@@ -226,6 +302,8 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
     # the head of them - it is the file actually read, the raws stand behind it.
     items.sort(key=lambda i: ("" if i.get("kind") == "built workbook" else "1",
                               i.get("from", "")))
+    if not items and lo and hi:
+        items = [src_missing(lo, hi)]
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
 
 
@@ -1260,7 +1338,7 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
             n = (b - a).days + 1
             items.append({"from": a.isoformat(), "to": b.isoformat(),
                           "kind": "daily upload", "stream": STREAM["shop_daily"],
-                          "detail": f"{n} day files" if n > 1 else "",
+                          "files": n,
                           "name": files[a].name if n == 1 else
                                   f"{files[a].name} … {files[b].name}"})
         gap = src_gap(lo, hi, files)
@@ -1276,7 +1354,10 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
                                     "kind": "month workbook",
                                     "stream": STREAM["shop_daily"],
                                     "name": book.name}])])
-    return src_block([])
+    # Nothing at all behind the window. The panel used to hide itself here,
+    # which read as a report with no sources rather than as a window with no
+    # uploads - the one case where the Source has the most to say.
+    return src_block([src_leg("Shop sales (KSBC)", [src_missing(lo, hi)])])
 
 
 def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
@@ -2066,18 +2147,23 @@ def _liq_source(start: date, end: date, p_start, p_end) -> dict:
 
     now = shop(start, end)
     hole = src_gap(start, end, src_chain_days(plan_window(start, end).get("chain", [])))
-    legs = [src_leg("Shop sales (KSBC)", now + ([hole] if hole and now else []),
+    legs = [src_leg("Shop sales (KSBC)",
+                    (now + ([hole] if hole else [])) or [src_missing(start, end)],
                     f"{period_for(start, end)['short']}")]
-    if p_start:
-        was = shop(p_start, p_end)
-        if was:
-            legs.append(src_leg("Compared against",
-                                was, period_for(p_start, p_end)["short"], "green"))
     sec_leg = src_secondary(sec, start, end)
     gap = src_gap(start, end, secondary_covered_days())
     if gap and sec_leg.get("items"):
         sec_leg["items"].append(gap)
     legs.append(sec_leg)
+    # The comparison side reads the same two streams as this side does, so it
+    # is named the same way - one leg holding both, each row wearing its own
+    # card. It used to name only the shop files, which meant a month whose
+    # dispatch raws were never uploaded compared silently against nothing.
+    if p_start:
+        was = shop(p_start, p_end) or [src_missing(p_start, p_end)]
+        was += src_secondary(sec, p_start, p_end).get("items", [])
+        legs.append(src_leg("Compared against", was,
+                            period_for(p_start, p_end)["short"], "green"))
     return src_block(legs)
 
 
@@ -2323,15 +2409,18 @@ def _tva_source(sources: dict, lo=None, hi=None) -> dict:
     """
     shop = src_windows(sources.get("chain", []))
     hole = src_gap(lo, hi, src_chain_days(sources.get("chain", [])))
-    legs = [src_leg("Shop sales (KSBC)", shop + ([hole] if hole and shop else []),
+    legs = [src_leg("Shop sales (KSBC)",
+                    (shop + ([hole] if hole else [])) or [src_missing(lo, hi)],
                     "what the shops sold")]
-    invoice = sources.get("invoice") or []
-    if invoice:
-        leg = src_secondary(invoice, lo, hi)
-        gap = src_gap(lo, hi, secondary_covered_days())
-        if gap and leg.get("items"):
-            leg["items"].append(gap)
-        legs.append(leg)
+    # Named whether or not it answered. Achievement is the two legs added
+    # together, so a window with no dispatch raws behind it is not a window
+    # that sold nothing to Fed and Bar - it is a window nobody uploaded, and
+    # the total is short by however much went out. The leg has to say so.
+    leg = src_secondary(sources.get("invoice") or [], lo, hi)
+    gap = src_gap(lo, hi, secondary_covered_days())
+    if gap and leg.get("items"):
+        leg["items"].append(gap)
+    legs.append(leg)
     return src_block(legs)
 
 
