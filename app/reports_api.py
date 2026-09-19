@@ -1244,9 +1244,25 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
     # the middle of a window visible as a day with no file behind it.
     files = {d: path for d, path in shop_day_files().items() if lo <= d <= hi}
     if files:
-        items = [{"from": d.isoformat(), "to": d.isoformat(), "kind": "daily upload",
-                  "stream": STREAM["shop_daily"], "name": files[d].name}
-                 for d in sorted(files)]
+        # A run of days, not a line per day. Eighteen rows saying 1 Sep, 2 Sep,
+        # 3 Sep is the window read out loud; "1 - 18 Sep" is the same fact in
+        # one line, and a day nobody uploaded is called out on its own below
+        # rather than left to be noticed as a row that is not there.
+        days = sorted(files)
+        runs: list[list] = []
+        for d in days:
+            if runs and d == runs[-1][1] + timedelta(days=1):
+                runs[-1][1] = d
+            else:
+                runs.append([d, d])
+        items = []
+        for a, b in runs:
+            n = (b - a).days + 1
+            items.append({"from": a.isoformat(), "to": b.isoformat(),
+                          "kind": "daily upload", "stream": STREAM["shop_daily"],
+                          "detail": f"{n} day files" if n > 1 else "",
+                          "name": files[a].name if n == 1 else
+                                  f"{files[a].name} … {files[b].name}"})
         gap = src_gap(lo, hi, files)
         if gap:
             items.append(gap)
