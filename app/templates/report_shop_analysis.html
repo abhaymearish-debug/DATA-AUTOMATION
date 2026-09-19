@@ -179,8 +179,8 @@
          is on - so the switch writes 1 or 0 into a field that always rides. -->
     <input type="hidden" name="round_off" id="roVal" value="{{ '1' if round_off else '0' }}">
     <label class="chk"><input type="checkbox" id="round" {{ 'checked' if round_off }}
-           onchange="roVal.value = this.checked ? '1' : '0'; this.form.submit()">
-           Round off</label>
+           onchange="roVal.value = this.checked ? '1' : '0'; this.form.submit()"><span
+           class="sw"></span><span class="t">Round off</span></label>
     <div class="sp">
       {% if not no_data %}
         <a class="act xl" href="/reports/shop-analysis/export.xlsx?{{ qs }}">Download Excel</a>

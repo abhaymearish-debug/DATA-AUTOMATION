@@ -154,8 +154,8 @@
     <input type="hidden" name="round_off" id="roVal" value="{{ '1' if round_off else '0' }}">
     <label class="chk"><input type="checkbox" id="round" {{ 'checked' if round_off }}
            onchange="roVal.value = this.checked ? '1' : '0';
-                     document.getElementById('f').submit()">
-           Round off</label>
+                     document.getElementById('f').submit()"><span class="sw"></span><span
+           class="t">Round off</span></label>
     {% if not error %}
     <div class="sp">
       <a class="act xl" href="/reports/liquidation/export.xlsx?{{ q }}">Download Excel</a>
