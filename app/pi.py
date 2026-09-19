@@ -518,6 +518,7 @@ def source_for(month: str, prior: str = "") -> dict:
             note += f", {blank} returned blank"
         return _r.src_leg(label, [{"title": month_label(key),
                                    "kind": "purchase instruction",
+                                   "stream": _r.STREAM["purchase"],
                                    "name": note}], tone=tone)
 
     legs = [l for l in (leg(month, "This month"),

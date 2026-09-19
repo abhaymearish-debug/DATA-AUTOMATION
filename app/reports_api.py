@@ -47,21 +47,40 @@ BOND_CLUSTERS: dict[int, list[str]] = {
 
 SRC_KIND = {"cumulative": "cumulative upload", "daily": "daily upload"}
 
+# Every file on the chip came off one of the cards on Raw Data Upload, and
+# which card is the thing you actually want to know: "daily" alone does not
+# say whether it is shop sales or secondary. Each item carries the card's own
+# title, spelled the way the card spells it.
+STREAM = {
+    "shop_cumulative": "Shop Sales - Cumulative",
+    "shop_daily":      "Shop Sales - Daily",
+    "secondary":       "Secondary Sales - Daily",
+    "item_issue":      "Secondary Sales - Analysis",
+    "warehouse":       "Warehouse Physical Stock",
+    "purchase":        "Purchase Instruction",
+}
+# A shop window is tiled by whichever files cover it, and the two kinds come
+# off two different cards.
+CHAIN_STREAM = {"cumulative": STREAM["shop_cumulative"], "daily": STREAM["shop_daily"]}
+
 
 def src_windows(chain: list) -> list:
     """Chain segments - the files that tile a window - as the chip reads them."""
     out = []
     for seg in chain or []:
         name = seg.get("name") or Path(seg["path"]).name
+        kind = seg.get("kind", "")
         out.append({"from": str(seg["from"])[:10], "to": str(seg["to"])[:10],
-                    "kind": SRC_KIND.get(seg.get("kind", ""), seg.get("kind", "")),
+                    "kind": SRC_KIND.get(kind, kind),
+                    "stream": CHAIN_STREAM.get(kind, ""),
                     "name": name})
     return out
 
 
-def src_files(names, kind: str = "raw upload", title: str = "") -> list:
+def src_files(names, kind: str = "raw upload", title: str = "",
+              stream: str = "") -> list:
     """Loose files with no window of their own - a workbook, a month's raws."""
-    return [{"title": title, "kind": kind, "name": str(n)}
+    return [{"title": title, "kind": kind, "stream": stream, "name": str(n)}
             for n in (names or []) if n]
 
 
@@ -122,13 +141,14 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
             continue
         if book is not None and name == book.name:
             # Its name reads like another report, so it leads with what it is.
-            items.append({"kind": "built workbook",
+            items.append({"kind": "built workbook", "stream": STREAM["secondary"],
                           "title": _sec_book_title(name), "name": name})
         elif a and b:
-            items.append({"kind": "raw upload", "name": name,
-                          "from": a.isoformat(), "to": b.isoformat()})
+            items.append({"kind": "raw upload", "stream": STREAM["secondary"],
+                          "name": name, "from": a.isoformat(), "to": b.isoformat()})
         else:
-            items.append({"kind": "raw upload", "name": name})
+            items.append({"kind": "raw upload", "stream": STREAM["secondary"],
+                          "name": name})
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
 
 
@@ -859,6 +879,7 @@ def warehouse_stock(as_of: str = "", cluster: int | None = None,
         "source_block": src_block(
             [src_leg("Warehouse stock (Bevco)",
                      [{"from": day, "to": day, "kind": "daily snapshot",
+                       "stream": STREAM["warehouse"],
                        "name": stock_history_path().name}])],
             "A stock position is a photograph, not a total: this is the snapshot "
             "the daily build filed for that date. The Bevco exports themselves are "
@@ -1127,7 +1148,8 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
     files = {d: path for d, path in shop_day_files().items() if lo <= d <= hi}
     if files:
         items = [{"from": d.isoformat(), "to": d.isoformat(), "kind": "daily upload",
-                  "name": files[d].name} for d in sorted(files)]
+                  "stream": STREAM["shop_daily"], "name": files[d].name}
+                 for d in sorted(files)]
         gaps = (hi - lo).days + 1 - len(items)
         return src_block(
             [src_leg("Shop sales (KSBC)", items, "what the shops sold")],
@@ -1137,7 +1159,9 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
                else " - every day in it is accounted for."))
     if book is not None and not book.is_dir():
         return src_block([src_leg("Shop sales (KSBC)",
-                                  [{"kind": "month workbook", "name": book.name}])],
+                                  [{"kind": "month workbook",
+                                    "stream": STREAM["shop_daily"],
+                                    "name": book.name}])],
                          "Read from the month's workbook: these days predate per-day storage.")
     return src_block([])
 
