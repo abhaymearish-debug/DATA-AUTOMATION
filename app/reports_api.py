@@ -370,6 +370,14 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
     dates = [l["date"] for l in lines if l["date"]]
     span = {"min": min(dates).isoformat() if dates else None,
             "max": max(dates).isoformat() if dates else None}
+    # The span is everything on disk, which is what the picker offers. It is
+    # not what the page should open on: last month's raws are still there, and
+    # opening on 1 August in September is a report nobody asked for.
+    if dates:
+        lo, hi = _latest_month(dates)
+        opens = {"from": lo.isoformat(), "to": hi.isoformat()}
+    else:
+        opens = {"from": None, "to": None}
 
     sel = []
     for l in lines:
@@ -451,6 +459,7 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
         "grand": {"cells": {b: rounded(gt[b]) for b in brands},
                   "total": rounded(sum(gt.values()))},
         "span": span,
+        "opens": opens,
         # The days an upload stands behind, so the picker can mark them.
         "days_with_data": sorted({l["date"].isoformat() for l in lines if l.get("date")}),
         "workbook": workbook.name,
@@ -1428,19 +1437,33 @@ def period_for(start: date, end: date) -> dict:
 
 
 def widest_window():
-    """The longest window the uploads can answer for, end to end.
+    """The window to open on: this month, as wide as the uploads can answer.
 
     Not simply the newest file: with 1-16 and 17-23 on disk the useful default
     is 1-23, because that is the whole of what has been uploaded. Searched
     rather than taken greedily - the longest file starting on a day is not
     always the one that reaches furthest, if a shorter one is the only link to
     the next stretch.
+
+    It never crosses a month. Daily files tile one day at a time, so an
+    unbroken run of them chained 1 August straight through to 18 September and
+    opened every report on a window nobody asked for. A month is the unit the
+    office reports in, so that is the unit a default is cut to - and the month
+    it picks is this one, falling back to the newest month with anything in
+    it. Asking for a window by hand is untouched: plan_window() still tiles
+    across months.
     """
-    by_start: dict = {}
+    per_month: dict = {}
     for s, e, _kind, _path in segments():
-        by_start.setdefault(s, []).append(e)
-    if not by_start:
+        per_month.setdefault((s.year, s.month), {}).setdefault(s, []).append(e)
+    if not per_month:
         return None
+
+    today = date.today()
+    key = (today.year, today.month)
+    if key not in per_month:
+        key = max(per_month)
+    by_start = per_month[key]
 
     memo: dict = {}
 
@@ -1457,10 +1480,8 @@ def widest_window():
         memo[day] = best if best is not None else day
         return memo[day]
 
-    # Newest data first, then the widest reach to it: with August 1-23 and
-    # September 1-16 on disk the default is September 1-16, because nobody
-    # opens the app to look at last month. Within one stretch the earliest
-    # start wins, so 1-16 plus 17-23 opens as 1-23 rather than 17-23.
+    # Furthest reach first, then the earliest start that gets there: 1-16 plus
+    # 17-23 opens as 1-23 rather than 17-23.
     winner = None
     for start in sorted(by_start):
         end = reach(start)

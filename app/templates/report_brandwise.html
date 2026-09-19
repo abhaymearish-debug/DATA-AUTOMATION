@@ -190,7 +190,7 @@
 <script>
 let view = 'bond';
 let filled = false;
-let FROM = '', TO = '';
+let FROM = '', TO = '', OPENS = {};
 
 function toggleMenu(id){
   document.querySelectorAll('.menu').forEach(m => { if (m.id !== id) m.classList.remove('open'); });
@@ -229,7 +229,7 @@ function onPick(from, to){ FROM = from; TO = to; load(); }
 function resetAll(){
   fBond.value = ''; fWh.value = ''; round.checked = false;
   openGroups.clear();
-  FROM = SPAN.min || ''; TO = SPAN.max || '';
+  FROM = OPENS.from || SPAN.min || ''; TO = OPENS.to || SPAN.max || '';
   Cal.init(FROM, TO, onPick);
   load();
 }
@@ -263,10 +263,16 @@ async function load(refresh){
     : '';
 
   SPAN = d.span || SPAN;
+  OPENS = d.opens || OPENS;
   if (!filled){
     fill(fBond, d.bonds, 'All bonds');
     fill(fWh, d.warehouses, 'All warehouses');
-    if (d.span.min && !FROM){ FROM = d.span.min; TO = d.span.max; }
+    // This month, not everything on disk - the picker still offers the rest.
+    const open = d.opens || {};
+    if (!FROM){
+      FROM = open.from || d.span.min;
+      TO = open.to || d.span.max;
+    }
     filled = true;
   }
   // The dots mark days an upload stands behind; every day stays pickable.
