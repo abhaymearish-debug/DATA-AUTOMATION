@@ -152,6 +152,7 @@
         </select><i>&#9662;</i></div>
       </label>
     </div>
+    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
     <div class="sp">
       <div class="menu" id="xlMenu">
         <button type="button" class="act xl" onclick="toggleMenu('xlMenu')">Download Excel &#9662;</button>
@@ -166,14 +167,6 @@
           <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="bar2">
-    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
-    <div class="sp">
-      <button type="button" class="link" onclick="resetAll()">Reset filters</button>
-      <button type="button" class="act" onclick="load(true)">Refresh</button>
     </div>
   </div>
 </div>
@@ -225,14 +218,6 @@ function params(){
 }
 
 function onPick(from, to){ FROM = from; TO = to; load(); }
-
-function resetAll(){
-  fBond.value = ''; fWh.value = ''; round.checked = false;
-  openGroups.clear();
-  FROM = OPENS.from || SPAN.min || ''; TO = OPENS.to || SPAN.max || '';
-  Cal.init(FROM, TO, onPick);
-  load();
-}
 
 let SPAN = {min:'', max:''};
 
