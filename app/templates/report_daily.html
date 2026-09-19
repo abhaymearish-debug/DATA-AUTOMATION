@@ -29,8 +29,14 @@
   .fitem input[type=date]:focus, .fitem select:focus { outline:none; }
 
 
+  /* A height, or the box never scrolls: overflow:auto with nothing to overflow
+     is not a scrollport, and the sticky header inside it has nothing to stick
+     to - it just rode up the page and out of sight, leaving eighteen columns
+     of figures with no names on them. --stick is the filter strip above, so
+     the table always ends where the window does. */
   .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
-          overflow:auto; }
+          overflow:auto;
+          max-height:max(120px, calc(100vh - var(--stick) - 250px)); }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px; }
 
   thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:var(--gold);

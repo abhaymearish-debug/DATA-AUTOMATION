@@ -34,8 +34,13 @@
   .vs { font-size:12.5px; color:var(--muted); flex:0 1 auto; min-width:0;
         overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+  /* A height, or the box never scrolls: overflow:auto with nothing to overflow
+     is not a scrollport, and the sticky header inside it has nothing to stick
+     to - it rode up the page and out of sight, leaving the figures with no
+     column names on them. --stick is the filter strip above it. */
   .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
-          overflow:auto; }
+          overflow:auto;
+          max-height:max(120px, calc(100vh - var(--stick) - 250px)); }
   /* Fixed layout, so a header and the figures under it sit on one axis. Auto
      layout was stretching CM / LM / TREND and pulling the numbers off it. */
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
