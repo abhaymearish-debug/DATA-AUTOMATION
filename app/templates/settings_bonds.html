@@ -89,10 +89,6 @@
 {% endblock %}
 
 {% block content %}
-<p class="lead">Which shop belongs to which bond, and which bond to which ASM cluster.
-  Shop assignments are written back into <b id="srcName">master data</b> — the same column
-  the build scripts read — so a change here reaches the reports and the workbooks alike.</p>
-
 <div id="msg"></div>
 
 <h3 class="sec">Clusters</h3>
@@ -140,7 +136,6 @@ async function load(){
   msg.innerHTML = '';
   DATA = d;
   clusters = JSON.parse(JSON.stringify(d.clusters));
-  srcName.textContent = d.source;
   fBond.innerHTML = '<option value="">All bonds</option>'
     + d.bonds.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('');
   drawClusters();
@@ -153,6 +148,7 @@ function drawClusters(){
   const spare = DATA.bonds.filter(b => !assigned.has(b));
   clusters_el().innerHTML = ['1','2','3'].map(c => {
     const bonds = clusters[c] || [];
+    const elsewhere = DATA.bonds.filter(b => !bonds.includes(b) && assigned.has(b));
     return `
     <div class="cl">
       <h4>Cluster ${c}<span class="n">${bonds.length} bond${bonds.length === 1 ? '' : 's'}</span></h4>
@@ -162,9 +158,17 @@ function drawClusters(){
             ? bonds.map(b => `<span class="chip">${escapeHtml(b)}<button title="Take ${escapeHtml(b)} out of cluster ${c}" onclick="dropBond('${c}','${b}')">&times;</button></span>`).join('')
             : '<span class="none">Nothing in this cluster yet</span>'}</div>
         <div class="addw">
-          <select onchange="addBond('${c}', this)"${spare.length ? '' : ' disabled'}>
-            <option value="">${spare.length ? '+\u2002Add a bond' : 'Every bond is in a cluster'}</option>
-            ${spare.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('')}
+          <select onchange="addBond('${c}', this)"${elsewhere.length || spare.length ? '' : ' disabled'}>
+            <option value="">${elsewhere.length || spare.length
+                ? '+\u2002Move a bond here' : 'Every bond is already here'}</option>
+            ${spare.length ? `<optgroup label="In no cluster">${
+                spare.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('')
+              }</optgroup>` : ''}
+            ${['1','2','3'].filter(o => o !== c).map(o => {
+                const mine = (clusters[o] || []);
+                return mine.length ? `<optgroup label="Currently in cluster ${o}">${
+                  mine.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('')
+                }</optgroup>` : ''; }).join('')}
           </select><i>&#9662;</i>
         </div>
       </div>
@@ -182,6 +186,8 @@ function drawClusters(){
 function clusters_el(){ return document.getElementById('clusters'); }
 function addBond(c, sel){
   const b = sel.value; if (!b) return;
+  for (const k of Object.keys(clusters))
+    clusters[k] = (clusters[k] || []).filter(x => x !== b);
   clusters[c] = [...new Set([...(clusters[c] || []), b])].sort();
   clustersDirty = true; drawClusters(); markDirty();
 }
