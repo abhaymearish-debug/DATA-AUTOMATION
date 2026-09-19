@@ -171,7 +171,12 @@ def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
         if it.get("miss"):
             it["files"] = 0
         else:
-            it["files"] = int(it.get("files") or 1)
+            # `or 1` here turned a deliberate nought back into a one, so the
+            # built workbook - which is made out of the raws above it and must
+            # not be counted a second time - kept adding itself back. Eighteen
+            # daily uploads reported as nineteen files.
+            got = it.get("files")
+            it["files"] = 1 if got is None else int(got)
         n += it["files"]
     return {"leg": label, "tone": tone, "items": items, "files": n}
 
@@ -310,12 +315,39 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
     rest = [i for i in items if i.get("kind") not in ("daily upload", "built workbook")]
     book_items = [i for i in items if i.get("kind") == "built workbook"]
     raws.sort(key=lambda i: i.get("from", ""))
-    # The workbook is built out of the raws, so counting both would count the
-    # same fortnight twice. It only counts as a file where it is the only
-    # thing left - an older month whose raws have been cleared out.
+
+    def spread(it):
+        """The days an item speaks for, as dates."""
+        try:
+            a = date.fromisoformat(it["from"])
+            b = date.fromisoformat(it["to"])
+        except (KeyError, TypeError, ValueError):
+            return set()
+        return {a + timedelta(days=i) for i in range((b - a).days + 1)}
+
+    # The workbook is built out of the raws, so counting both counts the same
+    # fortnight twice, and drawing both prints the same date range twice - a
+    # row saying "1 - 18 Sep 2026" directly under a row saying "1 - 18 Sep
+    # 2026". It earns a line only for the days no raw of yours answers: a
+    # month whose raws were never uploaded, or cleared off disk since. Then
+    # it is named by those days rather than by its own full window, so it
+    # still never repeats a span shown above it.
+    had = set().union(*[spread(i) for i in raws]) if raws else set()
+    kept_book = []
     for it in book_items:
-        it["files"] = 0 if raws else 1
-    items = src_fold(raws) + rest + book_items
+        if not raws:
+            it["files"] = 1
+            kept_book.append(it)
+            continue
+        extra = sorted((spread(it) - had) & secondary_covered_days())
+        if not extra:
+            continue
+        it["files"] = 0
+        it.pop("from", None)
+        it.pop("to", None)
+        it["title"] = f"{src_days(extra)} {extra[-1].strftime('%b %Y')}"
+        kept_book.append(it)
+    items = src_fold(raws) + rest + kept_book
     if not items and lo and hi:
         items = [src_missing(lo, hi)]
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
@@ -1829,11 +1861,38 @@ def plan_window(start: date, end: date) -> dict:
     while cursor <= end:
         options = [o for o in by_start.get(cursor, []) if o[0] <= end]
         if not options:
-            return {"error": _gap_message(cursor, end, by_start)}
+            return {"error": _gap_message(cursor, end, by_start),
+                    "need": [_gap_need(cursor, end)]}
         e, kind, path = max(options)
         chain.append({"from": cursor, "to": e, "kind": kind, "path": path})
         cursor = e + timedelta(days=1)
     return {"chain": chain}
+
+
+def _gap_need(cursor: date, end: date) -> dict:
+    """The upload that would answer the gap: which card, and for which days.
+
+    The prose beside it explains why the window cannot be built. This is the
+    part you act on - the name of the tile on Raw Data Upload, spelled the way
+    that tile spells it, and the dates to pull. Everything else on a screen
+    with no figures on it is reading, not doing.
+    """
+    # "17 - 20 Aug 2026", the way the Source panel says a span, rather than
+    # "17 Aug 2026 to 20 Aug 2026" - one month and one year, said once.
+    if (cursor.year, cursor.month) == (end.year, end.month):
+        said = (f"{cursor.day}\u2013{end.day} "
+                f"{end.strftime('%b %Y')}")
+    elif cursor.year == end.year:
+        said = (f"{cursor.day} {cursor.strftime('%b')} \u2013 "
+                f"{end.day} {end.strftime('%b %Y')}")
+    else:
+        said = (f"{cursor.day} {cursor.strftime('%b %Y')} \u2013 "
+                f"{end.day} {end.strftime('%b %Y')}")
+    return {"stream": "shop_cumulative", "label": STREAM["shop_cumulative"],
+            # The colour the Status Calendar gives that stream, so the row
+            # points at the tile you are about to go and press.
+            "tint": STREAM_TINT[STREAM["shop_cumulative"]],
+            "from": cursor.isoformat(), "to": end.isoformat(), "short": said}
 
 
 def _gap_message(cursor: date, end: date, by_start: dict) -> str:
@@ -2092,7 +2151,10 @@ def resolve_window(start: date, end: date) -> dict:
 
     built = window_lines(start, end)
     if "error" in built:
-        return {"error": built["error"]}
+        out = {"error": built["error"]}
+        if built.get("need"):
+            out["need"] = built["need"]
+        return out
 
     period = period_for(start, end)
     period["path"] = None

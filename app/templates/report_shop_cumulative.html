@@ -249,6 +249,22 @@
                letter-spacing:-.2px; }
   .nodata p { margin:0 auto; max-width:560px; font-size:13.5px; line-height:1.55;
               color:var(--muted); }
+  /* What to upload, and for when. A screen with no figures on it has one
+     job: name the tile on Raw Data Upload and the days to pull. The
+     paragraph that used to sit here explained why the window could not be
+     built, which is the one thing you cannot act on. */
+  .nodata .need { display:inline-flex; flex-direction:column; gap:7px;
+                  margin:4px auto 0; text-align:left; }
+  .nodata .nrow { display:flex; align-items:center; gap:14px;
+                  border:1px solid var(--line); border-radius:11px;
+                  background:var(--row); padding:10px 15px; }
+  .nodata .nrow i { width:8px; height:8px; border-radius:50%; flex:none;
+                    background:var(--tint, var(--blue)); }
+  .nodata .nrow b { font-size:13px; font-weight:700; color:var(--ink);
+                    letter-spacing:-.1px; }
+  .nodata .nrow span { margin-left:auto; font-size:12.5px; font-weight:650;
+                       color:var(--muted); font-variant-numeric:tabular-nums;
+                       white-space:nowrap; }
   .nodata .acts { display:flex; justify-content:center; flex-wrap:wrap;
                   gap:9px; margin-top:19px; }
   .nodata .have { margin-top:17px; font-size:12px; color:var(--muted); }
@@ -452,28 +468,23 @@ const CAL_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' 
    not a fault, so the screen says which window is empty, what would fill it,
    and offers the widest window that can be answered right now. */
 function noData(d){
-  const asked = d.asked ? esc(d.asked.short) : 'that period';
   const sug = d.suggest;
-  const acts =
-    '<a class="act primary" href="/">Upload raw data</a>' +
-    '<button type="button" class="act" onclick="openCal(event)">Pick another period</button>' +
-    (sug ? '<button type="button" class="act" onclick="useSuggested()">Show ' +
-           esc(sug.short) + ' instead</button>' : '');
-  // What IS on disk, in the office's own terms - more use than repeating the
-  // suggestion, because it says which pull is the one that was never taken.
-  const pulls = ((d.calendar || {}).periods || []).map(p => p.short);
-  const have = pulls.length
-    ? '<div class="have">Uploaded so far: <b>' +
-      pulls.slice(0, 4).map(esc).join('</b>, <b>') + '</b>' +
-      (pulls.length > 4 ? ' and ' + (pulls.length - 4) + ' more' : '') + '</div>'
-    : '';
+  // One heading, the uploads that are wanted, and the button that takes you
+  // to them. The prose that used to sit here explained why the window could
+  // not be tiled - true, and the one thing on the screen you cannot act on.
+  const need = (d.need || []).map(n =>
+    '<div class="nrow"' + (n.tint ? ' style="--tint:' + esc(n.tint) + '"' : '') +
+    '><i></i><b>' + esc(n.label) + '</b>' +
+    '<span>' + esc(n.short || '') + '</span></div>').join('');
+  const body = need
+    ? '<div class="need">' + need + '</div>'
+    : '<p>' + esc(d.error || '') + '</p>';
 
   document.getElementById('list').innerHTML =
     '<div class="bd"><div class="nodata">' +
       '<div class="ic">' + CAL_ICON + '</div>' +
-      '<h3>No raw data for ' + asked + '</h3>' +
-      '<p>' + esc(d.error || '') + '</p>' +
-      '<div class="acts">' + acts + '</div>' + have +
+      '<h3>Raw data needs to be uploaded</h3>' + body +
+      '<div class="acts"><a class="act primary" href="/">Upload raw data</a></div>' +
     '</div></div>';
   srcLine.hidden = true;
   lede.hidden = true;

@@ -1743,6 +1743,7 @@ def shop_cumulative_api(request: Request, date_from: str = "", date_to: str = ""
         asked = _asked_period(date_from, date_to, period)
         return JSONResponse({"error": win["error"], "calendar": _calendar_days(),
                              "asked": {"short": asked["short"]} if asked else None,
+                             "need": win.get("need", []),
                              "suggest": _suggested_window()})
 
     data = _window_data(win, cluster, bond, warehouse, group_by)
@@ -2194,6 +2195,7 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
                                        _previous_span(chosen))
                           if chosen else {"legs": []}),
          "no_data": win.get("error", ""),
+         "need": win.get("need", []),
          "asked": _asked_period(date_from, date_to, period),
          "suggest": _suggested_window()},
     )
