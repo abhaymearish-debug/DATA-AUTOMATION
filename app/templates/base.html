@@ -371,6 +371,40 @@ function tog(btn) {
   const kids = btn.nextElementSibling;
   if (kids && kids.classList.contains('kids')) kids.classList.toggle('hidden');
 }
+
+/* A report table ends where the window does.
+   Every page had its own figure for this - 72vh here, 100vh minus 186 there,
+   minus 210 somewhere else - each one tuned against the page as it looked the
+   day it was written. Change the filter row and the number is wrong, and it
+   goes wrong quietly: the page just stops short and leaves a band of nothing
+   under the last row. Measured, it is right on every page and stays right.
+   The CSS figures remain as the answer before this runs, so nothing flashes
+   full height on the way. */
+(function(){
+  function fit(){
+    document.querySelectorAll('.tablewrap').forEach(wrap => {
+      const box = wrap.getBoundingClientRect();
+      if (!box.height) return;                       // hidden: nothing to size
+      // Measured from the table's own bottom edge, so the footnote's margin
+      // is counted whatever it is on this page.
+      const foot = wrap.parentElement
+                 && wrap.parentElement.querySelector('.status');
+      const below = foot ? foot.getBoundingClientRect().bottom - box.bottom : 0;
+      const room = innerHeight - box.top - Math.max(0, below) - 8;
+      if (room > 220) wrap.style.maxHeight = Math.round(room) + 'px';
+    });
+  }
+  let timer = null;
+  const soon = () => { clearTimeout(timer); timer = setTimeout(fit, 60); };
+  addEventListener('resize', soon);
+  addEventListener('load', soon);
+  document.addEventListener('DOMContentLoaded', soon);
+  // The tables fill in after a fetch, and a banner above one moves it down,
+  // so re-measure whenever the page's contents settle. childList only: the
+  // style this sets is an attribute, so it cannot set itself off again.
+  new MutationObserver(soon).observe(document.documentElement,
+                                     {childList:true, subtree:true});
+})();
 </script>
 {% block scripts %}{% endblock %}
 </body>
