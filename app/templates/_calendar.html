@@ -43,12 +43,6 @@
   .cal-g button.d.s-start { border-radius:8px 0 0 8px; }
   .cal-g button.d.s-end { border-radius:0 8px 8px 0; }
 
-  .cal-quick { display:flex; flex-wrap:wrap; gap:5px; margin-top:12px; padding-top:11px;
-               border-top:1px solid var(--line); max-width:474px; }
-  .cal-quick button { border:1px solid var(--line); background:var(--card); color:var(--ink);
-                      border-radius:20px; padding:5px 11px; font:inherit; font-size:11.5px;
-                      font-weight:650; cursor:pointer; }
-  .cal-quick button:hover { background:var(--hover); }
   .cal-f { display:flex; align-items:center; margin-top:11px; padding-top:10px;
            border-top:1px solid var(--line); gap:10px; }
   .cal-f .say { font-size:12.5px; color:var(--muted); }
@@ -76,7 +70,7 @@ const calPretty = x => { if (!x) return ''; const [y,m,d] = x.split('-').map(Num
                          return `${d} ${CAL_SHORT[m-1]} ${y}`; };
 
 const Cal = {
-  days: new Set(), quick: [], from: '', to: '',
+  days: new Set(), from: '', to: '',
   anchor: '', pick: null, hover: '', onApply: null,
   /* One picker serves every control on a page. A control says which popup and
      which label are its own when it opens, so a page can carry two ranges -
@@ -99,10 +93,11 @@ const Cal = {
     this.draw();
   },
 
-  /* Called again whenever the host learns which days have data. */
-  setData(days, quick){
+  /* Called again whenever the host learns which days have data. The pages
+     also pass the whole periods they hold; the picker no longer draws a row
+     of shortcuts for them, so it takes the argument and ignores it. */
+  setData(days, _periods){
     this.days = new Set(days || []);
-    this.quick = quick || [];
     this.draw();
   },
 
@@ -169,8 +164,6 @@ const Cal = {
                     : 'Pick the first day, then the last.';
   },
 
-  use(from, to){ this.from = from; this.to = to; this.pick = null; this.apply(); },
-
   apply(){
     this.close();
     this.label();
@@ -229,9 +222,6 @@ const Cal = {
     let ny = y, nm = m + 1; if (nm > 12){ nm = 1; ny++; }
     const next = `${ny}-${String(nm).padStart(2,'0')}`;
 
-    const quick = this.quick.map(q =>
-      `<button type="button" onclick="Cal.use('${q.from}','${q.to}')">${q.short}</button>`).join('');
-
     pop.innerHTML = `
       <div class="cal-top">
         <button type="button" class="arrow" onclick="Cal.step(-1)">‹</button>
@@ -242,7 +232,6 @@ const Cal = {
         <button type="button" class="arrow" onclick="Cal.step(1)">›</button>
       </div>
       <div class="cal-two">${this.grid(this.anchor)}${this.grid(next)}</div>
-      ${quick ? `<div class="cal-quick">${quick}</div>` : ''}
       <div class="cal-f">
         <span class="say">${this.foot()}</span>
         <span class="sp">
