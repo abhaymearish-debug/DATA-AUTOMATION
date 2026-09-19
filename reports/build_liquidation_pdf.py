@@ -79,6 +79,16 @@ def whole(v: float) -> int:
     return int(Decimal(str(v)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def money(v: float, places: str = "0.01") -> str:
+    """Cases to two places, per cent to one - as the office's sheet prints.
+
+    Rounded half-up through Decimal rather than by format string, so a figure
+    reads the same here as it does in the workbook and on the screen.
+    """
+    q = Decimal(str(v)).quantize(Decimal(places), rounding=ROUND_HALF_UP)
+    return f"{q:f}"
+
+
 def group_x(i: int) -> float:
     return BOND_W + i * (GROUP_W + GUTTER)
 
@@ -151,34 +161,35 @@ def draw_row(c, y, row, stripe):
         for col in range(4):
             draw_cell(c, cell_x(g, col), y, COL_W, fill)
 
-        n_now, n_was = whole(now), whole(was)
-        for col, v in ((0, n_now), (1, n_was)):
+        for col, v in ((0, now), (1, was)):
             c.setFillColor(ink)
             c.setFont(font, F_ROW)
-            text = "-" if v == 0 else f"{v}"
+            text = "-" if not v else money(v)
             c.drawCentredString(cell_x(g, col) + COL_W / 2, base, text)
 
         # Change in cases. Two empty months have no story, so they read '-'
         # rather than a confident zero.
-        if n_now == 0 and n_was == 0:
+        if not now and not was:
             c.setFillColor(ink)
             c.setFont(font, F_ROW)
             c.drawCentredString(cell_x(g, 2) + COL_W / 2, base, "-")
         else:
             d = now - was
             rising = d >= 0
-            draw_delta(c, cell_x(g, 2), y, f"{whole(abs(d))}" if rising else f"-{whole(abs(d))}",
+            draw_delta(c, cell_x(g, 2), y,
+                       money(abs(d)) if rising else f"-{money(abs(d))}",
                        rising, (up if rising else down), font, F_ROW)
 
         # Per cent needs something to divide by.
-        if was == 0:
+        if not was:
             c.setFillColor(ink)
             c.setFont(font, F_ROW)
             c.drawCentredString(cell_x(g, 3) + COL_W / 2, base, "-")
         else:
             pct = (now - was) / was * 100
             rising = pct >= 0
-            label = f"{whole(abs(pct))}%" if rising else f"-{whole(abs(pct))}%"
+            label = (f"{money(abs(pct), '0.1')}%" if rising
+                     else f"-{money(abs(pct), '0.1')}%")
             draw_delta(c, cell_x(g, 3), y, label, rising, (up if rising else down), font, F_ROW)
 
 

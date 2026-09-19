@@ -2144,12 +2144,15 @@ def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "", pe
 
 @app.get("/reports/liquidation/export.xlsx")
 def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", period: str = ""):
-    """The scorecard as a workbook, built to read as the PDF does.
+    """The scorecard as a workbook, cell for cell as the PDF prints it.
 
-    Same two bands, the same grouped header over four blocks, the same navy
-    channel between them, and the same three tiers of row. A delta keeps its
-    number - the arrow and its colour are a number format, so the cell can
-    still be summed or sorted.
+    Measured off the office's own sheet rather than styled by eye: its navy and
+    gold, its Segoe UI, its hairlines inside a block and gold rules around one,
+    its zebra, and the four colours a delta can take - two on a white row, two
+    on a dark one, because red on navy cannot be read.
+
+    A delta keeps its number. The arrow lives in the number format and the
+    colour in the font, so the cell still sums, sorts and filters.
     """
     require_user(request)
     data = _liquidation(date_from, date_to, period)
@@ -2162,125 +2165,158 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.page import PageMargins
 
-    NAVY, GOLD = "FF0A294F", "FFFFBD30"
-    SLATE, SLATE_2 = "FF2B3440", "FF3C4653"
-    INK, ROW_A, ROW_B = "FF1B2A4A", "FFFFFFFF", "FFF7F9FC"
-    HAIR = Side(style="thin", color="FFD9DEE7")
-    BOX = Border(left=HAIR, right=HAIR, top=HAIR, bottom=HAIR)
+    # ---- the office's palette, read out of its own workbook ----
+    NAVY, GOLD = "FF0B2C52", "FFFAAF19"
+    SLATE, SLATE_2 = "FF2C3540", "FF3E4957"
+    ZEBRA, WHITE = "FFF5F7FC", "FFFFFFFF"
+    NAME_INK, FIG_INK = "FF282828", "FF0F192D"
+    UP_LIGHT, DOWN_LIGHT = "FF3F8600", "FFCF1322"
+    UP_DARK, DOWN_DARK = "FF52C41A", "FFFF7875"
+    FACE = "Segoe UI"
+
+    HAIR = Side(style="thin", color="FFC7C7C7")
+    RULE = Side(style="medium", color=GOLD)
 
     now_label, was_label = data["headings"][0], data["headings"][1]
     groups = ["SHOP LIQUIDATION (KSBC)", "SECONDARY SALES",
               "FED / BAR INVOICE", "TOTAL LIQUIDATION"]
 
-    # A gutter column between blocks, as the sheet prints: one navy channel,
-    # not a line, so four blocks read as four.
-    GUT = 1.6
-    first = [2 + i * 5 for i in range(len(groups))]     # B, G, L, Q
+    # A gutter column between blocks: navy, gold-ruled both sides, barely wide
+    # enough to be a channel rather than a column.
+    first = [2 + i * 5 for i in range(len(groups))]      # B, G, L, Q
     gutters = [c - 1 for c in first[1:]]
-    span = first[-1] + 4 - 1
+    span = first[-1] + 3
     last_col = get_column_letter(span)
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "LIQUIDATION"
+    ws.title = "Liquidation Scorecard"
     ws.sheet_view.showGridLines = False
 
-    def paint(row, col, fill=None, colour=INK, bold=False, size=10,
-              align="center", fmt=None, value=None, wrap=False):
+    def edges(col):
+        """Gold down a block's outer edges, hairline between its columns."""
+        left = RULE if (col == 1 or col in first or col in gutters) else HAIR
+        right = RULE if (col == 1 or col - 3 in first or col in gutters) else HAIR
+        return left, right
+
+    def paint(row, col, fill=None, colour=FIG_INK, bold=False, size=9.5,
+              align="center", fmt=None, value=None, wrap=False, strong=False,
+              plain=False):
         c = ws.cell(row=row, column=col)
         if value is not None:
             c.value = value
         if fill:
             c.fill = PatternFill("solid", fgColor=fill)
-        c.font = Font(bold=bold, size=size, color=colour)
+        c.font = Font(name=FACE, bold=bold, size=size, color=colour)
         c.alignment = Alignment(horizontal=align, vertical="center", wrap_text=wrap)
-        c.border = BOX
+        if not plain:
+            left, right = edges(col)
+            band = RULE if strong else HAIR
+            c.border = Border(left=left, right=right, top=band, bottom=band)
         if fmt:
             c.number_format = fmt
         return c
 
     # ---- the two bands ----
     ws.merge_cells(f"A1:{last_col}1")
-    paint(1, 1, NAVY, GOLD, True, 16, "center", value="K.S DISTILLERY")
-    for col in range(2, span + 1):
-        paint(1, col, NAVY)
-    ws.row_dimensions[1].height = 30
+    for col in range(1, span + 1):
+        paint(1, col, NAVY, plain=True)
+    paint(1, 1, NAVY, GOLD, True, 18, value="K.S DISTILLERY", plain=True)
+    ws.row_dimensions[1].height = 36
 
-    half = first[2] - 1
+    half = span // 2
+    for col in range(1, span + 1):
+        paint(2, col, GOLD, plain=True)
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=half)
     ws.merge_cells(start_row=2, start_column=half + 1, end_row=2, end_column=span)
-    paint(2, 1, GOLD, NAVY, True, 11, "left", value="BOND LIQUIDATION SCORECARD")
-    paint(2, half + 1, GOLD, NAVY, True, 11, "right", value=data["subtitle"])
-    for col in range(2, span + 1):
-        paint(2, col, GOLD)
-    ws.row_dimensions[2].height = 22
+    paint(2, 1, GOLD, NAVY, True, 12, "left", value="BOND LIQUIDATION SCORECARD",
+          plain=True)
+    paint(2, half + 1, GOLD, NAVY, True, 12, "right", value=data["subtitle"],
+          plain=True)
+    ws.row_dimensions[2].height = 24
 
-    # ---- the grouped header ----
+    # ---- the grouped header, two tiers as the sheet prints it ----
     ws.merge_cells(start_row=3, start_column=1, end_row=4, end_column=1)
-    paint(3, 1, NAVY, GOLD, True, 10, "left", value="Bond")
+    paint(3, 1, NAVY, GOLD, True, 9.5, value="Bond")
     paint(4, 1, NAVY)
     for g, name in zip(first, groups):
         ws.merge_cells(start_row=3, start_column=g, end_row=3, end_column=g + 3)
-        paint(3, g, NAVY, GOLD, True, 9.5, value=name, wrap=True)
-        for col in range(g + 1, g + 4):
+        for col in range(g, g + 4):
             paint(3, col, NAVY)
+        paint(3, g, NAVY, GOLD, True, 9.5, value=name, wrap=True)
         for col, label in zip(range(g, g + 4),
                               (now_label, was_label, "\u25b2 CS", "\u25b2 %")):
-            paint(4, col, NAVY, GOLD, True, 9, value=label)
+            paint(4, col, NAVY, GOLD, True, 9.5, value=label, wrap=True)
     for col in gutters:
         paint(3, col, NAVY)
         paint(4, col, NAVY)
-    ws.row_dimensions[3].height = 26
-    ws.row_dimensions[4].height = 16
+    ws.row_dimensions[3].height = 22
+    ws.row_dimensions[4].height = 18
 
     # ---- the rows ----
-    # The arrow and its colour live in the number format, so the figure stays a
-    # figure: a nil prints as the dash the sheet prints, not as a nought.
-    CS_FMT = '[Green]"\u25b2"#,##0;[Red]"\u25bc-"#,##0;[Green]"\u25b2"0;@'
-    PC_FMT = '[Green]"\u25b2"0%;[Red]"\u25bc-"0%;[Green]"\u25b2"0%;@'
-    # Green and red are for the white body only. On the navy and slate rows the
-    # cell brings its own colour, and a red figure on navy cannot be read - so
-    # those keep the arrow and take the row's gold.
-    CS_STRONG = '"\u25b2"#,##0;"\u25bc-"#,##0;"\u25b2"0;@'
-    PC_STRONG = '"\u25b2"0%;"\u25bc-"0%;"\u25b2"0%;@'
-    DASH = '#,##0;-#,##0;"-";@'
+    # The arrow is the number format's doing and the sign is the font's, so a
+    # delta reads as the sheet prints it and still behaves as a number.
+    FIG = '0.00;-0.00;"-"'
+    CS_FMT = '"\u25b2 "0.00;"\u25bc -"0.00;"\u25b2 "0.00'
+    PC_FMT = '"\u25b2 "0.0%;"\u25bc -"0.0%;"\u25b2 "0.0%'
 
     r = 4
-    band = 0
+    stripe = 0
     for row in data["rows"]:
         r += 1
         kind = row.get("kind", "bond")
-        if kind == "bond":
-            fill = ROW_A if band % 2 == 0 else ROW_B
-            colour, bold = INK, False
-            band += 1
-        elif kind == "cluster":
-            fill, colour, bold = NAVY, GOLD, True
-        elif row["label"].upper().startswith("AVERAGE"):
-            fill, colour, bold = SLATE_2, GOLD, True
+        strong = kind in ("total", "average")
+        if kind == "cluster":
+            fill, name_ink, fig_ink = NAVY, GOLD, GOLD
+            up, down, bold, size = UP_DARK, DOWN_DARK, True, 10
+        elif kind == "total":
+            fill, name_ink, fig_ink = SLATE, WHITE, WHITE
+            up, down, bold, size = UP_DARK, DOWN_DARK, True, 10
+        elif kind == "average":
+            fill, name_ink, fig_ink = SLATE_2, WHITE, WHITE
+            up, down, bold, size = UP_DARK, DOWN_DARK, True, 10
         else:
-            fill, colour, bold = SLATE, GOLD, True
+            fill = ZEBRA if stripe % 2 == 0 else WHITE
+            name_ink, fig_ink = NAME_INK, FIG_INK
+            up, down, bold, size = UP_LIGHT, DOWN_LIGHT, False, 9.5
+            stripe += 1
 
-        paint(r, 1, fill, colour, True, 10, "left", value=str(row["label"]))
-        for g, (now, was) in zip(first, row["blocks"]):
-            delta = now - was
-            pct = ((now - was) / was) if was else None
-            paint(r, g, fill, colour, bold, 10, fmt=DASH, value=round(now))
-            paint(r, g + 1, fill, colour, bold, 10, fmt=DASH, value=round(was))
-            paint(r, g + 2, fill, colour, bold, 10,
-                  fmt=CS_STRONG if bold else CS_FMT, value=round(delta))
-            paint(r, g + 3, fill, colour, bold, 10,
-                  fmt=PC_STRONG if bold else PC_FMT,
-                  value=None if pct is None else round(pct, 4))
+        paint(r, 1, fill, name_ink, bold, size, "left",
+              value=str(row["label"]), strong=strong)
+        for g, (now, was) in enumerate(row["blocks"]):
+            col = first[g]
+            paint(r, col, fill, fig_ink, bold, size, fmt=FIG,
+                  value=float(now), strong=strong)
+            paint(r, col + 1, fill, fig_ink, bold, size, fmt=FIG,
+                  value=float(was), strong=strong)
+
+            # Two empty months have no story, so they read as a dash rather
+            # than as a confident nought.
+            if not now and not was:
+                paint(r, col + 2, fill, fig_ink, bold, size, value="-", strong=strong)
+            else:
+                d = float(now) - float(was)
+                paint(r, col + 2, fill, up if d >= 0 else down, True, size,
+                      fmt=CS_FMT, value=round(d, 2), strong=strong)
+
+            # A per cent needs something to divide by.
+            if not was:
+                paint(r, col + 3, fill, fig_ink, bold, size, value="-", strong=strong)
+            else:
+                pct = (float(now) - float(was)) / float(was)
+                paint(r, col + 3, fill, up if pct >= 0 else down, True, size,
+                      fmt=PC_FMT, value=round(pct, 4), strong=strong)
         for col in gutters:
-            paint(r, col, NAVY)
-        ws.row_dimensions[r].height = 17
+            paint(r, col, NAVY, strong=strong)
+        ws.row_dimensions[r].height = 20
 
     # ---- the shape of the page ----
     ws.column_dimensions["A"].width = 24
-    for col in range(2, span + 1):
-        ws.column_dimensions[get_column_letter(col)].width = (
-            GUT if col in gutters else 10.5)
+    for g in first:
+        for col, width in zip(range(g, g + 4), (11.5, 11.5, 13, 10.5)):
+            ws.column_dimensions[get_column_letter(col)].width = width
+    for col in gutters:
+        ws.column_dimensions[get_column_letter(col)].width = 1.0
     ws.freeze_panes = ws.cell(row=5, column=2)
 
     ws.page_setup.orientation = "landscape"
@@ -2687,8 +2723,9 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
     right.font = Font(bold=True, size=12, color=NAVY)
     right.alignment = Alignment(horizontal="right", vertical="center")
 
-    ws.append([])
-    head_row = 4
+    # The header sits straight under the gold band: an empty row there reads as
+    # a white gap the sheet never closes.
+    head_row = 3
     for i, label in enumerate(labels, start=1):
         c = ws.cell(row=head_row, column=i, value=label)
         c.fill = PatternFill("solid", fgColor=NAVY)
