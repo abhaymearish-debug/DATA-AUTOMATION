@@ -795,6 +795,7 @@ TA_GOLD_T = colors.Color(1.0, 0.741, 0.192)
 TA_GOLD_D = colors.Color(0.95, 0.70, 0.18)      # the target half of a total row
 TA_SHADE  = colors.Color(0.95, 0.95, 0.95)      # the target half of a bond row
 TA_GRID   = colors.Color(0.78, 0.78, 0.78)
+TA_SEAM   = colors.Color(0.133, 0.251, 0.498)   # the grid inside a navy band
 TA_RED    = colors.Color(0.812, 0.075, 0.133)
 TA_WHITE  = colors.Color(1.0, 1.0, 1.0)
 TA_BLACK  = colors.Color(0.0, 0.0, 0.0)
@@ -915,20 +916,23 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
         c.line(x, head_top, x, head_bot)
 
     # ---- the bonds ----
-    # Exactly one row wears the gold, and it is the one the sheet adds up to:
-    # the cluster on a cluster sheet, the network on the summary. A cluster
-    # sitting among its own bonds is only a subtotal, so it takes bold figures
-    # and keeps the body's colours.
+    # Three tiers, as every other sheet in the office reads: a bond on the
+    # body's colours, a cluster subtotal on navy with gold figures, and the one
+    # row the sheet adds up to in gold. A cluster used to differ from the bonds
+    # above it by bold figures alone, which is no difference at all halfway
+    # down a page of numbers.
     has_bonds = any(r.get("kind") == "bond" for r in rows)
     y = head_bot
     for idx, row in enumerate(rows):
         total = idx == len(rows) - 1
-        strong = total or (has_bonds and row.get("kind") == "cluster")
+        cluster = not total and has_bonds and row.get("kind") == "cluster"
+        strong = total or cluster
         pair_top, pair_bot = y, y - TA_ROW_H * 2
-        tgt_fill = TA_GOLD_D if total else TA_SHADE
-        ach_fill = TA_GOLD if total else TA_WHITE
+        tgt_fill = TA_GOLD_D if total else TA_NAVY if cluster else TA_SHADE
+        ach_fill = TA_GOLD if total else TA_NAVY if cluster else TA_WHITE
+        ink = TA_GOLD_T if cluster else TA_BLACK
 
-        c.setStrokeColor(TA_GRID)
+        c.setStrokeColor(TA_SEAM if cluster else TA_GRID)
         c.setLineWidth(0.4)
         c.setFillColor(TA_NAVY)
         c.rect(xs[0], pair_bot, xs[1] - xs[0], TA_ROW_H * 2, stroke=1, fill=1)
@@ -941,14 +945,14 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
         c.rect(xs[-2], pair_bot, xs[-1] - xs[-2], TA_ROW_H * 2, stroke=1, fill=1)
 
         # the name, centred on its navy, gold once the row is a total
-        c.setFillColor(TA_GOLD_T if total else TA_WHITE)
+        c.setFillColor(TA_GOLD_T if total or cluster else TA_WHITE)
         _ta_centre(c, xs[0], xs[1], pair_bot + TA_ROW_H - 3.5,
                    str(row.get("label", "")), BOLD, TAF_NAME)
 
         body = BOLD if strong else BOOK
         for which, tag, line_y in (("tgt", "TGT", pair_top - TA_ROW_H + 11.85),
                                    ("ach", "ACH", pair_bot + 11.85)):
-            c.setFillColor(TA_BLACK)
+            c.setFillColor(ink)
             _ta_centre(c, xs[1], xs[2], line_y, tag, BOLD, TAF_BODY)
             cells = row.get(which) or {}
             for i, col in enumerate(cols):
@@ -958,7 +962,7 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
                        _ta_num(row.get(which + "_total", 0)), BOLD, TAF_BODY)
 
         pct = row.get("pct")
-        c.setFillColor(TA_BLACK if total else TA_RED)
+        c.setFillColor(TA_BLACK if total else TA_GOLD_T if cluster else TA_RED)
         _ta_centre(c, xs[-2], xs[-1], pair_bot + TA_ROW_H - 3.325,
                    "-" if pct is None else f"{pct:.2f}%", BOLD, TAF_PCT)
 
