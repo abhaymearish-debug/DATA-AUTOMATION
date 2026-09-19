@@ -77,21 +77,21 @@ def src_windows(chain: list) -> list:
     return out
 
 
-def src_files(names, kind: str = "raw upload", title: str = "",
-              stream: str = "") -> list:
-    """Loose files with no window of their own - a workbook, a month's raws."""
-    return [{"title": title, "kind": kind, "stream": stream, "name": str(n)}
-            for n in (names or []) if n]
-
-
 def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
     return {"leg": label, "note": note, "tone": tone, "items": items}
 
 
 def src_block(legs: list, say: str = "") -> dict:
-    """One report's provenance. Empty legs drop out; an empty block hides."""
+    """One report's provenance. Empty legs drop out; an empty block hides.
+
+    `say` is accepted and dropped. The panel used to close with a paragraph
+    explaining the mechanism - how a window gets stitched, which workbook wins
+    for which days. Now that every file names the card it came off and the days
+    it answered for, the paragraph was saying in prose what the list above it
+    already showed, and it was the longest thing in the panel.
+    """
     kept = [l for l in legs if l and l.get("items")]
-    return {"legs": kept, "say": say} if kept else {"legs": [], "say": ""}
+    return {"legs": kept} if kept else {"legs": []}
 
 
 def _sec_book_title(name: str) -> str:
@@ -145,20 +145,12 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
                           "title": _sec_book_title(name), "name": name})
         elif a and b:
             items.append({"kind": "raw upload", "stream": STREAM["secondary"],
-                          "name": name, "from": a.isoformat(), "to": b.isoformat()})
+                          "name": name, "from": a.isoformat(), "to": b.isoformat(),
+                          "behind": bool(isinstance(src, dict) and src.get("behind"))})
         else:
             items.append({"kind": "raw upload", "stream": STREAM["secondary"],
                           "name": name})
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
-
-
-def src_stitched(n: int) -> str:
-    """The sentence under a window answered by more than one file."""
-    if n > 1:
-        return (f"{n} uploads, stitched end to end - KSBC caps a pull at 16 days, "
-                f"so a longer window is the first-half file plus the ones after it.")
-    return "One upload answers this whole window."
-
 
 
 def bond_clusters() -> dict[int, list[str]]:
@@ -728,10 +720,7 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
         "warehouses": sorted({l["warehouse"] for l in lines if l["warehouse"]}),
         "unmapped": sorted({l["shop"] or l["shop_code"] for l in sel if not l["bond"]}),
         "source_block": src_block(
-            [src_secondary(sources, date_from, date_to)],
-            "The month's analysis workbook is the authority where it exists; days it "
-            "does not cover are filled from the raws themselves, newest first, so no "
-            "invoice is counted twice."),
+            [src_secondary(sources, date_from, date_to)]),
     }
 
 
@@ -880,10 +869,7 @@ def warehouse_stock(as_of: str = "", cluster: int | None = None,
             [src_leg("Warehouse stock (Bevco)",
                      [{"from": day, "to": day, "kind": "daily snapshot",
                        "stream": STREAM["warehouse"],
-                       "name": stock_history_path().name}])],
-            "A stock position is a photograph, not a total: this is the snapshot "
-            "the daily build filed for that date. The Bevco exports themselves are "
-            "deleted after ingest, so the history file is the record."),
+                       "name": stock_history_path().name}])]),
     }
 
 
@@ -1136,11 +1122,7 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
     """What answered a daily grid - one day at a time, or a month's raws."""
     if kind == "secondary":
         return src_block(
-            [src_secondary(sources, lo, hi)],
-            "A day reports as soon as its raw is uploaded; the month's workbook "
-            "takes over for the days it covers. That workbook is this app's own "
-            "build of those uploads \u2014 not the Secondary Sales - Analysis "
-            "report, which reads a different raw.")
+            [src_secondary(sources, lo, hi)])
 
     # Shop sales are stored a day at a time, so the grid's provenance is
     # literally the files for the days on screen - which also makes a gap in
@@ -1150,19 +1132,16 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
         items = [{"from": d.isoformat(), "to": d.isoformat(), "kind": "daily upload",
                   "stream": STREAM["shop_daily"], "name": files[d].name}
                  for d in sorted(files)]
-        gaps = (hi - lo).days + 1 - len(items)
         return src_block(
-            [src_leg("Shop sales (KSBC)", items, "what the shops sold")],
-            f"{len(items)} day file{'' if len(items) == 1 else 's'} across this window"
-            + (f"; {gaps} day{'' if gaps == 1 else 's'} in it has nothing uploaded yet, "
-               f"which is why {'it reads' if gaps == 1 else 'they read'} zero." if gaps > 0
-               else " - every day in it is accounted for."))
+            [src_leg("Shop sales (KSBC)", items, "what the shops sold")])
     if book is not None and not book.is_dir():
+        # These days predate per-day storage, so the month's workbook answers
+        # them. It still says which days, because that is half the question.
         return src_block([src_leg("Shop sales (KSBC)",
-                                  [{"kind": "month workbook",
+                                  [{"from": lo.isoformat(), "to": hi.isoformat(),
+                                    "kind": "month workbook",
                                     "stream": STREAM["shop_daily"],
-                                    "name": book.name}])],
-                         "Read from the month's workbook: these days predate per-day storage.")
+                                    "name": book.name}])])
     return src_block([])
 
 
@@ -1959,11 +1938,7 @@ def _liq_source(start: date, end: date, p_start, p_end) -> dict:
             legs.append(src_leg("Compared against",
                                 was, period_for(p_start, p_end)["short"], "green"))
     legs.append(src_secondary(sec, start, end))
-    return src_block(
-        legs,
-        "Shop liquidation comes off the KSBC cumulative files; secondary and "
-        "Fed/Bar off the dispatch raws. Total liquidation is shop plus Fed/Bar, "
-        "never shop plus secondary.")
+    return src_block(legs)
 
 
 def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
@@ -2211,11 +2186,7 @@ def _tva_source(sources: dict, lo=None, hi=None) -> dict:
     invoice = sources.get("invoice") or []
     if invoice:
         legs.append(src_secondary(invoice, lo, hi))
-    return src_block(
-        legs,
-        "Achievement is shop sales plus Fed/Bar invoice - KSBC-category dispatch "
-        "is left out, since that stock is counted where the shop sold it. "
-        "Targets are entered in the app, not uploaded.")
+    return src_block(legs)
 
 
 def _tva_legs(start: date, end: date) -> dict:

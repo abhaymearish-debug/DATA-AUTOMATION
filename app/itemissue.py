@@ -253,10 +253,7 @@ def source_for(key: str, prior: str = "") -> dict:
 
     legs = [l for l in (leg(key, "This period"),
                         leg(prior, "Compared against", "green")) if l]
-    return _r.src_block(
-        legs,
-        "KSBC's item issue consolidation, one export per warehouse. The industry "
-        "figure beside it is typed in - no export carries it.")
+    return _r.src_block(legs)
 
 
 _CACHE: dict = {}

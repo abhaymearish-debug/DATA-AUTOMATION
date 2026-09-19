@@ -523,11 +523,7 @@ def source_for(month: str, prior: str = "") -> dict:
 
     legs = [l for l in (leg(month, "This month"),
                         leg(prior, "Compared against", "green")) if l]
-    return _r.src_block(
-        legs,
-        "One KSBC export per shop, filed under the month it names. A blank sheet "
-        "is a shop that returned no instruction - it is counted as blank, never "
-        "as a zero.")
+    return _r.src_block(legs)
 
 
 def _receipt(key: str, by_shop: dict, files: int, problems: list) -> dict:

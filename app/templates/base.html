@@ -431,8 +431,12 @@
             overscroll-behavior:contain;
             background:var(--card); border:1px solid var(--line); border-radius:16px;
             box-shadow:0 1px 2px rgba(16,24,40,.06), 0 22px 48px -14px rgba(16,24,40,.28); }
-  .srcline:hover .srcpop, .srcline.on .srcpop { display:block;
+  .srcline.on .srcpop { display:block;
             animation:ksd-pop .18s cubic-bezier(.2,.7,.3,1) both; }
+  /* The panel stands clear of the chip; this covers the gap so the pointer
+     never leaves it on the way across. */
+  .srcpop::after { content:''; position:absolute; left:0; right:0; top:100%;
+                   height:12px; }
   /* Hard against the right edge it opens the other way, never off-screen. */
   .srcline.rt .srcpop { left:auto; right:0; }
   .srcpop h6 { margin:0 0 14px; font-size:9px; letter-spacing:1px; font-weight:800;
@@ -488,9 +492,6 @@
                 letter-spacing:.1px; overflow:hidden; text-overflow:ellipsis;
                 white-space:nowrap; }
 
-  /* ---------- the one sentence at the end ---------- */
-  .srcpop .say { margin-top:14px; padding-top:12px; border-top:1px solid var(--line);
-                 font-size:11px; line-height:1.55; color:var(--muted); }
 
   @media (prefers-reduced-motion: reduce) {
     .controls .bar1 > *, .calpop.on, .menu.open .items { animation:none; }
@@ -815,39 +816,67 @@ window.ksdSource = function (block, host) {
        </svg>
        <span>Source</span>${count > 1 ? `<span class="n">${count}</span>` : ''}
      </button>
-     <div class="srcpop"><h6>Where these figures come from</h6>${body}` +
-    ((block && block.say) ? `<div class="say">${esc(block.say)}</div>` : '') + '</div>';
+     <div class="srcpop"><h6>Where these figures come from</h6>${body}</div>`;
 
   const chip = line.querySelector('.srcchip');
   const pop = line.querySelector('.srcpop');
-  // Scrolling the list is using it, so it pins itself open. On hover alone it
-  // would still shut the moment the page moved a pixel under the pointer -
-  // and a window this long is exactly the one you scroll.
-  pop.addEventListener('scroll', () => {
-    if (line.classList.contains('on')) return;
-    line.classList.add('on');
-    chip.setAttribute('aria-expanded', 'true');
-  }, {passive: true});
   // Near the right edge the panel hangs the other way, so it never runs off.
   const place = () => line.classList.toggle('rt',
     line.getBoundingClientRect().left + pop.offsetWidth
       > document.documentElement.clientWidth - 16);
-  line.addEventListener('mouseenter', place);
-  chip.addEventListener('click', () => {
-    const on = line.classList.toggle('on');
-    chip.setAttribute('aria-expanded', on ? 'true' : 'false');
+
+  // Opening and closing is done here rather than by :hover, which could not
+  // be made to work: the panel stands clear of the chip, and the pointer has
+  // to cross that gap to reach it. Every time it did, hover was off for an
+  // instant and the panel shut in your face on the way to it.
+  //
+  // So: hovering the chip opens it, and leaving only starts a short count -
+  // long enough to cross the gap, and cancelled the moment you arrive.
+  // Touching the list at all (scrolling it, clicking in it) pins it, and a
+  // pinned panel stays until you click away or press Escape.
+  let timer = null, pinned = false;
+  const stop = () => { clearTimeout(timer); timer = null; };
+  const open = () => {
+    stop();
+    if (!line.classList.contains('on')) {
+      line.classList.add('on');
+      chip.setAttribute('aria-expanded', 'true');
+    }
     place();
+  };
+  const shut = () => {
+    stop();
+    pinned = false;
+    line.classList.remove('on');
+    chip.setAttribute('aria-expanded', 'false');
+  };
+  const later = () => { if (pinned) return; stop(); timer = setTimeout(shut, 280); };
+  const pin = () => { pinned = true; stop(); };
+
+  line.addEventListener('mouseenter', open);
+  line.addEventListener('mouseleave', later);
+  pop.addEventListener('mouseenter', open);
+  pop.addEventListener('mouseleave', later);
+  pop.addEventListener('scroll', pin, {passive: true});
+  pop.addEventListener('wheel', pin, {passive: true});
+  pop.addEventListener('mousedown', pin);
+  chip.addEventListener('click', e => {
+    e.stopPropagation();
+    if (line.classList.contains('on') && pinned) { shut(); return; }
+    open(); pinned = true;
   });
+  line._srcShut = shut;
 };
 
 // Pinned open by a click, closed the way everything else on the page closes.
+const ksdShutSources = () => document.querySelectorAll('.srcline.on')
+  .forEach(l => (l._srcShut ? l._srcShut() : l.classList.remove('on')));
 document.addEventListener('click', e => {
   if (e.target.closest('.srcline')) return;
-  document.querySelectorAll('.srcline.on').forEach(l => l.classList.remove('on'));
+  ksdShutSources();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape')
-    document.querySelectorAll('.srcline.on').forEach(l => l.classList.remove('on'));
+  if (e.key === 'Escape') ksdShutSources();
 });
 
 // Server-rendered pages hand their block over in a script tag rather than

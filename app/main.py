@@ -1764,10 +1764,7 @@ def _shop_source(win: dict, prev: dict | None = None) -> dict:
         legs.append(reports_api.src_leg(
             "Compared against", reports_api.src_windows(prev["chain"]),
             prev["period"]["short"] if prev.get("period") else "", "green"))
-    say = reports_api.src_stitched(len(now)) if len(legs) == 1 else (
-        "Each side of the comparison is answered by its own uploads. "
-        + reports_api.src_stitched(len(now)))
-    return reports_api.src_block(legs, say)
+    return reports_api.src_block(legs)
 
 
 def _calendar_days() -> dict:
@@ -2160,7 +2157,7 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
          "calendar": _calendar_days(),
          "source": win.get("source", ""), "chain": win.get("chain", []),
          "source_block": (_shop_source(win, _previous_window(chosen))
-                          if chosen else {"legs": [], "say": ""}),
+                          if chosen else {"legs": []}),
          "no_data": win.get("error", ""),
          "asked": _asked_period(date_from, date_to, period),
          "suggest": _suggested_window()},
