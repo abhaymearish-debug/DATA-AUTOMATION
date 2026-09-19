@@ -193,14 +193,20 @@ def make_row(label, v, prev_sales, days, prev_days, kind, places: int = 0):
     net = closing - opening
     avail = opening + receipt
     cm = sales / days if days else 0.0
-    lm = prev_sales / prev_days if prev_days else 0.0
+    # prev_days is nought only when there is no window to compare against at
+    # all. A bond that genuinely sold nothing last month still has days, and
+    # still reads zero - which is a fact. None is the other thing: nobody
+    # knows, because the file was never uploaded.
+    lm = prev_sales / prev_days if prev_days else None
     return {
         "kind": kind, "label": label,
         "cells": [whole(opening, places), whole(receipt, places), whole(sales, places),
                   whole(closing, places), whole(net, places)],
         "net_pct": (net / opening * 100) if opening else None,
         "sell": (sales / avail * 100) if avail else None,
-        "cm": whole(cm, places), "lm": whole(lm, places), "trend": cm - lm,
+        "cm": whole(cm, places),
+        "lm": None if lm is None else whole(lm, places),
+        "trend": None if lm is None else cm - lm,
     }
 
 
@@ -345,10 +351,17 @@ def draw_row(c, y, h, row, stripe):
     c.setFillColor(ink)
     c.setFont(font, F_ROW)
     for n, key in enumerate(("cm", "lm")):
+        v = row[key]
         c.drawCentredString((EDGES[AVG_COL + n] + EDGES[AVG_COL + n + 1]) / 2,
-                            base, str(row[key]))
+                            base, "-" if v is None else str(v))
 
     trend = row["trend"]
+    if trend is None:
+        # No comparison, so no arrow: an arrow is a claim about a direction.
+        c.setFillColor(ink)
+        c.setFont(font, F_ROW)
+        c.drawCentredString((EDGES[-2] + EDGES[-1]) / 2, base, "-")
+        return
     rising = trend >= 0
     if cluster:
         tint = UP_C if rising else DOWN_C
@@ -407,7 +420,6 @@ def main() -> int:
 
     import json
     days = a.days or 1
-    prev_days = a.prev_days or days
 
     if a.totals:
         now = {k: list(v) for k, v in json.loads(Path(a.totals).read_text()).items()}
@@ -427,6 +439,13 @@ def main() -> int:
         prev = bond_totals(Path(a.prev))
     else:
         prev = {}
+
+    # Borrow this window's day count only when there IS a last month to divide.
+    # Without one, prev_days fell back to days and every bond divided a total
+    # of nothing by six: LM printed 0 and TREND claimed the whole month as a
+    # gain, on a comparison that was never uploaded. Nought days is how
+    # make_row hears "nobody knows".
+    prev_days = a.prev_days or (days if prev else 0)
 
     def _span_map(path):
         if not path or not Path(path).is_file():
@@ -454,7 +473,8 @@ def main() -> int:
             print(f"  {r['label']:<16} {r['cells'][0]:>6} {r['cells'][1]:>6} "
                   f"{r['cells'][2]:>6} {r['cells'][3]:>6} {r['cells'][4]:>6} "
                   f"{pct(r['net_pct']):>6} {pct(r['sell']):>5} "
-                  f"{r['cm']:>4} {r['lm']:>4} {r['trend']:+6.2f}")
+                  f"{r['cm']:>4} {('-' if r['lm'] is None else r['lm']):>4} "
+                  + ("     -" if r['trend'] is None else f"{r['trend']:+6.2f}"))
     return 0
 
 

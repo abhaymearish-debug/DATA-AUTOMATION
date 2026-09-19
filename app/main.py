@@ -2102,7 +2102,14 @@ def _analysis_basis(chosen: dict, prev: dict | None) -> dict:
         p_start, p_end = prev["period"]["start"], prev["period"]["end"]
         basis["prev_open"] = leaves.open_days(p_start, p_end)
     else:
-        basis["prev_open"] = basis["open"]
+        # No window to compare against - last month's cumulative was never
+        # uploaded. This used to borrow THIS window's day count, which made
+        # the per-day rate divide a last-month total of nothing by a real
+        # number of days: every bond read "last month 0" and posted the whole
+        # of this month as a gain. Nought days says there is no comparison,
+        # and every row prints a dash instead of a figure nobody can stand
+        # behind.
+        basis["prev_open"] = 0
     return basis
 
 
@@ -2122,7 +2129,9 @@ def _analysis_rows(win: dict, cluster: int, bond: str, round_off: bool = False):
         "net_pct": mod.pct(r["net_pct"]), "sell": mod.pct(r["sell"]),
         "amber": r["sell"] is not None and r["sell"] >= mod.SELL_AMBER_AT,
         "cm": r["cm"], "lm": r["lm"],
-        "up": r["trend"] >= 0, "trend": mod.whole(abs(r["trend"]), places),
+        "up": (r["trend"] or 0) >= 0,
+        "trend": (None if r["trend"] is None
+                  else mod.whole(abs(r["trend"]), places)),
     } for r in raw]
     return rows, (prev["period"] if prev else None), sorted(now), basis
 
@@ -2190,7 +2199,10 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
 
     for r in rows:
         ws.append([r["label"], *r["cells"], r["net_pct"], r["sell"],
-                   r["cm"], r["lm"], ("+" if r["up"] else "-") + str(r["trend"])])
+                   r["cm"] if r["cm"] is not None else "-",
+                   r["lm"] if r["lm"] is not None else "-",
+                   "-" if r["trend"] is None
+                   else ("+" if r["up"] else "-") + str(r["trend"])])
         if r["kind"] != "bond":
             for cell in ws[ws.max_row]:
                 cell.fill = PatternFill("solid", fgColor=navy)

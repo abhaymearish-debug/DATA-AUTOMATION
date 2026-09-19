@@ -112,6 +112,9 @@
                   margin-top:19px; }
   .nodata .have { margin-top:17px; font-size:12px; color:var(--muted); }
   .nodata .have b { color:var(--ink); font-weight:650; }
+  /* Nothing to show, said as nothing. A dash is not a figure, so it does not
+     get a figure's weight. */
+  .nil { color:var(--zero); font-weight:400; }
   .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
   .status b { color:var(--ink); font-weight:700; }
   .status a.lv { color:var(--blue); font-weight:650; text-decoration:none; }
@@ -137,7 +140,8 @@
 {# Rounded off, the figures arrive as integers; exact, as floats that would
    otherwise print as 99.0 beside 341.32. #}
 {% macro fig(v) -%}
-  {{ v if v is integer else '%.2f'|format(v)|trim0 }}
+  {% if v is none %}<span class="nil">&mdash;</span>
+  {%- elif v is integer %}{{ v }}{% else %}{{ '%.2f'|format(v)|trim0 }}{% endif %}
 {%- endmacro %}
 
 {% set qs = 'date_from=' ~ chosen.start ~ '&date_to=' ~ chosen.end ~ ('&cluster=' ~ cluster if cluster else '') ~ ('&bond=' ~ bond if bond else '') ~ ('&round_off=1' if round_off else '&round_off=0') %}
@@ -247,9 +251,12 @@
         <td>{{ fig(r.cm) }}</td>
         <td>{{ fig(r.lm) }}</td>
         <td>
+          {%- if r.trend is none %}<span class="nil">&mdash;</span>
+          {%- else %}
           <span class="tr {{ 'up' if r.up else 'dn' }}">
             <span class="ar">{{ '▲' if r.up else '▼' }}</span>{{ fig(r.trend) }}
           </span>
+          {%- endif %}
         </td>
       </tr>
       {% endfor %}
@@ -263,7 +270,9 @@
 <script type="application/json" data-source="srcLine">{{ source_block|tojson }}</script>
 
 <p class="status">
-  {% if prev %}Compared against {{ prev.short }}.{% else %}No matching window last month, so LM reads zero.{% endif %}
+  {% if prev %}Compared against {{ prev.short }}.{% else %}Last month's cumulative for this
+    window has not been uploaded, so LM and Trend have nothing to stand on and read
+    &mdash;.{% endif %}
   Cases{% if round_off %}, rounded to whole numbers{% endif %}. Every figure is rounded from its
   own unrounded total, so a column can read one apart from the sum of the rows above it and both
   be right.
