@@ -495,7 +495,7 @@
   "shop":     '<path d="M4 7h16l-1 3.2a3 3 0 0 1-5.8.3 3 3 0 0 1-4.4 0 3 3 0 0 1-5.8-.3z"/><path d="M5 12.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7.5"/>',
   "truck":    '<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18.5" r="1.7"/><circle cx="17" cy="18.5" r="1.7"/>',
   "layers":   '<path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/>',
-  "drop":     '<path d="M12 3s6 6.2 6 10a6 6 0 0 1-12 0c0-3.8 6-10 6-10z"/>',
+  "gauge":    '<path d="M3.5 18.5a8.5 8.5 0 1 1 17 0"/><path d="M12 18.5 16.8 11.8"/><circle cx="12" cy="18.5" r="1.5"/>',
   "target":   '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',
   "clipboard":'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h4"/>',
   "badge":    '<path d="M12 3 5 6v5.5c0 4.1 2.9 7.6 7 8.5 4.1-.9 7-4.4 7-8.5V6z"/><path d="m9.2 12 2 2 3.6-3.8"/>',
@@ -538,7 +538,7 @@
     </div>
 
     <a class="item {% if page == 'liquidation' %}active{% endif %}" href="/reports/liquidation">
-      {{ nav_icon('drop') }}Liquidation Summary</a>
+      {{ nav_icon('gauge') }}Liquidation Summary</a>
     <a class="item {% if page == 'target' %}active{% endif %}" href="/reports/target-achievement">
       {{ nav_icon('target') }}Target vs Achievement</a>
     <a class="item {% if page == 'pi' %}active{% endif %}" href="/reports/pi-variance">
