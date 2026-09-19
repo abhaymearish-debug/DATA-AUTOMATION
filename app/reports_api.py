@@ -2019,11 +2019,17 @@ def upload_calendar() -> dict:
     return {
         "days": days,
         "periods": periods,
+        # The short name is what a day tile has room for: "no Stock yet" reads
+        # in a 90px cell where "no Warehouse Stock yet" wraps to three lines.
         "streams": [
-            {"key": "shop_cumulative", "label": "Shop Sales - Cumulative", "colour": "#2563EB"},
-            {"key": "shop_daily", "label": "Shop Sales - Daily", "colour": "#0EA5E9"},
-            {"key": "secondary", "label": "Secondary Sales", "colour": "#10B981"},
-            {"key": "warehouse", "label": "Warehouse Stock", "colour": "#F59E0B"},
+            {"key": "shop_cumulative", "label": "Shop Sales - Cumulative",
+             "short": "Cumulative", "colour": "#2563EB"},
+            {"key": "shop_daily", "label": "Shop Sales - Daily",
+             "short": "Daily", "colour": "#0EA5E9"},
+            {"key": "secondary", "label": "Secondary Sales",
+             "short": "Secondary", "colour": "#10B981"},
+            {"key": "warehouse", "label": "Warehouse Stock",
+             "short": "Stock", "colour": "#F59E0B"},
         ],
         "span": {"first": min(days) if days else "", "last": max(days) if days else ""},
     }
