@@ -164,26 +164,35 @@ def owner() -> str:
     """
     forced = (getattr(config, "OWNER_EMAIL", "") or "").strip().lower()
     if forced:
+        # It outranks the file, and corrects it: an install that had guessed
+        # its owner before this was set should not keep the guess on disk.
+        if _stored_owner() != forced:
+            set_owner(forced)
         return forced
-    f = _owner_file()
-    if f.is_file():
-        try:
-            got = json.loads(f.read_text())
-            email = str(got.get("email") or "").strip().lower()
-            if email:
-                return email
-        except (json.JSONDecodeError, OSError):
-            pass
+
+    stored = _stored_owner()
+    if stored:
+        return stored
+
     users = load_users()
     if not users:
         return ""
-    # Accounts are written in the order they were created, so the first one is
-    # the account that set this install up. Colleagues added later were invited
-    # from inside the app and are not on the deploy-time allowlist, so when
-    # that allowlist says anything, it settles it.
-    first = next((e for e in users if e in config.ALLOWED_EMAILS), next(iter(users)))
-    set_owner(first)
-    return first
+    # Nothing on record says who set this install up, so this is a guess: the
+    # first account written, preferring one named in the deploy-time allowlist
+    # over a colleague invited from inside the app. It is NOT written down -
+    # a guess that files itself is a guess nobody can correct without going
+    # into the server. KSD_OWNER_EMAIL settles it for good.
+    return next((e for e in users if e in config.ALLOWED_EMAILS), next(iter(users)))
+
+
+def _stored_owner() -> str:
+    f = _owner_file()
+    if not f.is_file():
+        return ""
+    try:
+        return str(json.loads(f.read_text()).get("email") or "").strip().lower()
+    except (json.JSONDecodeError, OSError):
+        return ""
 
 
 def is_owner(email: str) -> bool:

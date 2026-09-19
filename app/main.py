@@ -2658,6 +2658,69 @@ def pi_data(request: Request, month: str = "", prior: str = "",
                                         cluster=cluster or None, prior=prev))
 
 
+def _safe_name(text: str) -> str:
+    """A group name as a file name. KSBC writes '(NO 2)' and '/' into both."""
+    clean = re.sub(r"[\\/:*?\"<>|]+", " ", str(text or "")).strip()
+    return re.sub(r"\s+", " ", clean) or "report"
+
+
+@app.get("/reports/pi-variance/export.pdf")
+def pi_pdf(request: Request, month: str = "", view: str = "bond",
+           cluster: int = 0, group: str = ""):
+    """One sheet per bond - or per warehouse, whichever the page is grouped by.
+
+    The office's own bond sheet: the bond's total at the top, then every shop
+    under it, one block each, in the layout they already circulate. Ask for
+    more than one and they come back zipped, because a bond sheet is a thing
+    somebody forwards to one ASM - it is not a chapter of a book.
+    """
+    require_user(request)
+    if view not in ("bond", "warehouse"):
+        raise HTTPException(400, "Unknown view.")
+    cur, _prev = _pi_months(month, "-")
+    if not cur:
+        raise HTTPException(404, "No purchase instruction has been uploaded yet.")
+    data = pi_mod.variance(cur, view=view, cluster=cluster or None, prior="")
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+
+    wanted = [r for r in data["rows"] if r["kind"] == "group"]
+    if group:
+        wanted = [r for r in wanted if r["label"].lower() == group.strip().lower()]
+    if not wanted:
+        raise HTTPException(404, "Nothing matches that filter.")
+
+    import tempfile, zipfile
+    outdir = Path(tempfile.mkdtemp())
+    label = data["month_label"]
+    made: list[Path] = []
+
+    for row in wanted:
+        key = row["key"] or row["label"]
+        shops = (data.get("shops") or {}).get(key) or []
+        brands = [{"key": code, "label": label}
+                  for code, label in sorted(reports_pdf.PB_BRAND.items(),
+                                            key=lambda kv: kv[1])]
+        out = outdir / f"Purchase Instruction - {_safe_name(row['label'])} ({label}).pdf"
+        reports_pdf.build_pi_group_pdf(
+            row["label"], label, brands, row,
+            [{"label": s["name"], "cells": s["cells"], "total": s["total"]}
+             for s in shops],
+            out)
+        made.append(out)
+
+    if len(made) == 1:
+        return FileResponse(made[0], filename=made[0].name)
+
+    scope = (f"Cluster {cluster}" if cluster else
+             "All warehouses" if view == "warehouse" else "All bonds")
+    bundle = outdir / f"Purchase Instruction - {scope} ({label}).zip"
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in made:
+            z.write(f, f.name)
+    return FileResponse(bundle, filename=bundle.name)
+
+
 @app.get("/reports/pi-variance/export.xlsx")
 def pi_xlsx(request: Request, month: str = "", prior: str = "",
             view: str = "bond", cluster: int = 0):

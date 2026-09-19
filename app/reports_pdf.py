@@ -1155,6 +1155,23 @@ def _pb_title(c, group: str, month_label: str, line: str, first: bool) -> float:
     return PB_H - PB_CONT_H - 2.0 - 13.0
 
 
+# The bond sheet prints a brand by its trade name, not by the full SKU line:
+# "OLD PEARL", not "OLD PEARL NO.1 MATURED XXX RUM". Eight rows, always, in
+# this order - a shop that bought one brand still shows the other seven as
+# nil, because the question the sheet answers is what was indented against
+# everything on offer.
+PB_BRAND: dict[str, str] = {
+    "1139703": "BCB",
+    "1139707": "BLENDER'S CHOICE",
+    "1139715": "CHAIRMAN'S CHOICE",
+    "1339710": "K.S 99 LIFE TIME MATURED",
+    "1339718": "MAGIC BLEND RESERVED",
+    "1139708": "MORNING WALKERS",
+    "1339703": "OLD PEARL",
+    "1339704": "ROYAL OLD FORT",
+}
+
+
 def build_pi_group_pdf(group: str, month_label: str, brands: list,
                        total_row: dict, shops: list, out_path: Path) -> Path:
     """One bond's (or warehouse's) instruction: its total, then every shop.
@@ -1186,11 +1203,8 @@ def build_pi_group_pdf(group: str, month_label: str, brands: list,
         if y - need < PB_BOT:
             c.showPage()
             y = _pb_title(c, group, month_label, line, first=False)
-        live = sum(1 for b in brands
-                   if any((shop.get("cells") or {}).get(b["key"], {}).get(k)
-                          for k, _ in PB_COLS))
         y = _pb_block(c, y, str(shop.get("label", "")),
-                      f"{live} brand{'' if live == 1 else 's'}",
+                      f"{len(brands)} brand{'' if len(brands) == 1 else 's'}",
                       rows_for(shop.get("cells") or {}),
                       shop.get("total") or {})
         y -= 12.0
