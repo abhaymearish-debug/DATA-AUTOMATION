@@ -93,16 +93,42 @@ def _sec_book_title(name: str) -> str:
     return f"{month}{span} dispatches, built from your daily uploads".strip()
 
 
-def src_secondary(sources: list) -> dict:
-    """The dispatch leg: the month's built workbook, then the raws after it."""
+def src_secondary(sources: list, lo=None, hi=None) -> dict:
+    """The dispatch leg: the month's built workbook, then the raws after it.
+
+    Only the files that answered THIS window. The shop legs have always been
+    built from the files for the days on screen; this one named every dispatch
+    file on disk whatever you asked for, so a single day in the first week
+    still credited the raws uploaded a fortnight later.
+    """
+    def day(v):
+        if isinstance(v, date):
+            return v
+        try:
+            return date.fromisoformat(str(v)[:10])
+        except (TypeError, ValueError):
+            return None
+
     book = find_secondary_workbook()
+    lo, hi = day(lo), day(hi)
     items = []
-    for n in (sources or []):
-        if book is not None and n == book.name:
+    for src in (sources or []):
+        name = src["name"] if isinstance(src, dict) else str(src)
+        a = day(src.get("from")) if isinstance(src, dict) else None
+        b = day(src.get("to")) if isinstance(src, dict) else None
+        # A file with no days of its own is kept: better to over-name one file
+        # than to drop the only source a report has.
+        if a and b and lo and hi and (b < lo or a > hi):
+            continue
+        if book is not None and name == book.name:
+            # Its name reads like another report, so it leads with what it is.
             items.append({"kind": "built workbook",
-                          "title": _sec_book_title(n), "name": n})
+                          "title": _sec_book_title(name), "name": name})
+        elif a and b:
+            items.append({"kind": "raw upload", "name": name,
+                          "from": a.isoformat(), "to": b.isoformat()})
         else:
-            items.append({"kind": "raw upload", "name": n})
+            items.append({"kind": "raw upload", "name": name})
     return src_leg("Secondary dispatch", items, "what left the warehouses", "gold")
 
 
@@ -537,13 +563,25 @@ def secondary_lines() -> tuple[list, list]:
     lines: list = []
     sources: list = []
 
+    def entry(name: str, rows: list) -> dict:
+        """A source, with the days it actually answered for.
+
+        Carried so the Source chip can drop a file that contributed nothing to
+        the window on screen. Without it every secondary report named every
+        dispatch file the app had ever seen, whatever window you asked for.
+        """
+        days = sorted(l["date"] for l in rows if l.get("date"))
+        return {"name": name,
+                "from": days[0].isoformat() if days else "",
+                "to": days[-1].isoformat() if days else ""}
+
     book = find_secondary_workbook()
     if book is not None:
         got = load_dispatch_lines(book)
         if got:
             lines += got
             claimed |= {l["date"] for l in got if l.get("date")}
-            sources.append(book.name)
+            sources.append(entry(book.name, got))
 
     for _end, path in secondary_raw_files():
         got = load_dispatch_lines(path)
@@ -553,7 +591,7 @@ def secondary_lines() -> tuple[list, list]:
             continue
         lines += fresh
         claimed |= days
-        sources.append(path.name)
+        sources.append(entry(path.name, fresh))
 
     return lines, sources
 
@@ -568,7 +606,7 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
     if not lines:
         return {"error": "Nothing uploaded for secondary sales yet. "
                          "Upload a day's raw export on the Raw Data Upload page."}
-    workbook = find_secondary_workbook() or Path(sources[0])
+    workbook = find_secondary_workbook() or Path(sources[0]["name"])
 
     dates = [l["date"] for l in lines if l["date"]]
     span = {"min": min(dates).isoformat() if dates else None,
@@ -670,7 +708,7 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
         "warehouses": sorted({l["warehouse"] for l in lines if l["warehouse"]}),
         "unmapped": sorted({l["shop"] or l["shop_code"] for l in sel if not l["bond"]}),
         "source_block": src_block(
-            [src_secondary(sources)],
+            [src_secondary(sources, date_from, date_to)],
             "The month's analysis workbook is the authority where it exists; days it "
             "does not cover are filled from the raws themselves, newest first, so no "
             "invoice is counted twice."),
@@ -1077,7 +1115,7 @@ def _daily_source(kind: str, sources: list, book, lo: date, hi: date) -> dict:
     """What answered a daily grid - one day at a time, or a month's raws."""
     if kind == "secondary":
         return src_block(
-            [src_secondary(sources)],
+            [src_secondary(sources, lo, hi)],
             "A day reports as soon as its raw is uploaded; the month's workbook "
             "takes over for the days it covers. That workbook is this app's own "
             "build of those uploads \u2014 not the Secondary Sales - Analysis "
@@ -1896,7 +1934,7 @@ def _liq_source(start: date, end: date, p_start, p_end) -> dict:
         if was:
             legs.append(src_leg("Compared against",
                                 was, period_for(p_start, p_end)["short"], "green"))
-    legs.append(src_secondary(sec))
+    legs.append(src_secondary(sec, start, end))
     return src_block(
         legs,
         "Shop liquidation comes off the KSBC cumulative files; secondary and "
@@ -2136,19 +2174,19 @@ def upload_calendar() -> dict:
 # that did not equal the column added up by hand. Round once, for display.
 
 
-def _tva_source(sources: dict) -> dict:
+def _tva_source(sources: dict, lo=None, hi=None) -> dict:
     """Achievement is two legs added together, so its source is two legs.
 
     What the shops sold comes off the KSBC cumulative files; what went
     straight to Fed and Bar outlets never passes through a shop and comes off
-    the dispatch raws. Targets are typed in rather than uploaded, so they are
-    named but carry no file.
+    the dispatch raws. Targets are typed in rather than uploaded, so the
+    sentence at the foot says so rather than naming a file that does not exist.
     """
     legs = [src_leg("Shop sales (KSBC)", src_windows(sources.get("chain", [])),
                     "what the shops sold")]
     invoice = sources.get("invoice") or []
     if invoice:
-        legs.append(src_secondary(invoice))
+        legs.append(src_secondary(invoice, lo, hi))
     return src_block(
         legs,
         "Achievement is shop sales plus Fed/Bar invoice - KSBC-category dispatch "
@@ -2289,7 +2327,7 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
         "legs": {k: round(v, 3) for k, v in legs.items()},
         "liquidation": round(sum(legs.values()), 3),
         "sources": got["sources"],
-        "source_block": _tva_source(got["sources"]),
+        "source_block": _tva_source(got["sources"], start, end),
         "targets_set": bool(tgt),
         "target_meta": targets_mod.meta(month),
         "cluster": cluster or 0,
