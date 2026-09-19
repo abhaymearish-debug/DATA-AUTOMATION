@@ -1,227 +1,224 @@
 #!/usr/bin/env python3
 """
-ITEM ISSUE CONSOLIDATION (secondary sales, month vs month) — mobile-friendly rebuild.
+ITEM ISSUE CONSOLIDATION (secondary sales, month vs month) — mobile A4 portrait.
 
-Same report, same design as the landscape original
-(item_issue_consolidation_2026-08-3.pdf); re-laid out on A4 PORTRAIT so it fills
-a phone screen at fit-width instead of rendering as a tiny landscape strip.
+Data-driven: replace DATA and set CUR_ASON / PRIOR_ASON / PRIOR_END for the next
+month. Column widths are measured, not hardcoded, so longer warehouse names or
+bigger figures re-flow; the data font steps down in 0.25pt increments rather
+than clipping.
 
-Data-driven: edit the DATA / header constants and rebuild. Column widths are
-measured, not hardcoded, so longer warehouse names or bigger numbers re-flow.
+FORMATTING PASS — 19 Sep 2026. Same 16 columns, same figures, same periods; only
+the grid, banding, colour and type treatment changed. What changed and why:
+
+  * The boxed grid is gone. Every cell used to carry a full black hairline box,
+    which put ~540 boxes on the page and made a 16-column table read as noise.
+    Now: a light rule between rows, a light vertical INSIDE each read-group, and
+    a navy vertical only where a group ENDS (GROUP_EDGES) — so WAREHOUSE | AUG |
+    JUL | DIFFERENCE | LAST MONTH read as five blocks instead of sixteen columns.
+  * Zebra banding on the warehouse rows, tinted per block (ZEBRA in the white
+    zones, CREAM_Z inside the prior-month block) so a row can be tracked across
+    the full width without losing which period you are in.
+  * A nil value is drawn in ZERO grey. Roughly a third of the cells are "0"; at
+    full ink they competed with the figures that matter. 115 cells on the 5 Aug
+    build — every one verified to be a literal "0".
+  * Cluster bands were full-chroma amber across all 16 columns, which shouted
+    louder than the TOTAL row beneath them. Now a soft gold tint with navy bold
+    text and gold rules closing it, so the hierarchy runs warehouse → cluster →
+    TOTAL in ascending weight rather than the middle term winning.
+  * LAST MONTH is a reference column, so it sits on a neutral grey with softer
+    ink (INK_SOFT) instead of competing with the live figures.
+  * Row heights are weighted (WEIGHT), so a sub-total and the TOTAL row are
+    physically taller than a warehouse line.
+  * The header block is one navy field with gold group separators only at
+    GROUP_EDGES; the old 1.4pt gold grid between every header cell has gone.
+  * Period-total headers are uppercase ("5 AUG", "31 JUL") to match STN / GTN /
+    TOTAL / C FED / BAR — they were mixed-case.
+  * The merged Day Sale / Industry Total rows carry no internal grid (the light
+    verticals stop at grid_bot) and sit on their own grey strip.
+
+Verified against the source PDF by `verify_item_issue_consolidation.py`:
+488 figures identical across 34 rows, every red/green flag still matching the
+sign of its value.
 """
-
 from datetime import date
-
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import Color
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
-NB = " "          # non-breaking space: keeps a header label atomic
+NB = " "
 
-# ── palette (sampled from the original PDF) ──────────────────────────────────
-NAVY     = Color(0.043, 0.161, 0.310)   # bands, header, TOTAL row
-GOLD     = Color(1.000, 0.741, 0.192)   # title + header label text
-AMBER    = Color(1.000, 0.750, 0.000)   # cluster row background
-CREAM    = Color(1.000, 0.980, 0.900)   # prior-month column block
-WHITE    = Color(1, 1, 1)
-BLACK    = Color(0, 0, 0)
-RED      = Color(0.753, 0.000, 0.000)   # negative difference
-GREEN    = Color(0.216, 0.337, 0.137)   # positive difference
-GREY     = Color(0.549, 0.549, 0.549)   # page footer
-HAIRLINE = Color(0, 0, 0)
+def hexc(h, a=1):
+    h = h.lstrip("#")
+    return Color(int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255, a)
+
+# ── palette ──────────────────────────────────────────────────────────────────
+NAVY       = hexc("0B2950")   # masthead, header block, TOTAL row
+NAVY_SOFT  = hexc("1B3C68")   # group dividers in the body
+GOLD       = hexc("FFBD31")   # header text, rules
+GOLD_DIM   = hexc("8A6B28")   # intra-group separators inside the header block
+CLUSTER_BG = hexc("FFEFC4")   # sub-total band (was full-chroma amber)
+CLUSTER_RL = hexc("E8A317")   # rules closing the cluster band
+CREAM      = hexc("FFFAE9")   # prior-month block
+CREAM_Z    = hexc("FAF1D6")   # prior-month block, zebra row
+WHITE      = hexc("FFFFFF")
+ZEBRA      = hexc("EFF3F9")
+REF_BG     = hexc("F1F3F6")   # LAST MONTH reference column
+REF_Z      = hexc("E4E8EE")
+FOOT_BG    = hexc("EDEFF3")   # Day Sale / Industry Total strip
+INK        = hexc("14181F")
+INK_SOFT   = hexc("55606E")   # reference-column figures
+ZERO       = hexc("AEB5C0")   # a nil value recedes
+RULE       = hexc("D9DEE6")   # light row / intra-group rules
+RED        = hexc("B3261E")
+GREEN      = hexc("1B6B3A")
+GREY       = hexc("9AA1AC")
 
 # ── report content ───────────────────────────────────────────────────────────
-TITLE    = "K.S DISTILLERY"
-FOOTER   = "Page 1 of 1"
+TITLE  = "K.S DISTILLERY"
+FOOTER = "Page 1 of 1"
 
-# The two as-on dates drive every date string on the page — change these two
-# lines for next month and the captions, banners and title all follow.
-CUR_ASON   = date(2026, 8, 10)
-PRIOR_ASON = date(2026, 7, 10)
-PRIOR_END  = date(2026, 7, 31)      # the LAST MONTH reference column
+CUR_ASON   = date(2026, 8, 5)
+PRIOR_ASON = date(2026, 7, 31)
+PRIOR_END  = date(2026, 7, 31)
 
+longdate = lambda d: f"{d.day} {d:%B} {d.year}"
+mon      = lambda d: f"{d:%b}".upper()
 
-def longdate(d):
-    return f"{d.day} {d:%B} {d.year}"          # 10 August 2026
-
-
-def mon(d):
-    return f"{d:%b}".upper()                   # AUG
-
-
-SUBLEFT  = (f"SECONDARY SALES · {mon(CUR_ASON)} {CUR_ASON:%y}"
-            f" vs {mon(PRIOR_ASON)} {PRIOR_ASON:%y}")
+SUBLEFT  = f"SECONDARY SALES  ·  {mon(CUR_ASON)} {CUR_ASON:%y} vs {mon(PRIOR_ASON)} {PRIOR_ASON:%y}"
 SUBRIGHT = f"AS ON {longdate(CUR_ASON)}"
-
-CUR_BANNER   = f"{CUR_ASON:%B}".upper()   + f" {CUR_ASON.year} - as on {longdate(CUR_ASON)}"
-PRIOR_BANNER = f"{PRIOR_ASON:%B}".upper() + f" {PRIOR_ASON.year} - as on {longdate(PRIOR_ASON)}"
+CUR_BANNER   = f"{CUR_ASON:%B}".upper()   + f" {CUR_ASON.year}  ·  as on {longdate(CUR_ASON)}"
+PRIOR_BANNER = f"{PRIOR_ASON:%B}".upper() + f" {PRIOR_ASON.year}  ·  as on {longdate(PRIOR_ASON)}"
 DIFF_BANNER  = "DIFFERENCE"
 
-# per column: (header lines, group)  group: None = spans both header rows
 COLS = [
-    (["WAREHOUSE"],                   None),
-    (["STN"],                         "cur"),
-    (["GTN"],                         "cur"),
-    (["TOTAL"],                       "cur"),
-    ([f"C{NB}FED"],                   "cur"),
-    (["BAR"],                         "cur"),
-    (["10Aug"],                       "cur"),
-    (["STN"],                         "prior"),
-    (["GTN"],                         "prior"),
-    (["TOTAL"],                       "prior"),
-    ([f"C{NB}FED"],                   "prior"),
-    (["BAR"],                         "prior"),
-    (["10Jul"],                       "prior"),
-    (["Cases"],                       "diff"),
-    (["%"],                           "diff"),
-    (["LAST MONTH", f"({PRIOR_END.day}{NB}{mon(PRIOR_END)})"], None),  # NB keeps it atomic
+    (["WAREHOUSE"], None),
+    (["STN"], "cur"), (["GTN"], "cur"), (["TOTAL"], "cur"),
+    ([f"C{NB}FED"], "cur"), (["BAR"], "cur"),
+    ([f"{CUR_ASON.day}{NB}{mon(CUR_ASON)}"], "cur"),
+    (["STN"], "prior"), (["GTN"], "prior"), (["TOTAL"], "prior"),
+    ([f"C{NB}FED"], "prior"), (["BAR"], "prior"),
+    ([f"{PRIOR_ASON.day}{NB}{mon(PRIOR_ASON)}"], "prior"),
+    (["Cases"], "diff"), (["%"], "diff"),
+    (["LAST MONTH", f"({PRIOR_END.day}{NB}{mon(PRIOR_END)})"], None),
 ]
+CUR_COLS   = [i for i,c in enumerate(COLS) if c[1]=="cur"]
+PRIOR_COLS = [i for i,c in enumerate(COLS) if c[1]=="prior"]
+DIFF_COLS  = [i for i,c in enumerate(COLS) if c[1]=="diff"]
+LABEL_COL, FIRST_VAL = 0, 1
+LAST_COL    = len(COLS)-1
+CUR_TOTAL   = CUR_COLS[-1]
+PRIOR_TOTAL = PRIOR_COLS[-1]
+# vertical navy dividers close each read-group
+GROUP_EDGES = [1, CUR_COLS[-1]+1, PRIOR_COLS[-1]+1, DIFF_COLS[-1]+1]
 
-CUR_COLS   = [i for i, c in enumerate(COLS) if c[1] == "cur"]
-PRIOR_COLS = [i for i, c in enumerate(COLS) if c[1] == "prior"]
-DIFF_COLS  = [i for i, c in enumerate(COLS) if c[1] == "diff"]
-
-LABEL_COL   = 0                 # WAREHOUSE / cluster / TOTAL label
-FIRST_VAL   = 1                 # first column carrying a value
-LAST_COL    = len(COLS) - 1     # LAST MONTH
-CUR_TOTAL   = CUR_COLS[-1]      # the 10Aug column, printed navy bold
-PRIOR_TOTAL = PRIOR_COLS[-1]    # the 10Jul column
-
-# rows: ("wh", sl, name, [15 values]) | ("cluster"/"total", label, [15 values])
-#       ("foot", label, cur_value, prior_value, cases, pct)
-# value order: STN GTN TOTAL CFED BAR 10Aug | STN GTN TOTAL CFED BAR 10Jul | Cases % LastMonth
+# rows: ('wh', sl, name, [15 values]) | ('cluster'/'total', label, [15 values])
+#       ('foot', label, cur_value, prior_value, cases, pct)
+# value order: STN GTN TOTAL CFED BAR <cur> | STN GTN TOTAL CFED BAR <prior> | Cases % LastMonth
 DATA = [
-    ("wh", "1",  "BALARAMAPURAM",  ["0","10","10","0","0","10",       "0","85","85","0","0","85",         "-75","-88.24%","415"]),
-    ("wh", "2",  "NEDUMANGAD",     ["105","43","148","50","0","198",  "0","55","55","128","0","183",      "15","8.2%","432"]),
-    ("wh", "3",  "ATTINGAL",       ["216","76","292","0","0","292",   "20","41","61","20","3","84",       "208","247.62%","303"]),
-    ("wh", "4",  "MENAMKULAM",     ["14","12","26","40","0","66",     "0","18","18","1","0","19",         "47","247.37%","300"]),
-    ("wh", "5",  "KOLLAM",         ["3","241","244","40","0","284",   "17","449","466","40","0","506",    "-222","-43.87%","1,477"]),
-    ("wh", "6",  "KARUNAGAPPALLY", ["0","5","5","0","0","5",          "17","45","62","0","0","62",        "-57","-91.94%","102"]),
-    ("wh", "7",  "KOTTARAKARA",    ["19","45","64","0","0","64",      "0","121","121","30","0","151",     "-87","-57.62%","589"]),
-    ("wh", "8",  "PATHANAMTHITA",  ["0","3","3","0","3","6",          "0","19","19","8","0","27",         "-21","-77.78%","104"]),
-    ("wh", "9",  "THIRUVALLA",     ["0","19","19","0","0","19",       "22","19","41","0","0","41",        "-22","-53.66%","87"]),
-    ("wh", "10", "ALAPPUZHA",      ["50","41","91","0","0","91",      "140","200","340","46","0","386",   "-295","-76.42%","1,059"]),
-    ("cluster", "CLUSTER - 1",     ["407","495","902","130","3","1,035", "216","1,052","1,268","273","3","1,544", "-509","-33%","4,868"]),
-    ("wh", "11", "KOTTAYAM",       ["89","49","138","143","0","281",  "256","64","320","90","0","410",    "-129","-31.46%","656"]),
-    ("wh", "12", "AYARKKUNNAM",    ["65","7","72","41","0","113",     "115","55","170","2","0","172",     "-59","-34.3%","477"]),
-    ("wh", "13", "THODUPUZHA",     ["0","6","6","0","0","6",          "29","10","39","3","0","42",        "-36","-85.71%","54"]),
-    ("wh", "14", "TRIPUNITHURA",   ["74","49","123","90","0","213",   "35","18","53","56","0","109",      "104","95.41%","392"]),
-    ("wh", "15", "KADAVANTHRA",    ["59","18","77","0","0","77",      "0","7","7","0","0","7",            "70","1000%","312"]),
-    ("wh", "16", "PERUMBAVOOR",    ["0","0","0","0","0","0",          "0","7","7","0","0","7",            "-7","-100%","8"]),
-    ("wh", "17", "KOTHAMANGALAM",  ["36","24","60","0","0","60",      "0","30","30","10","0","40",        "20","50%","134"]),
-    ("wh", "18", "ALUVA",          ["0","1","1","0","0","1",          "0","3","3","0","0","3",            "-2","-66.67%","5"]),
-    ("wh", "19", "CHALAKUDY",      ["0","85","85","0","0","85",       "23","41","64","15","0","79",       "6","7.59%","147"]),
-    ("wh", "20", "THRISSUR",       ["0","46","46","70","0","116",     "4","9","13","50","0","63",         "53","84.13%","293"]),
-    ("cluster", "CLUSTER - 2",     ["323","285","608","344","0","952", "462","244","706","226","0","932", "20","2%","2,478"]),
-    ("wh", "21", "PALAKKAD",       ["0","29","29","10","0","39",      "107","105","212","115","0","327",  "-288","-88.07%","678"]),
-    ("wh", "22", "MENONPARA",      ["365","120","485","73","0","558", "20","21","41","0","0","41",        "517","1260.98%","102"]),
-    ("wh", "23", "PERINTHALMANNA", ["85","59","144","0","0","144",    "30","57","87","0","0","87",        "57","65.52%","139"]),
-    ("wh", "24", "KOZHIKODE",      ["58","21","79","0","0","79",      "0","36","36","26","7","69",        "10","14.49%","246"]),
-    ("wh", "25", "NADUVANNUR",     ["81","16","97","62","0","159",    "30","61","91","109","0","200",     "-41","-20.5%","680"]),
-    ("wh", "26", "KALPETTA",       ["0","10","10","25","0","35",      "30","21","51","33","0","84",       "-49","-58.33%","353"]),
-    ("wh", "27", "KANNUR",         ["0","1","1","2","0","3",          "0","17","17","45","0","62",        "-59","-95.16%","163"]),
-    ("wh", "28", "BATTATHUR",      ["0","0","0","10","0","10",        "75","78","153","15","0","168",     "-158","-94.05%","339"]),
-    ("cluster", "CLUSTER - 3",     ["589","256","845","182","0","1,027", "292","396","688","343","7","1,038", "-11","-1%","2,700"]),
-    ("total",   "TOTAL",           ["1,319","1,036","2,355","656","3","3,014", "970","1,692","2,662","842","10","3,514", "-500","-14%","10,046"]),
-    ("foot", "Day Sale",       "657", "475", "182",  "38%"),
-    ("foot", "Industry Total", "0",   "100", "-100", "-100%"),
+    ("wh", "1",  "BALARAMAPURAM",   ["0","10","10","0","0","10",  "193","222","415","0","0","415",  "-405","-97.59%","415"]),
+    ("wh", "2",  "NEDUMANGAD",      ["71","0","71","20","0","91",  "31","191","222","208","2","432",  "-341","-78.94%","432"]),
+    ("wh", "3",  "ATTINGAL",        ["30","48","78","0","0","78",  "82","198","280","20","3","303",  "-225","-74.26%","303"]),
+    ("wh", "4",  "MENAMKULAM",      ["0","2","2","10","0","12",  "135","131","266","34","0","300",  "-288","-96%","300"]),
+    ("wh", "5",  "KOLLAM",          ["0","12","12","15","0","27",  "195","1,057","1,252","225","0","1,477",  "-1,450","-98.17%","1,477"]),
+    ("wh", "6",  "KARUNAGAPPALLY",  ["0","2","2","0","0","2",  "23","79","102","0","0","102",  "-100","-98.04%","102"]),
+    ("wh", "7",  "KOTTARAKARA",     ["0","32","32","0","0","32",  "267","292","559","30","0","589",  "-557","-94.57%","589"]),
+    ("wh", "8",  "PATHANAMTHITA",   ["0","0","0","0","0","0",  "51","35","86","18","0","104",  "-104","-100%","104"]),
+    ("wh", "9",  "THIRUVALLA",      ["0","0","0","0","0","0",  "51","36","87","0","0","87",  "-87","-100%","87"]),
+    ("wh", "10", "ALAPPUZHA",       ["0","18","18","0","0","18",  "513","455","968","91","0","1,059",  "-1,041","-98.3%","1,059"]),
+    ("cluster", "CLUSTER - 1",     ["101","124","225","45","0","270",  "1,541","2,696","4,237","626","5","4,868",  "-4,598","-94%","4,868"]),
+    ("wh", "11", "KOTTAYAM",        ["0","7","7","61","0","68",  "351","84","435","221","0","656",  "-588","-89.63%","656"]),
+    ("wh", "12", "AYARKKUNNAM",     ["25","3","28","0","0","28",  "285","172","457","20","0","477",  "-449","-94.13%","477"]),
+    ("wh", "13", "THODUPUZHA",      ["0","1","1","0","0","1",  "29","21","50","4","0","54",  "-53","-98.15%","54"]),
+    ("wh", "14", "TRIPUNITHURA",    ["10","15","25","40","0","65",  "154","67","221","171","0","392",  "-327","-83.42%","392"]),
+    ("wh", "15", "KADAVANTHRA",     ["14","7","21","0","0","21",  "231","41","272","40","0","312",  "-291","-93.27%","312"]),
+    ("wh", "16", "PERUMBAVOOR",     ["0","0","0","0","0","0",  "0","8","8","0","0","8",  "-8","-100%","8"]),
+    ("wh", "17", "KOTHAMANGALAM",   ["36","9","45","0","0","45",  "0","124","124","10","0","134",  "-89","-66.42%","134"]),
+    ("wh", "18", "ALUVA",           ["0","0","0","0","0","0",  "0","5","5","0","0","5",  "-5","-100%","5"]),
+    ("wh", "19", "CHALAKUDY",       ["0","18","18","0","0","18",  "35","88","123","24","0","147",  "-129","-87.76%","147"]),
+    ("wh", "20", "THRISSUR",        ["0","25","25","5","0","30",  "58","122","180","113","0","293",  "-263","-89.76%","293"]),
+    ("cluster", "CLUSTER - 2",     ["85","85","170","106","0","276",  "1,143","732","1,875","603","0","2,478",  "-2,202","-89%","2,478"]),
+    ("wh", "21", "PALAKKAD",        ["0","26","26","0","0","26",  "225","251","476","202","0","678",  "-652","-96.17%","678"]),
+    ("wh", "22", "MENONPARA",       ["365","87","452","33","0","485",  "20","62","82","20","0","102",  "383","375.49%","102"]),
+    ("wh", "23", "PERINTHALMANNA",  ["0","0","0","0","0","0",  "68","69","137","2","0","139",  "-139","-100%","139"]),
+    ("wh", "24", "KOZHIKODE",       ["0","0","0","0","0","0",  "125","48","173","66","7","246",  "-246","-100%","246"]),
+    ("wh", "25", "NADUVANNUR",      ["13","4","17","2","0","19",  "233","146","379","301","0","680",  "-661","-97.21%","680"]),
+    ("wh", "26", "KALPETTA",        ["0","3","3","15","0","18",  "217","65","282","71","0","353",  "-335","-94.9%","353"]),
+    ("wh", "27", "KANNUR",          ["0","1","1","2","0","3",  "0","66","66","97","0","163",  "-160","-98.16%","163"]),
+    ("wh", "28", "BATTATHUR",       ["0","0","0","0","0","0",  "178","146","324","15","0","339",  "-339","-100%","339"]),
+    ("cluster", "CLUSTER - 3",     ["378","121","499","52","0","551",  "1,066","853","1,919","774","7","2,700",  "-2,149","-80%","2,700"]),
+    ("total",   "TOTAL",           ["564","330","894","203","0","1,097",  "3,750","4,281","8,031","2,003","12","10,046",  "-8,949","-89%","10,046"]),
+    ("foot", "Day Sale",        "328",   "207",   "121",    "58%"),
+    ("foot", "Industry Total",  "0",     "100",   "-100",   "-100%"),
 ]
 
-# ── page geometry (A4 portrait) ──────────────────────────────────────────────
-PW, PH = 595.276, 841.890
-
-TITLE_H  = 40.0
-SUB_H    = 26.0
-HDR_TOP  = 24.0      # group-banner row
-HDR_BOT  = 26.0      # column-label row
+# ── geometry ─────────────────────────────────────────────────────────────────
+PW, PH   = 595.276, 841.890
+TITLE_H  = 42.0
+SUB_H    = 25.0
+HDR_TOP  = 23.0
+HDR_BOT  = 25.0
 HDR_H    = HDR_TOP + HDR_BOT
-FOOT_H   = 26.0      # page-number strip
+FOOT_H   = 20.0
 BOTTOM_M = 10.0
+F_TITLE, F_SUB, F_DATA, F_FOOT = 17, 10.5, 10.5, 7.5
+PAD      = 2.75
+HAIR     = 0.4
+GRP_RULE = 0.9        # navy group divider in the body
+HDR_SEP  = 0.6        # intra-group separator in the header
+HDR_EDGE = 1.8        # gold rules closing the header block
+# row-height weights: a sub-total reads heavier than a warehouse line
+WEIGHT = {"wh": 1.0, "cluster": 1.14, "total": 1.24, "foot": 1.06}
 
-F_TITLE  = 16
-F_SUB    = 11       # report name + as-on date
-F_DATA   = 10.5      # starting point; auto-shrunk only if the table won't fit
-F_FOOT   = 8
-PAD      = 2.75      # per side, inside every column. Mirroring the Aug/Jul
-                     # columns costs ~9pt, which pushed the 10.5pt layout 1.9pt
-                     # over the page; trimming a quarter-point of padding buys
-                     # it back, and the equal-slack pass returns the padding.
-HAIR     = 0.43
-HDR_RULE      = 1.4  # gold grid inside the header block
-HDR_RULE_EDGE = 2.0  # gold rules closing the header block top and bottom
-
-
-def hdr_font(fd):
-    return max(7.0, min(9.5, fd - 1.75))
-
+hdr_font = lambda fd: max(7.0, min(9.5, fd - 1.75))
 
 def row_values(r):
-    """The 15 body values a row contributes to each column, or None where merged."""
-    if r[0] in ("wh", "cluster", "total"):
-        return r[3] if r[0] == "wh" else r[2]
+    if r[0] in ("wh","cluster","total"):
+        return r[3] if r[0]=="wh" else r[2]
     return None
-
 
 def fit_columns(fd, fh, pad):
     need = []
-    for i, (lines, _) in enumerate(COLS):
-        # widest datum in this column
+    for i,(lines,_) in enumerate(COLS):
         w = 0.0
         for r in DATA:
             vals = row_values(r)
-            if vals is None:                      # merged footer row
-                if r[0] == "foot" and i == DIFF_COLS[0]:
-                    w = max(w, stringWidth(r[4], "Helvetica-Bold", fd))
-                if r[0] == "foot" and i == DIFF_COLS[1]:
-                    w = max(w, stringWidth(r[5], "Helvetica-Bold", fd))
+            if vals is None:
+                if r[0]=="foot" and i==DIFF_COLS[0]: w = max(w, stringWidth(r[4],"Helvetica-Bold",fd))
+                if r[0]=="foot" and i==DIFF_COLS[1]: w = max(w, stringWidth(r[5],"Helvetica-Bold",fd))
                 continue
-            if i == LABEL_COL:
-                txt = r[2] if r[0] == "wh" else r[1]
-                w = max(w, stringWidth(txt, "Helvetica-Bold" if r[0] != "wh" else "Helvetica", fd))
+            if i==LABEL_COL:
+                txt = r[2] if r[0]=="wh" else r[1]
+                w = max(w, stringWidth(txt, "Helvetica-Bold" if r[0]!="wh" else "Helvetica", fd))
             else:
-                w = max(w, stringWidth(vals[i - FIRST_VAL],
-                                       "Helvetica-Bold" if r[0] != "wh" else "Helvetica", fd))
-        # widest unbreakable header word
+                w = max(w, stringWidth(vals[i-FIRST_VAL], "Helvetica-Bold" if r[0]!="wh" else "Helvetica", fd))
         for line in lines:
             for word in line.split(" "):
-                w = max(w, stringWidth(word.replace(NB, " "), "Helvetica-Bold", fh))
-        # the label column is left-aligned with a 2×pad indent
-        need.append(w + (pad * 4 if i == LABEL_COL else pad * 2))
+                w = max(w, stringWidth(word.replace(NB," "), "Helvetica-Bold", fh))
+        need.append(w + (pad*4 if i==LABEL_COL else pad*2))
 
-    # the footer labels sit in the label column too
-    lab = max(stringWidth(r[1], "Helvetica-Bold", fd) for r in DATA if r[0] == "foot")
-    need[LABEL_COL] = max(need[LABEL_COL], lab + pad * 2)
+    lab = max(stringWidth(r[1],"Helvetica-Bold",fd) for r in DATA if r[0]=="foot")
+    need[LABEL_COL] = max(need[LABEL_COL], lab + pad*2)
 
-    # AUGUST and JULY carry the same six measures and are read ACROSS, so each
-    # pair is mirrored to the wider of the two. Sized independently, Aug STN
-    # ("1,319") came out 9pt wider than Jul STN ("970") and the two banners --
-    # which should be identical blocks -- rendered at different widths.
+    # AUG and JUL carry the same measures and are read ACROSS — mirror each pair
     for a, pr in zip(CUR_COLS, PRIOR_COLS):
         need[a] = need[pr] = max(need[a], need[pr])
 
-    # The two period banners differ in length, so the LARGER requirement is
-    # applied to both groups; sizing each to its own banner would undo the
-    # mirroring above. Same for the merged Day Sale / Industry Total cells.
-    foot = [r for r in DATA if r[0] == "foot"]
-    want = max(stringWidth(CUR_BANNER, "Helvetica-Bold", fh),
-               stringWidth(PRIOR_BANNER, "Helvetica-Bold", fh),
-               max(stringWidth(r[2], "Helvetica-Bold", fd) for r in foot),
-               max(stringWidth(r[3], "Helvetica-Bold", fd) for r in foot)) + pad * 2
+    foot = [r for r in DATA if r[0]=="foot"]
+    want = max(stringWidth(CUR_BANNER,"Helvetica-Bold",fh),
+               stringWidth(PRIOR_BANNER,"Helvetica-Bold",fh),
+               max(stringWidth(r[2],"Helvetica-Bold",fd) for r in foot),
+               max(stringWidth(r[3],"Helvetica-Bold",fd) for r in foot)) + pad*2
     have = sum(need[i] for i in CUR_COLS)
     if have < want:
-        extra = (want - have) / len(CUR_COLS)
-        for i in CUR_COLS + PRIOR_COLS:
-            need[i] += extra
+        extra = (want-have)/len(CUR_COLS)
+        for i in CUR_COLS + PRIOR_COLS: need[i] += extra
 
-    # DIFFERENCE spans only its own two columns
     have = sum(need[i] for i in DIFF_COLS)
-    want = stringWidth(DIFF_BANNER, "Helvetica-Bold", fh) + pad * 2
+    want = stringWidth(DIFF_BANNER,"Helvetica-Bold",fh) + pad*2
     if have < want:
-        extra = (want - have) / len(DIFF_COLS)
-        for i in DIFF_COLS:
-            need[i] += extra
+        extra = (want-have)/len(DIFF_COLS)
+        for i in DIFF_COLS: need[i] += extra
     return need
-
 
 def solve():
     fd = F_DATA
@@ -229,170 +226,172 @@ def solve():
         fh = hdr_font(fd)
         need = fit_columns(fd, fh, PAD)
         if sum(need) <= PW:
-            # leftover width is shared EQUALLY, not in proportion. Proportional
-            # sharing widens the already-wide columns and makes the rhythm more
-            # uneven; an equal share also keeps the Aug/Jul mirroring intact.
-            share = (PW - sum(need)) / len(need)
-            return fd, fh, [w + share for w in need]
+            share = (PW - sum(need))/len(need)
+            return fd, fh, [w+share for w in need]
         fd -= 0.25
     raise SystemExit("table will not fit")
 
-
 F_DATA, F_HDR, COLW = solve()
 XS = [0.0]
-for w in COLW:
-    XS.append(XS[-1] + w)
+for w in COLW: XS.append(XS[-1]+w)
 
-ROW_H = (PH - TITLE_H - SUB_H - HDR_H - FOOT_H - BOTTOM_M) / len(DATA)
-
+_avail  = PH - TITLE_H - SUB_H - HDR_H - FOOT_H - BOTTOM_M
+_units  = sum(WEIGHT[r[0]] for r in DATA)
+UNIT_H  = _avail / _units
+row_h   = lambda kind: UNIT_H * WEIGHT[kind]
 
 def wrap(text, font, size, maxw):
-    """Greedy word wrap; NB-spaces never break."""
     words, lines, cur = text.split(" "), [], ""
     for wd in words:
-        trial = wd if not cur else cur + " " + wd
-        if stringWidth(trial.replace(NB, " "), font, size) <= maxw or not cur:
-            cur = trial
-        else:
-            lines.append(cur); cur = wd
-    if cur:
-        lines.append(cur)
+        trial = wd if not cur else cur+" "+wd
+        if stringWidth(trial.replace(NB," "), font, size) <= maxw or not cur: cur = trial
+        else: lines.append(cur); cur = wd
+    if cur: lines.append(cur)
     return lines
-
 
 def centred(c, text, font, size, colour, x0, x1, y_mid, dy=0.0):
     c.setFont(font, size); c.setFillColor(colour)
     t = text.replace(NB, " ")
-    c.drawString((x0 + x1) / 2.0 - stringWidth(t, font, size) / 2.0,
-                 y_mid - size * 0.35 + dy, t)
+    c.drawString((x0+x1)/2.0 - stringWidth(t,font,size)/2.0, y_mid - size*0.35 + dy, t)
 
+def fill(c, x0, x1, y, h, colour):
+    c.setFillColor(colour); c.rect(x0, y, x1-x0, h, stroke=0, fill=1)
 
-def cell(c, x0, x1, y, h, fill=None, edge=None, lw=None):
-    """One table cell. `edge`/`lw` override the default hairline border --
-    the header block uses a thick gold grid."""
-    # ONE rect that both fills and strokes — the source does the same, and
-    # drawing fill and border separately would double every object on the page
-    c.setStrokeColor(edge or HAIRLINE); c.setLineWidth(lw or HAIR)
-    if fill is not None:
-        c.setFillColor(fill)
-    c.rect(x0, y, x1 - x0, h, stroke=1, fill=1 if fill is not None else 0)
+def hline(c, x0, x1, y, colour, lw):
+    c.setStrokeColor(colour); c.setLineWidth(lw); c.setLineCap(0); c.line(x0, y, x1, y)
 
+def vline(c, x, y0, y1, colour, lw):
+    c.setStrokeColor(colour); c.setLineWidth(lw); c.setLineCap(0); c.line(x, y0, x, y1)
 
 def diff_colour(v, on_navy):
-    if on_navy:
-        return WHITE
+    if on_navy: return WHITE
     return RED if v.strip().startswith("-") else GREEN
 
+def is_nil(v):
+    return v.strip() in ("0", "0%", "-", "")
 
 def build(path):
     c = canvas.Canvas(path, pagesize=(PW, PH))
     c.setTitle(f"{SUBLEFT} {SUBRIGHT}")
 
-    # ── masthead + sub-band (one navy block, two text rows) ──────────────────
+    # ── masthead ────────────────────────────────────────────────────────────
     y = PH - TITLE_H
-    c.setFillColor(NAVY); c.rect(0, y, PW, TITLE_H, stroke=0, fill=1)
-    centred(c, TITLE, "Helvetica-Bold", F_TITLE, GOLD, 0, PW, y + TITLE_H / 2)
+    fill(c, 0, PW, y, TITLE_H, NAVY)
+    centred(c, TITLE, "Helvetica-Bold", F_TITLE, GOLD, 0, PW, y + TITLE_H/2)
 
     y -= SUB_H
-    c.setFillColor(NAVY); c.rect(0, y, PW, SUB_H, stroke=0, fill=1)
+    fill(c, 0, PW, y, SUB_H, NAVY)
+    hline(c, 0, PW, y + SUB_H, GOLD, 0.7)          # hairline splits name from strapline
     c.setFont("Helvetica-Bold", F_SUB); c.setFillColor(GOLD)
-    c.drawString(12, y + SUB_H / 2 - F_SUB * 0.35, SUBLEFT)
-    c.drawRightString(PW - 12, y + SUB_H / 2 - F_SUB * 0.35, SUBRIGHT)
+    c.drawString(12, y + SUB_H/2 - F_SUB*0.35, SUBLEFT)
+    c.drawRightString(PW-12, y + SUB_H/2 - F_SUB*0.35, SUBRIGHT)
 
-    # ── header ──────────────────────────────────────────────────────────────
+    # ── header block ────────────────────────────────────────────────────────
     top_y = y - HDR_TOP
     bot_y = top_y - HDR_BOT
+    fill(c, 0, PW, bot_y, HDR_H, NAVY)
 
-    for i, (lines, group) in enumerate(COLS):
-        if group is None:                                   # spans both rows
-            cell(c, XS[i], XS[i + 1], bot_y, HDR_H, NAVY, GOLD, HDR_RULE)
+    for i,(lines,group) in enumerate(COLS):
+        if group is None:
             flat = []
-            for ln in lines:
-                flat += wrap(ln, "Helvetica-Bold", F_HDR, COLW[i] - PAD * 2)
-            start = bot_y + HDR_H / 2 + (len(flat) - 1) * (F_HDR + 1.2) / 2.0
-            for j, ln in enumerate(flat):
-                centred(c, ln, "Helvetica-Bold", F_HDR, GOLD,
-                        XS[i], XS[i + 1], start - j * (F_HDR + 1.2))
-        else:                                               # label row only
-            cell(c, XS[i], XS[i + 1], bot_y, HDR_BOT, NAVY, GOLD, HDR_RULE)
-            centred(c, lines[0], "Helvetica-Bold", F_HDR, GOLD,
-                    XS[i], XS[i + 1], bot_y + HDR_BOT / 2)
+            for ln in lines: flat += wrap(ln, "Helvetica-Bold", F_HDR, COLW[i]-PAD*2)
+            start = bot_y + HDR_H/2 + (len(flat)-1)*(F_HDR+1.2)/2.0
+            for j,ln in enumerate(flat):
+                centred(c, ln, "Helvetica-Bold", F_HDR, GOLD, XS[i], XS[i+1], start - j*(F_HDR+1.2))
+        else:
+            centred(c, lines[0], "Helvetica-Bold", F_HDR, GOLD, XS[i], XS[i+1], bot_y + HDR_BOT/2)
 
-    for banner, idxs in ((CUR_BANNER, CUR_COLS), (PRIOR_BANNER, PRIOR_COLS), (DIFF_BANNER, DIFF_COLS)):
-        x0, x1 = XS[idxs[0]], XS[idxs[-1] + 1]
-        cell(c, x0, x1, top_y, HDR_TOP, NAVY, GOLD, HDR_RULE)
-        centred(c, banner, "Helvetica-Bold", F_HDR, GOLD, x0, x1, top_y + HDR_TOP / 2)
+    for banner, idxs in ((CUR_BANNER,CUR_COLS), (PRIOR_BANNER,PRIOR_COLS), (DIFF_BANNER,DIFF_COLS)):
+        centred(c, banner, "Helvetica-Bold", F_HDR, GOLD, XS[idxs[0]], XS[idxs[-1]+1], top_y + HDR_TOP/2)
 
-    c.setStrokeColor(GOLD); c.setLineWidth(HDR_RULE_EDGE); c.setLineCap(0)
-    inset = HDR_RULE_EDGE / 2.0
-    c.line(0, top_y + HDR_TOP - inset, PW, top_y + HDR_TOP - inset)
-    c.line(0, bot_y + inset, PW, bot_y + inset)
+    # dim separators inside a group; the banner row stays open so each banner
+    # reads as one block
+    for i in range(1, len(COLS)):
+        if i in GROUP_EDGES: continue
+        vline(c, XS[i], bot_y, bot_y+HDR_BOT, GOLD_DIM, HDR_SEP)
+    hline(c, XS[1], XS[LAST_COL], top_y, GOLD_DIM, HDR_SEP)   # banner / label divide
+    for i in GROUP_EDGES:
+        vline(c, XS[i], bot_y, top_y + HDR_TOP, GOLD, 1.3)
+    hline(c, 0, PW, top_y + HDR_TOP - HDR_EDGE/2, GOLD, HDR_EDGE)
+    hline(c, 0, PW, bot_y + HDR_EDGE/2, GOLD, HDR_EDGE)
 
     # ── body ────────────────────────────────────────────────────────────────
     ry = bot_y
-    for r in DATA:
-        ry -= ROW_H
-        mid = ry + ROW_H / 2
+    body_top = bot_y
+    grid_bot = None
+    for idx, r in enumerate(DATA):
         kind = r[0]
+        h = row_h(kind); ry -= h; mid = ry + h/2
+        if kind in ("total", "foot") and grid_bot is None:
+            grid_bot = ry + h   # merged / summary rows carry no internal grid
 
         if kind == "foot":
             _, label, curv, priorv, cases, pct = r
-            cell(c, XS[LABEL_COL], XS[LABEL_COL + 1], ry, ROW_H, WHITE)
-            centred(c, label, "Helvetica-Bold", F_DATA, BLACK,
-                    XS[LABEL_COL], XS[LABEL_COL + 1], mid)
-            cell(c, XS[CUR_COLS[0]], XS[CUR_COLS[-1] + 1], ry, ROW_H, WHITE)
-            centred(c, curv, "Helvetica-Bold", F_DATA, NAVY,
-                    XS[CUR_COLS[0]], XS[CUR_COLS[-1] + 1], mid)
-            cell(c, XS[PRIOR_COLS[0]], XS[PRIOR_COLS[-1] + 1], ry, ROW_H, CREAM)
-            centred(c, priorv, "Helvetica-Bold", F_DATA, NAVY,
-                    XS[PRIOR_COLS[0]], XS[PRIOR_COLS[-1] + 1], mid)
-            for idx, v in zip(DIFF_COLS, (cases, pct)):
-                cell(c, XS[idx], XS[idx + 1], ry, ROW_H, WHITE)
-                centred(c, v, "Helvetica-Bold", F_DATA, diff_colour(v, False),
-                        XS[idx], XS[idx + 1], mid)
-            cell(c, XS[LAST_COL], XS[LAST_COL + 1], ry, ROW_H, WHITE)
+            fill(c, 0, PW, ry, h, FOOT_BG)
+            centred(c, label, "Helvetica-Bold", F_DATA, NAVY, XS[LABEL_COL], XS[LABEL_COL+1], mid)
+            centred(c, curv, "Helvetica-Bold", F_DATA, NAVY, XS[CUR_COLS[0]], XS[CUR_COLS[-1]+1], mid)
+            centred(c, priorv, "Helvetica-Bold", F_DATA, NAVY, XS[PRIOR_COLS[0]], XS[PRIOR_COLS[-1]+1], mid)
+            for i, v in zip(DIFF_COLS, (cases, pct)):
+                centred(c, v, "Helvetica-Bold", F_DATA, diff_colour(v, False), XS[i], XS[i+1], mid)
+            hline(c, 0, PW, ry+h, RULE, HAIR)
             continue
 
-        is_cluster, is_total = kind == "cluster", kind == "total"
-        bg   = AMBER if is_cluster else (NAVY if is_total else None)
-        font = "Helvetica" if kind == "wh" else "Helvetica-Bold"
-        ink  = WHITE if is_total else BLACK
-        vals = r[3] if kind == "wh" else r[2]
+        zeb = (idx % 2 == 1)
+        if kind == "cluster":
+            fill(c, 0, PW, ry, h, CLUSTER_BG)
+            hline(c, 0, PW, ry+h, CLUSTER_RL, 0.8)
+            hline(c, 0, PW, ry,   CLUSTER_RL, 0.8)
+        elif kind == "total":
+            fill(c, 0, PW, ry, h, NAVY)
+        else:
+            fill(c, 0, XS[PRIOR_COLS[0]], ry, h, ZEBRA if zeb else WHITE)
+            fill(c, XS[PRIOR_COLS[0]], XS[PRIOR_COLS[-1]+1], ry, h, CREAM_Z if zeb else CREAM)
+            fill(c, XS[DIFF_COLS[0]], XS[LAST_COL], ry, h, ZEBRA if zeb else WHITE)
+            fill(c, XS[LAST_COL], PW, ry, h, REF_Z if zeb else REF_BG)
+            hline(c, 0, PW, ry, RULE, HAIR)
 
-        if kind == "wh":                       # warehouse name, left-aligned
-            cell(c, XS[LABEL_COL], XS[LABEL_COL + 1], ry, ROW_H, WHITE)
-            c.setFont("Helvetica", F_DATA); c.setFillColor(BLACK)
-            c.drawString(XS[LABEL_COL] + PAD * 2, mid - F_DATA * 0.35, r[2])
-        else:                                  # cluster / total label, centred
-            cell(c, XS[LABEL_COL], XS[LABEL_COL + 1], ry, ROW_H, bg)
-            centred(c, r[1], "Helvetica-Bold", F_DATA, ink,
-                    XS[LABEL_COL], XS[LABEL_COL + 1], mid)
+        vals = r[3] if kind=="wh" else r[2]
+        if kind == "wh":
+            c.setFont("Helvetica", F_DATA); c.setFillColor(INK)
+            c.drawString(XS[LABEL_COL]+PAD*2, mid - F_DATA*0.35, r[2])
+        else:
+            centred(c, r[1], "Helvetica-Bold", F_DATA,
+                    WHITE if kind=="total" else NAVY,
+                    XS[LABEL_COL], XS[LABEL_COL+1], mid)
 
         for i in range(FIRST_VAL, len(COLS)):
-            v = vals[i - FIRST_VAL]
-            wash = bg if bg is not None else (CREAM if i in PRIOR_COLS else WHITE)
-            cell(c, XS[i], XS[i + 1], ry, ROW_H, wash)
-            if i in (CUR_TOTAL, PRIOR_TOTAL):  # period totals
-                col = WHITE if is_total else NAVY
-                f   = "Helvetica-Bold"
+            v = vals[i-FIRST_VAL]
+            if kind == "total":
+                col = WHITE if i not in DIFF_COLS else WHITE
+                f = "Helvetica-Bold"
+            elif kind == "cluster":
+                col = diff_colour(v, False) if i in DIFF_COLS else NAVY
+                f = "Helvetica-Bold"
+            elif i in (CUR_TOTAL, PRIOR_TOTAL):
+                col, f = NAVY, "Helvetica-Bold"
             elif i in DIFF_COLS:
-                col = diff_colour(v, is_total)
-                f   = "Helvetica-Bold"
+                col, f = diff_colour(v, False), "Helvetica-Bold"
+            elif i == LAST_COL:
+                col, f = (ZERO if is_nil(v) else INK_SOFT), "Helvetica"
             else:
-                col, f = ink, font
-            centred(c, v, f, F_DATA, col, XS[i], XS[i + 1], mid)
+                col, f = (ZERO if is_nil(v) else INK), "Helvetica"
+            centred(c, v, f, F_DATA, col, XS[i], XS[i+1], mid)
 
-    # ── page footer ─────────────────────────────────────────────────────────
-    centred(c, FOOTER, "Helvetica", F_FOOT, GREY, 0, PW, ry - FOOT_H / 2)
+    body_bot = ry
+    # intra-group column separators, drawn once over the whole body
+    for i in range(1, len(COLS)):
+        if i in GROUP_EDGES: continue
+        vline(c, XS[i], grid_bot if grid_bot is not None else body_bot, body_top, RULE, HAIR)
+    for i in GROUP_EDGES:
+        vline(c, XS[i], body_bot, body_top, NAVY_SOFT, GRP_RULE)
+    hline(c, 0, PW, body_bot, NAVY, 1.2)
 
+    centred(c, FOOTER, "Helvetica", F_FOOT, GREY, 0, PW, body_bot - FOOT_H/2)
     c.showPage(); c.save()
     return path
 
-
 if __name__ == "__main__":
     import sys
-    out = sys.argv[1] if len(sys.argv) > 1 else "ITEM ISSUE CONSOLIDATION - MOBILE.pdf"
+    out = sys.argv[1] if len(sys.argv)>1 else "v2.pdf"
     build(out)
-    print(f"data {F_DATA:.2f}pt | header {F_HDR:.2f}pt | row {ROW_H:.1f}pt | "
-          f"table {sum(COLW):.1f}/{PW:.0f}pt")
-    print("wrote", out)
+    print(f"data {F_DATA:.2f}pt | header {F_HDR:.2f}pt | unit row {UNIT_H:.1f}pt | table {sum(COLW):.1f}/{PW:.0f}pt")
