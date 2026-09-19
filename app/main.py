@@ -983,7 +983,8 @@ def discard(request: Request, job_id: str):
 
 
 @app.post("/api/uploads/{stream_key}/delete")
-def delete_upload_date(request: Request, stream_key: str, day: str = Form(...)):
+def delete_upload_date(request: Request, stream_key: str, day: str = Form(...),
+                       day_to: str = Form("")):
     """Remove an uploaded date: its runs, its raws, and the data it produced.
 
     Deleting an upload has to mean the reports stop showing it. The raws are
@@ -1000,10 +1001,18 @@ def delete_upload_date(request: Request, stream_key: str, day: str = Form(...)):
         raise HTTPException(404, "No such data type.")
     stream = STREAMS[stream_key]
 
+    # A cumulative upload is identified by its whole period. Matching on the
+    # first day alone meant deleting 1-2 September took 1-3 and 1-4 with it -
+    # every window that happened to start on the same day.
+    def same_window(j) -> bool:
+        if (j.covers or j.created_at[:10]) != day:
+            return False
+        return (j.covers_to or "") == day_to if day_to else True
+
     jobs = [j for j in STORE.recent(500)
-            if j.stream_key == stream_key and (j.covers or j.created_at[:10]) == day]
+            if j.stream_key == stream_key and same_window(j)]
     if not jobs:
-        raise HTTPException(404, "Nothing uploaded for that date.")
+        raise HTTPException(404, "Nothing uploaded for that period.")
 
     removed = 0
     for job in jobs:

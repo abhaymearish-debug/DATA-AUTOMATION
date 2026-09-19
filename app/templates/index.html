@@ -1003,13 +1003,17 @@ function closeHistory(){ hVeil.classList.remove('on'); historyStream = null; }
 // Deleting a date removes its runs and every raw the app holds for it. What
 // that does to the reports differs by stream, so the server says which and the
 // answer is shown rather than assumed.
-async function delDate(day){
+async function delDate(day, dayTo){
   if (!historyCard) return;
-  if (!confirm(`Delete everything uploaded for ${whenWords(day)}?\n\n`
+  // Name the window, not the day it starts on: 1-2 September and 1-3
+  // September are two entries now, and each Delete must take only its own.
+  const what = dayTo ? `${whenWords(day)} – ${whenWords(dayTo)}` : whenWords(day);
+  if (!confirm(`Delete everything uploaded for ${what}?\n\n`
              + `The raw file(s) and the record of those runs are removed. `
              + `This cannot be undone.`)) return;
   const fd = new FormData();
   fd.append('day', day);
+  if (dayTo) fd.append('day_to', dayTo);
   try {
     const res = await fetch(`/api/uploads/${historyCard.stream}/delete`, { method:'POST', body:fd });
     const data = await res.json();
@@ -1047,6 +1051,18 @@ async function loadHistory(stream){
 // The business date, not the upload date. Older jobs predate the field, so they
 // fall back to the day they were uploaded rather than disappearing.
 function coveredDate(j){ return j.covers || (j.created_at || '').slice(0, 10); }
+// A cumulative upload IS its period: 1-2 September and 1-3 September are two
+// different pulls of two different windows, not two attempts at the same one.
+// Keyed on the start alone they collapsed into one entry, the newest showing
+// and the rest folded away as "earlier attempts" - and Delete on that entry
+// took every window that began on the same day with it.
+function windowKey(j){
+  const a = coveredDate(j);
+  const b = j.covers_to && j.covers_to !== a ? j.covers_to : '';
+  return b ? `${a}..${b}` : a;
+}
+const keyStart = k => k.slice(0, 10);
+const keyEnd   = k => (k.length > 10 ? k.slice(12) : '');
 
 function niceDate(isoDay){
   const [y,m,d] = isoDay.split('-').map(Number);
@@ -1098,16 +1114,16 @@ function drawHistory(){
 
   const byDate = new Map();
   for (const j of historyJobs){
-    const key = coveredDate(j);
+    const key = windowKey(j);
     if (!key) continue;
     (byDate.get(key) || byDate.set(key, []).get(key)).push(j);
   }
   // The two month selects are built from the months actually filed, so the
   // filter can never ask for one that was never uploaded.
-  if (month) fillMonthPickers([...byDate.keys()]);
+  if (month) fillMonthPickers([...byDate.keys()].map(keyStart));
 
   // In month mode the filter values are YYYY-MM, so the key is cut to match.
-  const cut = d => month ? d.slice(0, 7) : d;
+  const cut = d => month ? keyStart(d).slice(0, 7) : keyStart(d);
   const days = [...byDate.keys()].sort().reverse()
     .filter(d => (!from || cut(d) >= from) && (!to || cut(d) <= to));
 
@@ -1127,9 +1143,10 @@ function drawHistory(){
     return;
   }
 
-  hBody.innerHTML = '<div class="runs">' + days.map(day => {
+  hBody.innerHTML = '<div class="runs">' + days.map(windowId => {
+    const day = keyStart(windowId), dayTo = keyEnd(windowId);
     // Newest first; the run that counts is the last one that actually saved.
-    const runs = byDate.get(day).slice()
+    const runs = byDate.get(windowId).slice()
       .sort((a,b) => (b.created_at || '').localeCompare(a.created_at || ''));
     const lead = runs.find(r => r.status === 'promoted') || runs[0];
     const look = RUN_LOOK[lead.status] || { cls:'', word:lead.status.replace('_',' ') };
@@ -1143,8 +1160,7 @@ function drawHistory(){
     // raw dated the 16th can carry every dispatch since the 1st - and a report
     // covering a fortnight off one upload looks invented until this says so.
     let span = month ? niceMonth(day)
-             : lead.covers_to && lead.covers_to !== day
-               ? `${niceDate(day)} – ${niceDate(lead.covers_to)}` : niceDate(day);
+             : dayTo ? `${niceDate(day)} – ${niceDate(dayTo)}` : niceDate(day);
     let holds = '';
     if (lead.spans_from && lead.spans_from < day){
       span = `${niceDate(lead.spans_from)} – ${niceDate(day)}`;
@@ -1155,7 +1171,7 @@ function drawHistory(){
     // This screen is about the raws, not the reports. The built workbook and
     // its PDFs belong to the report pages; here you re-run a date or fetch the
     // file it was built from. The log only earns its place when something broke.
-    let actions = `<button class="act" onclick="reupload('${day}','${lead.covers_to || ''}')">`
+    let actions = `<button class="act" onclick="reupload('${day}','${dayTo}')">`
                 + `${lead.status === 'promoted' ? 'Re-upload' : 'Try again'}</button>`;
     // Only offer the download when this run actually kept a copy. Runs from
     // before the app archived raws have nothing behind the link.
@@ -1171,7 +1187,7 @@ function drawHistory(){
     if (historyCard.stream === 'purchase_instruction'){
       actions += `<button class="act" onclick="runReceipt('${lead.id}','${day}')">Receipt</button>`;
     }
-    actions += `<button class="act danger" onclick="delDate('${day}')">Delete</button>`;
+    actions += `<button class="act danger" onclick="delDate('${day}','${dayTo}')">Delete</button>`;
 
     const others = runs.filter(r => r.id !== lead.id);
     const more = others.length ? `<details class="more">
