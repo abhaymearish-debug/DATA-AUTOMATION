@@ -79,6 +79,12 @@ def whole(v: float) -> int:
     return int(Decimal(str(v)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+# Round off: whole cases and whole per cent, the way somebody reads the sheet
+# out. Off, the two places the office's own sheet carries.
+CASES = {False: "0.01", True: "1"}
+PER_CENT = {False: "0.1", True: "1"}
+
+
 def money(v: float, places: str = "0.01") -> str:
     """Cases to two places, per cent to one - as the office's sheet prints.
 
@@ -129,7 +135,7 @@ def draw_delta(c, x, y, text, rising, tint, font, size):
     c.drawString(left + TRI_W + TRI_GAP, base, text)
 
 
-def draw_row(c, y, row, stripe):
+def draw_row(c, y, row, stripe, round_off=False):
     kind = row["kind"]
     if kind == "cluster":
         fill, ink, up, down, font = NAVY, GOLD_T, UP_DARK, DOWN_DK, BOLD
@@ -164,7 +170,7 @@ def draw_row(c, y, row, stripe):
         for col, v in ((0, now), (1, was)):
             c.setFillColor(ink)
             c.setFont(font, F_ROW)
-            text = "-" if not v else money(v)
+            text = "-" if not v else money(v, CASES[round_off])
             c.drawCentredString(cell_x(g, col) + COL_W / 2, base, text)
 
         # Change in cases. Two empty months have no story, so they read '-'
@@ -176,8 +182,9 @@ def draw_row(c, y, row, stripe):
         else:
             d = now - was
             rising = d >= 0
+            figure = money(abs(d), CASES[round_off])
             draw_delta(c, cell_x(g, 2), y,
-                       money(abs(d)) if rising else f"-{money(abs(d))}",
+                       figure if rising else f"-{figure}",
                        rising, (up if rising else down), font, F_ROW)
 
         # Per cent needs something to divide by.
@@ -188,12 +195,12 @@ def draw_row(c, y, row, stripe):
         else:
             pct = (now - was) / was * 100
             rising = pct >= 0
-            label = (f"{money(abs(pct), '0.1')}%" if rising
-                     else f"-{money(abs(pct), '0.1')}%")
+            shown = money(abs(pct), PER_CENT[round_off])
+            label = f"{shown}%" if rising else f"-{shown}%"
             draw_delta(c, cell_x(g, 3), y, label, rising, (up if rising else down), font, F_ROW)
 
 
-def build(data: dict, subtitle: str, out: Path) -> int:
+def build(data: dict, subtitle: str, out: Path, round_off: bool = False) -> int:
     rows = data["rows"]
     page_h = TITLE_H + SUB_H + HEAD_H + ROW_H * len(rows)
 
@@ -241,7 +248,7 @@ def build(data: dict, subtitle: str, out: Path) -> int:
 
     stripe = 0
     for row in rows:
-        draw_row(c, y, row, stripe)
+        draw_row(c, y, row, stripe, round_off)
         stripe = stripe + 1 if row["kind"] == "bond" else 0
         y -= ROW_H
 
@@ -255,6 +262,8 @@ def main() -> int:
     ap.add_argument("--data", required=True, help="the scorecard, as JSON")
     ap.add_argument("--out", required=True)
     ap.add_argument("--title", default="")
+    ap.add_argument("--round", action="store_true",
+                    help="whole cases and whole per cent")
     a = ap.parse_args()
 
     blob = json.loads(Path(a.data).read_text())
@@ -263,7 +272,7 @@ def main() -> int:
         return 3
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    n = build(blob, a.title or blob.get("subtitle", ""), out)
+    n = build(blob, a.title or blob.get("subtitle", ""), out, a.round)
     print(f"{n} rows  ->  {out.name}")
     return 0
 

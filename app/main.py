@@ -1674,7 +1674,8 @@ def shop_cumulative_detail(request: Request, code: str, date_from: str = "",
 @app.get("/reports/shop-cumulative/export.xlsx")
 def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "",
                          period: str = "", cluster: int = 0, bond: str = "",
-                         warehouse: str = "", group_by: str = "bond"):
+                         warehouse: str = "", group_by: str = "bond",
+                         round_off: str = ""):
     """The screen, as a workbook: bonds grouped, shops collapsible under them.
 
     The earlier flat dump pivoted well and read badly - four hundred rows with
@@ -1796,10 +1797,11 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
         cell.font = Font(bold=True, color=NAVY, size=11)
         cell.border = box
 
+    figures = "#,##0" if round_off else "#,##0.00"
     for row in ws.iter_rows(min_row=4, min_col=5):
         for cell in row:
             cell.alignment = Alignment(horizontal="right")
-            cell.number_format = "#,##0.00"
+            cell.number_format = figures
     for row in ws.iter_rows(min_row=4, min_col=1, max_col=3):
         for cell in row:
             cell.alignment = Alignment(horizontal="center")
@@ -1821,7 +1823,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
 def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = "",
                         period: str = "", bond: str = "", cluster: int = 0,
                         warehouse: str = "", group_by: str = "bond",
-                        scope: str = ""):
+                        scope: str = "", round_off: str = ""):
     """Two shapes from one endpoint.
 
     scope="current"  the screen, printed - the bonds you filtered to with their
@@ -1847,7 +1849,8 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
         if "error" in data or not data.get("bonds"):
             raise HTTPException(404, data.get("error", "Nothing matches that filter."))
         out = outdir / f"Shop Sales Cumulative - {label} ({chosen['short']}).pdf"
-        reports_pdf.build_cumulative_view_pdf(data, out, scope=label)
+        reports_pdf.build_cumulative_view_pdf(data, out, scope=label,
+                                              round_off=bool(round_off))
         return FileResponse(out, filename=out.name)
 
     argv = ["python3", str(APP_REPORTS / "build_shop_cumulative_pdfs.py"),
@@ -1941,29 +1944,31 @@ def _analysis_basis(chosen: dict, prev: dict | None) -> dict:
     return basis
 
 
-def _analysis_rows(win: dict, cluster: int, bond: str):
+def _analysis_rows(win: dict, cluster: int, bond: str, round_off: bool = False):
     """The rows the screen shows, the PDF prints and the workbook exports."""
     mod = _analysis_module()
+    places = 0 if round_off else 2
     chosen = win["period"]
     prev = _previous_window(chosen)
     now = _bond_totals(win)
     before = _bond_totals(prev) if prev else {}
     basis = _analysis_basis(chosen, prev)
     raw = mod.build_rows(now, before, basis["open"], basis["prev_open"],
-                         cluster, bond)
+                         cluster, bond, places=places)
     rows = [{
         "kind": r["kind"], "label": r["label"], "cells": r["cells"],
         "net_pct": mod.pct(r["net_pct"]), "sell": mod.pct(r["sell"]),
         "amber": r["sell"] is not None and r["sell"] >= mod.SELL_AMBER_AT,
         "cm": r["cm"], "lm": r["lm"],
-        "up": r["trend"] >= 0, "trend": mod.whole(abs(r["trend"])),
+        "up": r["trend"] >= 0, "trend": mod.whole(abs(r["trend"]), places),
     } for r in raw]
     return rows, (prev["period"] if prev else None), sorted(now), basis
 
 
 @app.get("/reports/shop-analysis", response_class=HTMLResponse)
 def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
-                       period: str = "", cluster: int = 0, bond: str = ""):
+                       period: str = "", cluster: int = 0, bond: str = "",
+                       round_off: str = ""):
     user = require_user(request)
     periods = reports_api.cumulative_periods()
     win = _window(date_from, date_to, period)
@@ -1971,7 +1976,7 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
 
     rows, prev, bonds, basis = [], None, [], None
     if chosen:
-        rows, prev, bonds, basis = _analysis_rows(win, cluster, bond)
+        rows, prev, bonds, basis = _analysis_rows(win, cluster, bond, bool(round_off))
     return templates.TemplateResponse(
         request, "report_shop_analysis.html",
         {"user": user, "page": "shop_analysis", "started_at": STARTED_AT,
@@ -1979,6 +1984,7 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
          "periods": periods, "chosen": chosen, "prev": prev, "rows": rows,
          "basis": basis,
          "bonds": bonds, "cluster": cluster, "bond": bond.upper(),
+         "round_off": bool(round_off),
          "calendar": _calendar_days(),
          "source": win.get("source", ""), "chain": win.get("chain", []),
          "no_data": win.get("error", ""),
@@ -1989,13 +1995,14 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
 
 @app.get("/reports/shop-analysis/export.xlsx")
 def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
-                       period: str = "", cluster: int = 0, bond: str = ""):
+                       period: str = "", cluster: int = 0, bond: str = "",
+                       round_off: str = ""):
     require_user(request)
     win = _window(date_from, date_to, period)
     if "error" in win:
         raise HTTPException(404, win["error"])
     chosen = win["period"]
-    rows, _prev, _bonds, _basis = _analysis_rows(win, cluster, bond)
+    rows, _prev, _bonds, _basis = _analysis_rows(win, cluster, bond, bool(round_off))
     if not rows:
         raise HTTPException(404, "Nothing matches that filter.")
 
@@ -2022,9 +2029,12 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
             for cell in ws[ws.max_row]:
                 cell.fill = PatternFill("solid", fgColor=navy)
                 cell.font = Font(bold=True, color=gold, size=10)
+    figures = "#,##0" if round_off else "#,##0.00"
     for row in ws.iter_rows(min_row=2, min_col=2):
         for cell in row:
             cell.alignment = Alignment(horizontal="center")
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = figures
 
     ws.column_dimensions["A"].width = 22
     for col in "BCDEFGHIJK":
@@ -2038,7 +2048,8 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
 
 @app.get("/reports/shop-analysis/export.pdf")
 def shop_analysis_pdf(request: Request, date_from: str = "", date_to: str = "",
-                      period: str = "", cluster: int = 0, bond: str = ""):
+                      period: str = "", cluster: int = 0, bond: str = "",
+                      round_off: str = ""):
     require_user(request)
     win = _window(date_from, date_to, period)
     if "error" in win:
@@ -2067,6 +2078,8 @@ def shop_analysis_pdf(request: Request, date_from: str = "", date_to: str = "",
         argv += ["--cluster", str(cluster)]
     if bond:
         argv += ["--bond", bond]
+    if not round_off:
+        argv += ["--places", "2"]
 
     proc = subprocess.run(argv, capture_output=True, text=True,
                           timeout=config.STEP_TIMEOUT_SECONDS)
@@ -2105,7 +2118,8 @@ def _liquidation(date_from: str, date_to: str, period: str = ""):
 
 
 @app.get("/reports/liquidation", response_class=HTMLResponse)
-def liquidation_page(request: Request, date_from: str = "", date_to: str = "", period: str = ""):
+def liquidation_page(request: Request, date_from: str = "", date_to: str = "",
+                     period: str = "", round_off: str = ""):
     user = require_user(request)
     data = _liquidation(date_from, date_to, period)
     return templates.TemplateResponse(
@@ -2115,12 +2129,14 @@ def liquidation_page(request: Request, date_from: str = "", date_to: str = "", p
          "calendar": _calendar_days(),
          "groups": ["Shop liquidation (KSBC)", "Secondary sales",
                     "Fed / Bar invoice", "Total liquidation"],
-         "data": data, "error": data.get("error", "")},
+         "data": data, "error": data.get("error", ""),
+         "round_off": bool(round_off)},
     )
 
 
 @app.get("/reports/liquidation/export.pdf")
-def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "", period: str = ""):
+def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "",
+                    period: str = "", round_off: str = ""):
     require_user(request)
     data = _liquidation(date_from, date_to, period)
     if "error" in data:
@@ -2135,7 +2151,8 @@ def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "", pe
     out = outdir / f"Liquidation Summary ({data['period']['short']}).pdf"
     proc = subprocess.run(
         ["python3", str(APP_REPORTS / "build_liquidation_pdf.py"),
-         "--data", str(feed), "--out", str(out), "--title", data["subtitle"]],
+         "--data", str(feed), "--out", str(out), "--title", data["subtitle"]]
+        + (["--round"] if round_off else []),
         capture_output=True, text=True, timeout=config.STEP_TIMEOUT_SECONDS)
     if proc.returncode != 0:
         raise HTTPException(500, f"PDF build failed: {(proc.stderr or proc.stdout)[-400:]}")
@@ -2143,7 +2160,8 @@ def liquidation_pdf(request: Request, date_from: str = "", date_to: str = "", pe
 
 
 @app.get("/reports/liquidation/export.xlsx")
-def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", period: str = ""):
+def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
+                     period: str = "", round_off: str = ""):
     """The scorecard as a workbook, cell for cell as the PDF prints it.
 
     Measured off the office's own sheet rather than styled by eye: its navy and
@@ -2258,9 +2276,11 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "", p
     # ---- the rows ----
     # The arrow is the number format's doing and the sign is the font's, so a
     # delta reads as the sheet prints it and still behaves as a number.
-    FIG = '0.00;-0.00;"-"'
-    CS_FMT = '"\u25b2 "0.00;"\u25bc -"0.00;"\u25b2 "0.00'
-    PC_FMT = '"\u25b2 "0.0%;"\u25bc -"0.0%;"\u25b2 "0.0%'
+    places = "0" if round_off else "0.00"
+    FIG = f'{places};-{places};"-"'
+    CS_FMT = f'"\u25b2 "{places};"\u25bc -"{places};"\u25b2 "{places}'
+    pc = "0%" if round_off else "0.0%"
+    PC_FMT = f'"\u25b2 "{pc};"\u25bc -"{pc};"\u25b2 "{pc}'
 
     r = 4
     stripe = 0
@@ -2463,7 +2483,7 @@ def daily_data(request: Request, kind: str, date_from: str = "", date_to: str = 
 
 @app.get("/reports/daily/{kind}/export.pdf")
 def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "",
-              cluster: str = "", view: str = "bond"):
+              cluster: str = "", view: str = "bond", round_off: str = ""):
     require_user(request)
     _daily_kind(kind)
     import tempfile
@@ -2476,13 +2496,13 @@ def daily_pdf(request: Request, kind: str, date_from: str = "", date_to: str = "
 
     suffix = f" (Cluster {cl})" if cl else ""
     out = Path(tempfile.mkdtemp()) / f"{data['title']}{suffix}.pdf"
-    reports_pdf.build_daily_pdf(data, out)
+    reports_pdf.build_daily_pdf(data, out, round_off=bool(round_off))
     return FileResponse(out, filename=out.name)
 
 
 @app.get("/reports/daily/{kind}/export.xlsx")
 def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = "",
-               cluster: str = "", view: str = "bond"):
+               cluster: str = "", view: str = "bond", round_off: str = ""):
     require_user(request)
     _daily_kind(kind)
     import tempfile
@@ -2508,9 +2528,12 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     ws.row_dimensions[1].height = 30
 
+    figures = "#,##0" if round_off else "#,##0.00"
     for r in data["rows"]:
         ws.append([r["label"]] + r["cells"] + [r["total"]])
         row = ws[ws.max_row]
+        for cell in row[1:]:
+            cell.number_format = figures
         for cell in row:
             cell.alignment = Alignment(horizontal="center")
             if r["kind"] == "cluster":
@@ -2666,7 +2689,7 @@ async def targets_write(request: Request):
 
 @app.get("/reports/target-achievement/export.xlsx")
 def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str = "",
-                            cluster: int = 0, month: str = ""):
+                            cluster: int = 0, month: str = "", round_off: str = ""):
     """The sheet as it prints, in the shape the office already circulates."""
     require_user(request)
     window = _tva_window(date_from, date_to)
@@ -2760,8 +2783,8 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
                 ("tgt", "TGT", top, GOLD_D if total else NAVY if clus else SHADE),
                 ("ach", "ACH", bottom, GOLD if total else NAVY if clus else "FFFFFFFF")):
             line = [row["label"] if rr == top else None, tag]
-            line += [round(float(row[which].get(c["key"], 0) or 0)) for c in cols]
-            line.append(round(float(row.get(which + "_total", 0) or 0)))
+            line += [float(row[which].get(c["key"], 0) or 0) for c in cols]
+            line.append(float(row.get(which + "_total", 0) or 0))
             line.append((row["pct"] / 100) if (rr == top and row["pct"] is not None) else None)
             for i, value in enumerate(line, start=1):
                 c = ws.cell(row=rr, column=i, value=value)
@@ -2781,6 +2804,8 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
                     c.fill = PatternFill("solid", fgColor=fill)
                     c.font = Font(bold=strong or i in (2, span - 1), size=9.5,
                                   color=GOLD if clus else INK)
+                    if i > 2:
+                        c.number_format = "#,##0" if round_off else "#,##0.00"
 
         ws.merge_cells(start_row=top, start_column=1, end_row=bottom, end_column=1)
         ws.merge_cells(start_row=top, start_column=span, end_row=bottom, end_column=span)
@@ -2820,7 +2845,8 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
 
 @app.get("/reports/target-achievement/export.pdf")
 def target_achievement_pdf(request: Request, date_from: str = "", date_to: str = "",
-                           cluster: int = 0, month: str = "", scope: str = "current"):
+                           cluster: int = 0, month: str = "", scope: str = "current",
+                           round_off: str = ""):
     """Two ways out: what is on screen, or the set the office circulates.
 
     'all' is four sheets - one per cluster and the summary that sits on top of
@@ -2851,7 +2877,8 @@ def target_achievement_pdf(request: Request, date_from: str = "", date_to: str =
         span = data["period"]["short"].replace(" to ", " - ")
         name = f"CLUSTER {cluster}" if cluster in (1, 2, 3) else ""
         stem = f"TARGET vs ACHIEVEMENT{' - ' + name if name else ''} ({span})"
-        pdf = reports_pdf.build_target_pdf(data, out / f"{stem}.pdf", scope=name)
+        pdf = reports_pdf.build_target_pdf(data, out / f"{stem}.pdf", scope=name,
+                                           round_off=bool(round_off))
         return FileResponse(pdf, filename=pdf.name, media_type="application/pdf")
 
     whole = grid(None)
@@ -2863,12 +2890,12 @@ def target_achievement_pdf(request: Request, date_from: str = "", date_to: str =
             continue
         made.append(reports_pdf.build_target_pdf(
             one, out / f"TARGET vs ACHIEVEMENT - CLUSTER {cid} ({span}).pdf",
-            scope=f"CLUSTER {cid}"))
+            scope=f"CLUSTER {cid}", round_off=bool(round_off)))
 
     summary = [r for r in whole["rows"] if r.get("kind") in ("cluster", "grand")]
     made.append(reports_pdf.build_target_pdf(
         whole, out / f"TARGET vs ACHIEVEMENT - CLUSTER SUMMARY ({span}).pdf",
-        rows=summary, scope="CLUSTER SUMMARY"))
+        rows=summary, scope="CLUSTER SUMMARY", round_off=bool(round_off)))
 
     bundle = out / f"TARGET vs ACHIEVEMENT ({span}).zip"
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
@@ -2924,7 +2951,7 @@ async def item_issue_industry(request: Request):
 
 @app.get("/reports/secondary-analysis/export.xlsx")
 def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
-                    cluster: int = 0):
+                    cluster: int = 0, round_off: str = ""):
     """The sheet as it prints, in the house colours."""
     require_user(request)
     data = reports_api.item_issue(period=period, prior=prior, cluster=cluster or None)
@@ -3033,8 +3060,11 @@ def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
                 if i == 14 and isinstance(value, (int, float)):
                     colour = GREEN if value > 0 else RED if value < 0 else INK
                 c.font = Font(bold=(i in (7, 13)), size=10, color=colour)
-            if i == 15 and value is not None:
-                c.number_format = "0.00%"
+            if i == 15:
+                if value is not None:
+                    c.number_format = "0.0%" if round_off else "0.00%"
+            elif i > 1:
+                c.number_format = "#,##0" if round_off else "#,##0.00"
         ws.row_dimensions[r].height = 17
 
     ws.column_dimensions["A"].width = 22

@@ -137,6 +137,7 @@
         </select><i>&#9662;</i></div>
       </label>
     </div>
+    <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
     <div class="sp">
       <a class="act xl" id="xl" href="#">Download Excel</a>
     </div>
@@ -180,13 +181,14 @@ let DATA = null;
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num = n => (n === null || n === undefined)
-  ? '<span class="nil">&ndash;</span>' : Number(n).toLocaleString('en-IN');
+  ? '<span class="nil">&ndash;</span>' : ksdCases(n, round.checked);
 
 function params(){
   const p = new URLSearchParams();
   if (fPeriod.value) p.set('period', fPeriod.value);
   if (fPrior.value)  p.set('prior', fPrior.value);
   if (+fCluster.value) p.set('cluster', fCluster.value);
+  if (round.checked) p.set('round_off', '1');
   return p;
 }
 

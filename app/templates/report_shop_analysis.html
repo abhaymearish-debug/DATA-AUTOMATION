@@ -136,7 +136,13 @@
     Upload a <strong>Shop Sales - Cumulative</strong> raw file and this sheet builds itself.
   </div>
 {% else %}
-{% set qs = 'date_from=' ~ chosen.start ~ '&date_to=' ~ chosen.end ~ ('&cluster=' ~ cluster if cluster else '') ~ ('&bond=' ~ bond if bond else '') %}
+{# Rounded off, the figures arrive as integers; exact, as floats that would
+   otherwise print as 99.0 beside 341.32. #}
+{% macro fig(v) -%}
+  {{ v if v is integer else '%.2f'|format(v) }}
+{%- endmacro %}
+
+{% set qs = 'date_from=' ~ chosen.start ~ '&date_to=' ~ chosen.end ~ ('&cluster=' ~ cluster if cluster else '') ~ ('&bond=' ~ bond if bond else '') ~ ('&round_off=1' if round_off else '') %}
 <div class="controls">
   <form method="get" class="bar1" id="f">
     <div class="fbar">
@@ -169,6 +175,8 @@
         </select><i>▾</i></div>
       </label>
     </div>
+    <label class="chk"><input type="checkbox" name="round_off" value="1"
+           {{ 'checked' if round_off }} onchange="this.form.submit()"> Round off</label>
     <div class="sp">
       {% if not no_data %}
         <a class="act xl" href="/reports/shop-analysis/export.xlsx?{{ qs }}">Download Excel</a>
@@ -231,14 +239,14 @@
       {% for r in rows %}
       <tr class="{{ 'cluster' if r.kind == 'cluster' else ('grand' if r.kind == 'total' else 'bond') }}{% if r.kind == 'bond' and loop.index0 % 2 == 1 %} alt{% endif %}">
         <td>{{ r.label }}</td>
-        {% for v in r.cells %}<td>{{ v }}</td>{% endfor %}
+        {% for v in r.cells %}<td>{{ fig(v) }}</td>{% endfor %}
         <td>{{ r.net_pct }}</td>
         <td class="sell {{ 'hi' if r.amber else 'lo' }}">{{ r.sell }}</td>
-        <td>{{ r.cm }}</td>
-        <td>{{ r.lm }}</td>
+        <td>{{ fig(r.cm) }}</td>
+        <td>{{ fig(r.lm) }}</td>
         <td>
           <span class="tr {{ 'up' if r.up else 'dn' }}">
-            <span class="ar">{{ '▲' if r.up else '▼' }}</span>{{ r.trend }}
+            <span class="ar">{{ '▲' if r.up else '▼' }}</span>{{ fig(r.trend) }}
           </span>
         </td>
       </tr>
@@ -250,8 +258,9 @@
 <p class="status">
   {% if prev %}Compared against {{ prev.short }}.{% else %}No matching window last month, so LM reads zero.{% endif %}
   {% if chain and chain|length > 1 %}<span class="warn">stitched from {{ chain|length }} uploads</span>{% endif %}
-  Cases, rounded to whole numbers. Every figure is rounded from its own unrounded total, so a
-  column can read one apart from the sum of the rows above it and both be right.
+  Cases{% if round_off %}, rounded to whole numbers{% endif %}. Every figure is rounded from its
+  own unrounded total, so a column can read one apart from the sum of the rows above it and both
+  be right.
   {% if basis %}
     Averages are over
     <b>{{ basis.open }}</b> trading day{{ '' if basis.open == 1 else 's' }}{% if basis.closed %} —

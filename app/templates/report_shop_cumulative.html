@@ -45,7 +45,16 @@
   .searchwrap { position:relative; }
   /* In the filter row the search gives way before the buttons wrap: it keeps
      its width while there is room and shrinks when there is not. */
-  .bar1 .searchwrap { flex:1 1 150px; max-width:268px; }
+  /* Two stacks rather than one long line: search over the switch, Excel over
+     PDF. The strip then keeps its shape at any width instead of spilling the
+     buttons onto a row of their own. */
+  .bar1 .stack { display:flex; flex-direction:column; gap:7px;
+                 flex:1 1 150px; max-width:262px; }
+  .bar1 .searchwrap { width:100%; }
+  .bar1 .stack .chk { padding-left:2px; }
+  .bar1 .sp { flex-direction:column; align-items:stretch; gap:7px; }
+  .bar1 .sp > * { width:176px; }
+  .bar1 .sp .act { width:100%; box-sizing:border-box; text-align:center; }
   .bar1 .searchwrap .search { min-width:0; width:100%; box-sizing:border-box; }
   .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
                     color:var(--muted); font-size:15px; pointer-events:none; }
@@ -70,7 +79,7 @@
      total in gold at the foot - the house pair, top and bottom. */
   .lede { position:sticky; top:0; z-index:20;
           display:flex; align-items:center; gap:11px; margin-bottom:0;
-          align-items:stretch; min-height:40px;
+          align-items:stretch; min-height:48px;
           padding:0 15px 0 17px; border-radius:10px 10px 0 0;
           background:var(--navy); color:var(--gold);
           font-weight:700; font-size:9.5px; letter-spacing:.9px;
@@ -104,8 +113,11 @@
   .bd { background:var(--card); border-bottom:1px solid var(--line); }
   #list > .bd:last-child { border-bottom:0; }
 
+  /* A bond row is a line of figures, not a card: 42px reads as a table and
+     fits three more bonds on the screen. The header above it takes the height
+     back, so the column names sit where the eye lands first. */
   .bd-h { position:relative; display:flex; align-items:stretch; gap:11px;
-          min-height:50px; padding:0 15px 0 16px; cursor:pointer; user-select:none;
+          min-height:42px; padding:0 15px 0 16px; cursor:pointer; user-select:none;
           background:var(--card); color:var(--ink);
           transition:background .14s ease; }
   .bd-h:hover { background:var(--hover); }
@@ -258,11 +270,15 @@
       </label>
     </div>
     <!-- The search sits with the filters: it is a filter, and a second strip
-         under them was a whole row of chrome for one box. It keeps the id the
-         page hides it by when there is nothing to search. -->
-    <div class="searchwrap" id="bar2">
-      <span class="ic">⌕</span>
-      <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
+         under them was a whole row of chrome for one box. The switch stacks
+         under it, and the two downloads stack on the other side, so the whole
+         strip stays one block however narrow the window gets. -->
+    <div class="stack">
+      <div class="searchwrap" id="bar2">
+        <span class="ic">⌕</span>
+        <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
+      </div>
+      <label class="chk"><input type="checkbox" id="round" onchange="load()"> Round off</label>
     </div>
     <div class="sp" id="dlBar">
       <a class="act xl" id="dlXl" href="#">Download Excel</a>
@@ -301,7 +317,7 @@ let openShops = new Set(), shopCache = {};
    apply both at once. */
 let groupBy = 'bond';
 
-const num = v => (v || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const num = v => ksdCases(v, round.checked);
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
 let FROM = '{{ chosen.start if chosen else "" }}', TO = '{{ chosen.end if chosen else "" }}';
@@ -317,6 +333,7 @@ function params(){
   } else if (fWh.value) {
     p.set('warehouse', fWh.value);
   }
+  if (round.checked) p.set('round_off', '1');
   return p;
 }
 

@@ -239,6 +239,14 @@
   .note { background:color-mix(in srgb, var(--warn) 12%, var(--card));
           border:1px solid color-mix(in srgb, var(--warn) 45%, var(--card)); color:var(--warn);
           padding:10px 13px; border-radius:9px; font-size:13px; margin-bottom:16px; }
+
+  /* Round off: the same switch, in the same place, on every report that
+     counts cases. A case is not always a whole one - a shop can be issued
+     half a case - so the reports carry the two decimals by default and this
+     hides them when somebody wants round figures to read out. */
+  .chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted);
+         cursor:pointer; white-space:nowrap; }
+  .chk input { margin:0; }
 </style>
 {% block head %}{% endblock %}
 </head>
@@ -405,6 +413,25 @@ function tog(btn) {
   new MutationObserver(soon).observe(document.documentElement,
                                      {childList:true, subtree:true});
 })();
+</script>
+<script>
+// One place decides what a case looks like. Off, a figure keeps its two
+// decimals; on, it reads as whole cases - and the exports are handed the
+// same flag, so the screen and the download never disagree.
+window.ksdCases = function (value, round) {
+  const v = Number(value || 0);
+  return v.toLocaleString('en-IN', round
+    ? {maximumFractionDigits: 0}
+    : {minimumFractionDigits: 2, maximumFractionDigits: 2});
+};
+
+// A link carrying the flag opens rounded, so a shared URL shows what the
+// person who sent it was looking at. Registered here, which is before any
+// page script, so the report's own load() sees the box already ticked.
+document.addEventListener('DOMContentLoaded', function () {
+  const box = document.getElementById('round');
+  if (box && new URLSearchParams(location.search).has('round_off')) box.checked = true;
+});
 </script>
 {% block scripts %}{% endblock %}
 </body>

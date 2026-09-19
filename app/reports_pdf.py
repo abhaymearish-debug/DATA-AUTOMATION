@@ -80,6 +80,16 @@ def _wrap(text: str, size: float, max_w: float) -> list[str]:
     return lines
 
 
+def cases(v, round_off: bool) -> str:
+    """A case count as the reports print it.
+
+    Off, two places - a shop can be issued half a case and the figure should
+    say so. On, whole cases, which is what somebody reading the sheet out
+    loud wants.
+    """
+    return f"{float(v or 0):,.0f}" if round_off else f"{float(v or 0):,.2f}"
+
+
 def _fmt(v: float, round_off: bool) -> str:
     if not v:
         return "0"
@@ -514,7 +524,7 @@ def _sub_band(grid: dict, page_w: float) -> tuple[float, float]:
     return size, D_SUB_H + D_SUB_LINE
 
 
-def build_daily_pdf(grid: dict, path: Path) -> Path:
+def build_daily_pdf(grid: dict, path: Path, *, round_off: bool = False) -> Path:
     """Render one bond x day grid to a single page."""
     page_w, page_h, label_w, day_w, total_w = daily_geometry(grid)
     days, rows = grid["days"], grid["rows"]
@@ -598,10 +608,11 @@ def build_daily_pdf(grid: dict, path: Path) -> Path:
 
         x = label_w
         for value, w in zip(r["cells"], day_w):
-            centred(str(value), x, w, base, font, DF_BODY, ink if value else zero)
+            centred(cases(value, round_off), x, w, base, font, DF_BODY,
+                    ink if value else zero)
             x += w
         # The period total is always bold, even on a plain bond row.
-        centred(str(r['total']), x, total_w, base, BOLD, DF_BODY,
+        centred(cases(r["total"], round_off), x, total_w, base, BOLD, DF_BODY,
                 ink if r["total"] else zero)
         y -= D_ROW_H
 
@@ -635,7 +646,8 @@ def _cv_rows_per_page(first: bool) -> int:
     return max(1, int((top - (CV_FOOT + 14)) // CV_ROW_H))
 
 
-def build_cumulative_view_pdf(data: dict, out_path: Path, *, scope: str = "All bonds") -> Path:
+def build_cumulative_view_pdf(data: dict, out_path: Path, *, scope: str = "All bonds",
+                              round_off: bool = False) -> Path:
     """Print the cumulative screen: the bonds on it, with their shops."""
     period = data.get("period", {})
     flat: list[dict] = []
@@ -728,7 +740,7 @@ def build_cumulative_view_pdf(data: dict, out_path: Path, *, scope: str = "All b
             for i, v in enumerate(row["values"], start=1):
                 c.setFillColor(ST_ZERO if (not bond and not v) else ink)
                 c.setFont(font, size)
-                c.drawCentredString(_cv_x(i) + CV_COLS[i] / 2, base, f"{v:,.2f}")
+                c.drawCentredString(_cv_x(i) + CV_COLS[i] / 2, base, cases(v, round_off))
             y -= h
 
         if n == len(pages) - 1:
@@ -739,7 +751,8 @@ def build_cumulative_view_pdf(data: dict, out_path: Path, *, scope: str = "All b
             c.setFont("Helvetica-Bold", 10)
             c.drawString(15, y - (CV_BOND_H / 2 + 3.0), "GRAND TOTAL")
             for i, v in enumerate(total, start=1):
-                c.drawCentredString(_cv_x(i) + CV_COLS[i] / 2, y - (CV_BOND_H / 2 + 3.0), f"{v:,.2f}")
+                c.drawCentredString(_cv_x(i) + CV_COLS[i] / 2, y - (CV_BOND_H / 2 + 3.0),
+                                    cases(v, round_off))
 
         c.setFont("Helvetica", 8)
         c.setFillColor(NAVY)
@@ -833,12 +846,17 @@ def _ta_wrap(text: str, size: float, max_w: float) -> list[str]:
     return lines or [""]
 
 
-def _ta_num(v) -> str:
-    """Whole cases, no separators - the shape the office's sheet prints."""
+def _ta_num(v, round_off: bool = True) -> str:
+    """Cases, no separators - the shape the office's sheet prints.
+
+    Whole when the sheet is rounded off, two places when it is not: a target
+    is always a whole case, but what a bond actually sold need not be.
+    """
     try:
-        return f"{int(round(float(v or 0)))}"
+        n = float(v or 0)
     except (TypeError, ValueError):
         return "0"
+    return f"{int(round(n))}" if round_off else f"{n:.2f}"
 
 
 def _ta_centre(c, x0: float, x1: float, y: float, text: str,
@@ -861,7 +879,7 @@ def target_geometry(columns: list, pairs: int) -> tuple[float, float, list[float
 
 
 def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
-                     scope: str = "") -> Path:
+                     scope: str = "", round_off: bool = True) -> Path:
     """One Target vs Achievement sheet: a cluster, the summary, or the view."""
     cols = data["columns"]
     rows = data["rows"] if rows is None else rows
@@ -957,9 +975,11 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
             cells = row.get(which) or {}
             for i, col in enumerate(cols):
                 _ta_centre(c, xs[2 + i], xs[3 + i], line_y,
-                           _ta_num(cells.get(col["key"], 0)), body, TAF_BODY)
+                           _ta_num(cells.get(col["key"], 0), round_off),
+                           body, TAF_BODY)
             _ta_centre(c, xs[-3], xs[-2], line_y,
-                       _ta_num(row.get(which + "_total", 0)), BOLD, TAF_BODY)
+                       _ta_num(row.get(which + "_total", 0), round_off),
+                       BOLD, TAF_BODY)
 
         pct = row.get("pct")
         c.setFillColor(TA_BLACK if total else TA_GOLD_T if cluster else TA_RED)

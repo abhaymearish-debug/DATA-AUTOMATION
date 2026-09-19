@@ -27,8 +27,10 @@
           overflow:auto; }
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px;
           table-layout:fixed; min-width:1120px; }
-  col.bond { width:150px; }
-  col.n { width:62px; }
+  /* Wide enough for AVERAGE DAILY SALE beside a figure with two decimals -
+     the two ran into each other at 150. */
+  col.bond { width:168px; }
+  col.n { width:66px; }
 
   thead th { position:sticky; background:var(--navy); color:var(--gold);
              font-weight:700; letter-spacing:.4px; text-transform:uppercase;
@@ -48,6 +50,7 @@
              font-variant-numeric:tabular-nums;
              border-bottom:1px solid var(--line); border-left:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
+                         white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                          padding-left:14px; font-weight:600; border-left:0; }
   /* The gold rules either side of the channel are the seam there, so the grid
      does not draw a second line beside them. */
@@ -89,23 +92,28 @@
 </style>
 {% endblock %}
 
-{% macro fig(v) -%}
-  {% if v|round|int == 0 %}<span class="nil">-</span>{% else %}{{ v|round|int }}{% endif %}
+{# Round off hides the decimals; it does not change the arithmetic. A case can
+   be half a case, so the figures carry two places until somebody asks for
+   round numbers to read out. #}
+{% macro fig(v, rnd) -%}
+  {% if v|round|int == 0 and v|round(2) == 0 %}<span class="nil">-</span>
+  {%- elif rnd %}{{ v|round|int }}{% else %}{{ '%.2f'|format(v) }}{% endif %}
 {%- endmacro %}
 
-{% macro delta(now, was, pct) -%}
-  {% if now|round|int == 0 and was|round|int == 0 %}<span class="nil">-</span>
+{% macro delta(now, was, pct, rnd) -%}
+  {% if now|round(2) == 0 and was|round(2) == 0 %}<span class="nil">-</span>
   {%- elif pct and was|round(6) == 0 %}<span class="nil">-</span>
   {%- else %}
     {% set d = ((now - was) / was * 100) if pct else (now - was) %}
     {% set up = d >= 0 %}
-    <span class="d {{ 'up' if up else 'dn' }}"><span class="ar">{{ '▲' if up else '▼' }}</span>{{
-      (d|abs)|round|int }}{{ '%' if pct else '' }}</span>
+    <span class="d {{ 'up' if up else 'dn' }}"><span class="ar">{{ '▲' if up else '▼' }}</span>{%
+      if rnd %}{{ (d|abs)|round|int }}{% elif pct %}{{ '%.1f'|format(d|abs) }}{%
+      else %}{{ '%.2f'|format(d|abs) }}{% endif %}{{ '%' if pct else '' }}</span>
   {%- endif %}
 {%- endmacro %}
 
 {% block content %}
-{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') %}
+{% set q = 'date_from=' ~ (data.period.start if data.period else '') ~ '&date_to=' ~ (data.period.end if data.period else '') ~ ('&round_off=1' if round_off else '') %}
 <div class="controls">
   <form method="get" class="bar1" id="f">
     <div class="fbar">
@@ -122,6 +130,9 @@
     <span class="vs">
       {% if data.previous %}against {{ data.previous.short }}{% endif %}
     </span>
+    <label class="chk"><input type="checkbox" name="round_off" value="1"
+           {{ 'checked' if round_off }} onchange="document.getElementById('f').submit()">
+           Round off</label>
     {% if not error %}
     <div class="sp">
       <a class="act xl" href="/reports/liquidation/export.xlsx?{{ q }}">Download Excel</a>
@@ -163,10 +174,10 @@
         <td>{{ row.label }}</td>
         {% for blk in row.blocks %}
           {% if not loop.first %}<td class="gut"></td>{% endif %}
-          <td>{{ fig(blk[0]) }}</td>
-          <td>{{ fig(blk[1]) }}</td>
-          <td>{{ delta(blk[0], blk[1], false) }}</td>
-          <td>{{ delta(blk[0], blk[1], true) }}</td>
+          <td>{{ fig(blk[0], round_off) }}</td>
+          <td>{{ fig(blk[1], round_off) }}</td>
+          <td>{{ delta(blk[0], blk[1], false, round_off) }}</td>
+          <td>{{ delta(blk[0], blk[1], true, round_off) }}</td>
         {% endfor %}
       </tr>
       {% if row.kind == 'bond' %}{% set ns.stripe = ns.stripe + 1 %}{% else %}{% set ns.stripe = 0 %}{% endif %}

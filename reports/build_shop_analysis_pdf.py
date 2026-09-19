@@ -89,9 +89,15 @@ def w(text, font, size):
     return pdfmetrics.stringWidth(str(text), font, size)
 
 
-def whole(value: float) -> int:
-    """Half up, the way the office rounds - never banker's."""
-    return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+def whole(value: float, places: int = 0):
+    """Half up, the way the office rounds - never banker's.
+
+    `places` is what the round-off switch moves: nought for whole cases, two
+    for the figure as it actually stands.
+    """
+    step = Decimal(1).scaleb(-places)
+    got = Decimal(str(value)).quantize(step, rounding=ROUND_HALF_UP)
+    return int(got) if places == 0 else float(got)
 
 
 # -------------------------------------------------------------------- data --
@@ -124,7 +130,8 @@ def bond_totals(path: Path) -> dict[str, list[float]]:
 
 def build_rows(now: dict, prev: dict, days: int, prev_days: int,
                only_cluster: int = 0, only_bond: str = "",
-               days_by: dict | None = None, prev_days_by: dict | None = None):
+               days_by: dict | None = None, prev_days_by: dict | None = None,
+               places: int = 0):
     """Bond rows interleaved with their cluster subtotals, then the grand total.
 
     A cluster or bond filter narrows what is shown AND what is totalled, so the
@@ -153,11 +160,12 @@ def build_rows(now: dict, prev: dict, days: int, prev_days: int,
         for bond in sorted(names):
             v = now[bond]
             p = prev.get(bond, [0.0] * 4)[2]
-            rows.append(make_row(bond, v, p, *span(bond), "bond"))
+            rows.append(make_row(bond, v, p, *span(bond), "bond", places))
             for k in range(4):
                 sub[k] += v[k]
             sub_prev += p
-        rows.append(make_row(f"CLUSTER - {cid}", sub, sub_prev, days, prev_days, "cluster"))
+        rows.append(make_row(f"CLUSTER - {cid}", sub, sub_prev, days, prev_days,
+                             "cluster", places))
         for k in range(4):
             grand[k] += sub[k]
         grand_prev += sub_prev
@@ -170,16 +178,17 @@ def build_rows(now: dict, prev: dict, days: int, prev_days: int,
         if only_cluster or (want and bond != want):
             continue
         v = now[bond]
-        rows.append(make_row(bond, v, prev.get(bond, [0.0] * 4)[2], *span(bond), "bond"))
+        rows.append(make_row(bond, v, prev.get(bond, [0.0] * 4)[2], *span(bond),
+                             "bond", places))
         for k in range(4):
             grand[k] += v[k]
         grand_prev += prev.get(bond, [0.0] * 4)[2]
 
-    rows.append(make_row("TOTAL", grand, grand_prev, days, prev_days, "total"))
+    rows.append(make_row("TOTAL", grand, grand_prev, days, prev_days, "total", places))
     return rows
 
 
-def make_row(label, v, prev_sales, days, prev_days, kind):
+def make_row(label, v, prev_sales, days, prev_days, kind, places: int = 0):
     opening, receipt, sales, closing = v
     net = closing - opening
     avail = opening + receipt
@@ -187,16 +196,22 @@ def make_row(label, v, prev_sales, days, prev_days, kind):
     lm = prev_sales / prev_days if prev_days else 0.0
     return {
         "kind": kind, "label": label,
-        "cells": [whole(opening), whole(receipt), whole(sales), whole(closing), whole(net)],
+        "cells": [whole(opening, places), whole(receipt, places), whole(sales, places),
+                  whole(closing, places), whole(net, places)],
         "net_pct": (net / opening * 100) if opening else None,
         "sell": (sales / avail * 100) if avail else None,
-        "cm": whole(cm), "lm": whole(lm), "trend": cm - lm,
+        "cm": whole(cm, places), "lm": whole(lm, places), "trend": cm - lm,
     }
 
 
 # ------------------------------------------------------------------ render --
-def pct(value) -> str:
-    return "-" if value is None else f"{whole(value)}%"
+def shown(v) -> str:
+    """A cell as it prints: whole when it was rounded, two places when not."""
+    return f"{v:.2f}" if isinstance(v, float) else str(v)
+
+
+def pct(value, places: int = 0) -> str:
+    return "-" if value is None else f"{whole(value, places)}%"
 
 
 def triangle(c, cx, base, up, colour):
@@ -305,7 +320,7 @@ def draw_row(c, y, h, row, stripe):
 
     c.setFont(font, F_ROW)
     # No thousands separators: the office prints 2658, not 2,658.
-    values = [str(v) for v in row["cells"]] + [pct(row["net_pct"])]
+    values = [shown(v) for v in row["cells"]] + [pct(row["net_pct"])]
     for i, text in enumerate(values, start=1):
         c.setFillColor(ink)
         c.drawCentredString((EDGES[i] + EDGES[i + 1]) / 2, base, text)
@@ -376,6 +391,9 @@ def main() -> int:
     ap.add_argument("--days-by", default="")
     ap.add_argument("--prev-days-by", default="")
     ap.add_argument("--verify", action="store_true")
+    ap.add_argument("--places", type=int, default=0,
+                    help="decimal places on the figures; 0 (the default) is "
+                         "whole cases, as the office's own book prints them")
     a = ap.parse_args()
 
     import json
@@ -408,7 +426,8 @@ def main() -> int:
                 for k, v in json.loads(Path(path).read_text()).items() if int(v) > 0}
 
     rows = build_rows(now, prev, days, prev_days, a.cluster, a.bond,
-                      _span_map(a.days_by), _span_map(a.prev_days_by))
+                      _span_map(a.days_by), _span_map(a.prev_days_by),
+                      places=max(0, min(2, a.places)))
     if not rows or len(rows) == 1:
         print("ERROR: nothing matches that filter.")
         return 4
