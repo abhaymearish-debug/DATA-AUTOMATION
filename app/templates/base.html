@@ -363,65 +363,103 @@
   /* ------------------------------------------------------------------
      Source: where a report's figures came from.
 
-     Every report answers from files somebody uploaded, and more often than
-     not from several - a window to the 18th is 1-16 stitched to 17-18, and
-     a liquidation figure is shop files on one side and dispatch raws on the
-     other. That is worth being able to check and not worth a paragraph under
-     every table, so it folds into one chip that opens on hover or a click.
+     Every report here answers from files somebody uploaded, and rarely
+     from one: KSBC caps a pull at sixteen days, so a window to the 18th
+     is the 1-16 file stitched to 17-18, and liquidation and target read
+     two streams at once. That is worth being able to check and not worth
+     a paragraph under every table, so it folds into one chip.
+
+     The panel is built as a timeline rather than a list, because that is
+     what a chain of uploads actually is: a rail with a node per file,
+     running through the window in order. One glance says whether the
+     figures came from one pull or three stitched together.
   ------------------------------------------------------------------ */
   .status { font-size:12.5px; color:var(--muted); margin:14px 2px 0; }
   .srcline { position:relative; display:flex; }
-  .srcchip { display:inline-flex; align-items:center; gap:7px; cursor:pointer;
-             border:1px solid var(--line); background:var(--card); color:var(--muted);
-             border-radius:999px; padding:5px 12px 5px 10px; font:inherit;
-             font-size:11.5px; font-weight:700; letter-spacing:.3px;
-             box-shadow:0 1px 2px rgba(16,24,40,.05);
-             transition:color .16s ease, border-color .16s ease, background .16s ease; }
-  .srcchip svg { width:13px; height:13px; fill:none; stroke:currentColor;
-                 stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
-  .srcchip .n { display:inline-grid; place-items:center; min-width:15px; height:15px;
-                padding:0 4px; border-radius:999px; background:var(--chip);
-                color:var(--chip-ink); font-size:10px; font-weight:800; }
-  .srcline:hover .srcchip, .srcline.on .srcchip { color:var(--ink);
-                border-color:color-mix(in srgb, var(--blue) 35%, var(--line));
-                background:var(--hover); }
 
-  .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 9px); z-index:40;
-            min-width:288px; max-width:430px; padding:13px 15px 12px;
-            max-height:min(64vh, 430px); overflow:auto;
-            background:var(--card); border:1px solid var(--line); border-radius:12px;
-            box-shadow:0 16px 38px rgba(16,24,40,.18); text-align:left; }
+  .srcchip { display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+             border:1px solid var(--line); border-radius:999px;
+             background:linear-gradient(180deg, var(--card),
+                        color-mix(in srgb, var(--card) 94%, var(--bg)));
+             color:var(--ink); padding:5px 12px 5px 9px; font:inherit;
+             font-size:11.5px; font-weight:700; letter-spacing:.2px;
+             box-shadow:0 1px 2px rgba(16,24,40,.05);
+             transition:border-color .18s ease, box-shadow .18s ease,
+                        transform .18s cubic-bezier(.2,.7,.3,1); }
+  .srcchip svg { width:14px; height:14px; fill:none; stroke:var(--blue);
+                 stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;
+                 opacity:.85; transition:opacity .18s ease; }
+  .srcchip .n { display:inline-grid; place-items:center; min-width:16px; height:16px;
+                padding:0 4px; border-radius:999px; background:var(--chip);
+                color:var(--chip-ink); font-size:9.5px; font-weight:800;
+                letter-spacing:0; font-variant-numeric:tabular-nums; }
+  .srcline:hover .srcchip, .srcline.on .srcchip {
+                border-color:color-mix(in srgb, var(--blue) 42%, var(--line));
+                box-shadow:0 1px 2px rgba(16,24,40,.06),
+                           0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
+                transform:translateY(-1px); }
+  .srcline:hover .srcchip svg, .srcline.on .srcchip svg { opacity:1; }
+
+  /* ---------- the panel ---------- */
+  .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 10px); z-index:40;
+            width:362px; max-width:calc(100vw - 44px); padding:15px 17px 14px;
+            max-height:min(66vh, 440px); overflow:auto; text-align:left;
+            background:var(--card); border:1px solid var(--line); border-radius:16px;
+            box-shadow:0 1px 2px rgba(16,24,40,.06), 0 22px 48px -14px rgba(16,24,40,.28); }
   .srcline:hover .srcpop, .srcline.on .srcpop { display:block;
-            animation:ksd-pop .16s cubic-bezier(.2,.7,.3,1) both; }
-  /* Near the right edge the popup hangs the other way, so it never runs off. */
+            animation:ksd-pop .18s cubic-bezier(.2,.7,.3,1) both; }
+  /* Hard against the right edge it opens the other way, never off-screen. */
   .srcline.rt .srcpop { left:auto; right:0; }
-  .srcpop h6 { margin:0 0 9px; font-size:9.5px; letter-spacing:.8px; font-weight:800;
-               text-transform:uppercase; color:var(--muted); }
-  /* A leg heading: only drawn when a report reads from more than one kind of
-     file, which is when knowing which leg a file answered actually matters. */
-  .srcpop .leg { display:flex; align-items:center; gap:7px; margin:10px 0 5px;
-                 padding-top:9px; border-top:1px solid var(--line);
-                 font-size:10.5px; font-weight:800; letter-spacing:.3px; color:var(--ink); }
-  .srcpop > div:first-of-type .leg { margin-top:0; padding-top:0; border-top:0; }
-  .srcpop .leg i { width:6px; height:6px; border-radius:50%; background:var(--blue); flex:none; }
-  .srcpop .leg.g i { background:var(--gold); }
-  .srcpop .leg.s i { background:#3F8600; }
-  .srcpop .leg span { font-weight:650; color:var(--muted); letter-spacing:0; }
-  .srcpop .seg1 { display:flex; gap:9px; padding:6px 0; border-top:1px solid var(--line); }
-  .srcpop .seg1.first { border-top:0; padding-top:0; }
-  .srcpop .dot { width:7px; height:7px; border-radius:50%; margin-top:5px; flex:none;
-                 background:var(--blue); }
-  .srcpop .dot.daily { background:var(--gold); }
-  /* Inside a leg the files take that leg's colour, so three legs read as
-     three groups rather than one long list of blue dots. */
-  .srcpop .g1 .dot { background:var(--gold); }
-  .srcpop .s1 .dot { background:#3F8600; }
-  .srcpop .win { font-size:12.5px; font-weight:700; color:var(--ink); }
-  .srcpop .file { font-size:11px; color:var(--muted); word-break:break-word; }
-  .srcpop .kind { font-size:10px; font-weight:700; letter-spacing:.4px;
-                  text-transform:uppercase; color:var(--muted); }
-  .srcpop .say { margin-top:9px; padding-top:9px; border-top:1px solid var(--line);
-                 font-size:11.5px; color:var(--muted); line-height:1.5; }
+  .srcpop h6 { margin:0 0 14px; font-size:9px; letter-spacing:1px; font-weight:800;
+               text-transform:uppercase; color:var(--muted); opacity:.85; }
+
+  /* ---------- one leg: a label, then its rail ---------- */
+  .srcleg { --tone:var(--blue); margin-top:14px; padding-top:13px;
+             border-top:1px solid var(--line); }
+  .srcleg.g { --tone:var(--gold); }
+  .srcleg.s { --tone:var(--ok); }
+  .srcpop > .srcleg:first-of-type { margin-top:0; padding-top:0; border-top:0; }
+  /* The label is only drawn when a report reads from more than one kind of
+     file - which is when which leg a file answered actually matters. */
+  .srcleg .leg { display:flex; align-items:center; gap:8px; margin:0 0 9px;
+                 font-size:9px; font-weight:800; letter-spacing:.9px;
+                 text-transform:uppercase; color:var(--tone); }
+  .srcleg .leg span { font-weight:700; letter-spacing:.2px; text-transform:none;
+                      font-size:10.5px; color:var(--muted); white-space:nowrap;
+                      overflow:hidden; text-overflow:ellipsis; }
+
+  /* The rail. Its line is the stitch: two windows end to end are one run. */
+  .srcrail { position:relative; padding-left:19px; }
+  .srcrail::before { content:''; position:absolute; left:3.5px; top:7px; bottom:8px;
+                     width:1.5px; border-radius:1px;
+                     background:color-mix(in srgb, var(--tone) 26%, transparent); }
+  .srcrail.one::before { display:none; }
+  .srcitem { position:relative; padding-bottom:12px; }
+  .srcitem:last-child { padding-bottom:0; }
+  .srcitem::before { content:''; position:absolute; left:-19px; top:4.5px;
+                     width:8px; height:8px; border-radius:50%;
+                     background:var(--card); border:2px solid var(--tone);
+                     box-shadow:0 0 0 3px var(--card); }
+  .srcitem .w { display:flex; align-items:center; gap:10px; }
+  .srcitem .w b { font-size:12.5px; font-weight:700; color:var(--ink);
+                  letter-spacing:-.1px; font-variant-numeric:tabular-nums;
+                  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* A file with no window of its own leads with its name, and a name is not
+     a date: it gets to wrap onto a second line rather than be cut off. */
+  .srcitem.nw .w { align-items:flex-start; }
+  .srcitem.nw .w b { font-size:12px; line-height:1.35; white-space:normal;
+                     overflow:visible; text-overflow:clip; }
+  .srcitem .tag { margin-left:auto; flex:none; font-size:8.5px; font-weight:750;
+                  letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
+                  background:color-mix(in srgb, var(--chip) 62%, transparent);
+                  border-radius:6px; padding:3px 7px; }
+  .srcitem .f { margin-top:3px; font-size:10.5px; line-height:1.4; color:var(--muted);
+                letter-spacing:.1px; overflow:hidden; text-overflow:ellipsis;
+                white-space:nowrap; }
+
+  /* ---------- the one sentence at the end ---------- */
+  .srcpop .say { margin-top:14px; padding-top:12px; border-top:1px solid var(--line);
+                 font-size:11px; line-height:1.55; color:var(--muted); }
 
   @media (prefers-reduced-motion: reduce) {
     .controls .bar1 > *, .calpop.on, .menu.open .items { animation:none; }
@@ -622,23 +660,38 @@ document.addEventListener('DOMContentLoaded', function () {
 // ---------------------------------------------------------------------
 // Source: one chip, every report.
 //
-// A report is only ever as good as the files behind it, and on this app a
-// window almost never maps to one file - KSBC caps a pull at sixteen days,
-// so anything longer is the first-half file plus the ones after it, and a
-// liquidation or target figure reads from two different streams at once.
-// The chip says Source; what it opens names each file, the days it answered
-// for, and how it reached the app.
+// A report is only ever as good as the files behind it, and here a window
+// almost never maps to one file - KSBC caps a pull at sixteen days, so
+// anything longer is the first-half file plus the ones after it, and a
+// liquidation or target figure reads two streams at once. The chip says
+// Source; what it opens draws those files as a timeline, so one look says
+// whether the figures came from one pull or three stitched together.
 //
 //   block = {legs: [{leg, note, tone, items: [{from, to, kind, name}]}], say}
 //
-// A single-leg block drops the heading: on a cumulative report there is only
-// one kind of file, and a label above it would say nothing the chip does not.
+// A single-leg block drops the leg label: on a cumulative report there is
+// only one kind of file, and a heading above it would say nothing.
 // ---------------------------------------------------------------------
+window.KSD_MON = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec'];
+
 window.ksdDate = function (iso) {
   if (!iso) return '';
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
-  return (y && m && d) ? `${d} ${M[m - 1]} ${y}` : String(iso);
+  return (y && m && d) ? `${d} ${KSD_MON[m - 1]} ${y}` : String(iso);
+};
+
+// A range says the month and the year once. '1 - 16 Sep 2026' is the same
+// fact as '1 Sep 2026 - 16 Sep 2026' and reads in half the width.
+window.ksdSpan = function (from, to) {
+  if (!from) return ksdDate(to);
+  if (!to || to === from) return ksdDate(from);
+  const [y1, m1, d1] = String(from).slice(0, 10).split('-').map(Number);
+  const [y2, m2, d2] = String(to).slice(0, 10).split('-').map(Number);
+  if (!y1 || !y2) return `${ksdDate(from)} – ${ksdDate(to)}`;
+  if (y1 === y2 && m1 === m2) return `${d1} – ${d2} ${KSD_MON[m1 - 1]} ${y1}`;
+  if (y1 === y2) return `${d1} ${KSD_MON[m1 - 1]} – ${d2} ${KSD_MON[m2 - 1]} ${y1}`;
+  return `${ksdDate(from)} – ${ksdDate(to)}`;
 };
 
 window.ksdSource = function (block, host) {
@@ -651,36 +704,37 @@ window.ksdSource = function (block, host) {
   const legs = ((block && block.legs) || []).filter(l => l && (l.items || []).length);
   const count = legs.reduce((n, l) => n + l.items.length, 0);
   line.hidden = !count;
-  line.classList.remove('on');
+  line.classList.remove('on', 'rt');
   if (!count) { line.innerHTML = ''; return; }
 
-  // One leg needs no heading; several do, because which file answered which
-  // half of the arithmetic is the whole question being asked.
+  // The tag beside a file says what kind of file it is in one word. The
+  // long form stays on the server, where it is the honest description.
+  const TAG = {'cumulative upload': 'cumulative', 'daily upload': 'daily',
+               'built workbook': 'workbook', 'raw upload': 'raw',
+               'daily snapshot': 'snapshot'};
   const TONE = {gold: 'g', green: 's'};
+
   const body = legs.map(l => {
     const head = legs.length < 2 ? '' :
-      `<div class="leg ${TONE[l.tone] || ''}"><i></i>${esc(l.leg)}` +
-      (l.note ? ` <span>${esc(l.note)}</span>` : '') + '</div>';
-    const rows = l.items.map((c, i) => {
+      `<div class="leg">${esc(l.leg)}${l.note ? `<span>${esc(l.note)}</span>` : ''}</div>`;
+    const rows = l.items.map(c => {
       const name = String(c.name || '').replace(/\.(xlsx?|csv|pdf)$/i, '');
       // A file that answers a window leads with the window and names itself
-      // underneath; one that has no window of its own leads with its name.
+      // underneath; one with no window of its own leads with its name.
       const dated = !!(c.from || c.to || c.title);
-      const win = dated
-        ? ((c.from || c.to)
-            ? `${esc(ksdDate(c.from))}${c.to && c.to !== c.from ? ' – ' + esc(ksdDate(c.to)) : ''}`
-            : esc(c.title))
-        : esc(name);
-      const kind = c.kind ? `<span class="kind">${esc(c.kind)}</span>` : '';
-      return `<div class="seg1${i === 0 ? ' first' : ''}">
-          <span class="dot ${c.kind === 'daily upload' ? 'daily' : ''}"></span>
-          <span>
-            <div class="win">${win}${dated && kind ? ' · ' + kind : ''}</div>
-            ${dated ? (name ? `<div class="file">${esc(name)}</div>` : '')
-                    : (kind ? `<div>${kind}</div>` : '')}
-          </span></div>`;
+      const lead = dated ? ((c.from || c.to) ? ksdSpan(c.from, c.to) : c.title) : name;
+      const under = dated ? name : '';
+      const tag = c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '';
+      return `<div class="srcitem${dated ? '' : ' nw'}">
+          <div class="w"><b title="${esc(lead)}">${esc(lead)}</b>${tag}</div>
+          ${under ? `<div class="f" title="${esc(under)}">${esc(under)}</div>` : ''}
+        </div>`;
     }).join('');
-    return `<div class="${TONE[l.tone] || 'b'}1">${head}${rows}</div>`;
+    // The rail's line is a chain through time, so it is only drawn when the
+    // files actually sit on one - not under a pair of loose workbooks.
+    const chained = l.items.length > 1 && l.items.every(c => c.from || c.to);
+    return `<div class="srcleg ${TONE[l.tone] || ''}">${head}
+        <div class="srcrail${chained ? '' : ' one'}">${rows}</div></div>`;
   }).join('');
 
   line.innerHTML =
@@ -695,12 +749,17 @@ window.ksdSource = function (block, host) {
      <div class="srcpop"><h6>Where these figures come from</h6>${body}` +
     ((block && block.say) ? `<div class="say">${esc(block.say)}</div>` : '') + '</div>';
 
-  line.querySelector('.srcchip').addEventListener('click', () => {
-    line.classList.toggle('on');
-    // Hard against the right edge it would open off-screen, so it flips.
-    const pop = line.querySelector('.srcpop');
-    line.classList.toggle('rt', line.getBoundingClientRect().left + pop.offsetWidth
-                                > document.documentElement.clientWidth - 16);
+  const chip = line.querySelector('.srcchip');
+  const pop = line.querySelector('.srcpop');
+  // Near the right edge the panel hangs the other way, so it never runs off.
+  const place = () => line.classList.toggle('rt',
+    line.getBoundingClientRect().left + pop.offsetWidth
+      > document.documentElement.clientWidth - 16);
+  line.addEventListener('mouseenter', place);
+  chip.addEventListener('click', () => {
+    const on = line.classList.toggle('on');
+    chip.setAttribute('aria-expanded', on ? 'true' : 'false');
+    place();
   });
 };
 

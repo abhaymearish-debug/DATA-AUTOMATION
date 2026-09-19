@@ -1709,7 +1709,7 @@ def _liq_source(start: date, end: date, p_start, p_end) -> dict:
     if p_start:
         was = shop(p_start, p_end)
         if was:
-            legs.append(src_leg("Shop sales - set against",
+            legs.append(src_leg("Compared against",
                                 was, period_for(p_start, p_end)["short"], "green"))
     legs.append(src_secondary(sec))
     return src_block(
@@ -1922,9 +1922,9 @@ def _tva_source(sources: dict) -> dict:
         legs.append(src_secondary(invoice))
     return src_block(
         legs,
-        "Achievement is shop sales plus Fed/Bar invoice. KSBC-category dispatch "
-        "is deliberately left out - that stock is already counted where the shop "
-        "sold it. Targets are entered in the app, not uploaded.")
+        "Achievement is shop sales plus Fed/Bar invoice - KSBC-category dispatch "
+        "is left out, since that stock is counted where the shop sold it. "
+        "Targets are entered in the app, not uploaded.")
 
 
 def _tva_legs(start: date, end: date) -> dict:

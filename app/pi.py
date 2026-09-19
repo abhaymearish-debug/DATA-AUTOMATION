@@ -515,11 +515,12 @@ def source_for(month: str, prior: str = "") -> dict:
         blank = sum(1 for d in filed if _blank_of(d))
         note = f"{len(files)} shop sheet{'' if len(files) == 1 else 's'} filed"
         if blank:
-            note += f", {blank} blank"
-        return _r.src_leg(label, [{"title": month_label(key), "kind": note,
-                                   "name": ""}], tone=tone)
+            note += f", {blank} returned blank"
+        return _r.src_leg(label, [{"title": month_label(key),
+                                   "kind": "purchase instruction",
+                                   "name": note}], tone=tone)
 
-    legs = [l for l in (leg(month, "Purchase instruction"),
+    legs = [l for l in (leg(month, "This month"),
                         leg(prior, "Compared against", "green")) if l]
     return _r.src_block(
         legs,

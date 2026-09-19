@@ -1692,7 +1692,7 @@ def _shop_source(win: dict, prev: dict | None = None) -> dict:
                                 win["period"]["short"] if win.get("period") else "")]
     if prev and prev.get("chain"):
         legs.append(reports_api.src_leg(
-            "Shop sales - set against", reports_api.src_windows(prev["chain"]),
+            "Compared against", reports_api.src_windows(prev["chain"]),
             prev["period"]["short"] if prev.get("period") else "", "green"))
     say = reports_api.src_stitched(len(now)) if len(legs) == 1 else (
         "Each side of the comparison is answered by its own uploads. "

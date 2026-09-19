@@ -245,12 +245,14 @@ def source_for(key: str, prior: str = "") -> dict:
                          for f in files} - {""})
         return _r.src_leg(label, [{
             "from": span[0].isoformat(), "to": span[1].isoformat(),
-            "kind": f"{len(files)} warehouse export{'' if len(files) == 1 else 's'}",
-            "name": ", ".join(houses) if houses else folder.name,
+            "kind": "item issue",
+            "name": f"{len(files)} warehouse export"
+                    f"{'' if len(files) == 1 else 's'}"
+                    + (f" · {len(houses)} warehouses" if len(houses) > 1 else ""),
         }], tone=tone)
 
-    legs = [l for l in (leg(key, "Item issue - this period"),
-                        leg(prior, "Item issue - set against", "green")) if l]
+    legs = [l for l in (leg(key, "This period"),
+                        leg(prior, "Compared against", "green")) if l]
     return _r.src_block(
         legs,
         "KSBC's item issue consolidation, one export per warehouse. The industry "
