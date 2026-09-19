@@ -864,6 +864,11 @@ function when(iso){
 
 // "What does the app hold for this stream?" — replaces the static blurb with
 // the only thing about a card that actually changes.
+//
+// One phrase, not a date AND a phrase: '19 Sep · today' was the same fact
+// twice, and the half nobody reads is the date. Recent days are named the way
+// a person names them; past a fortnight 'thirteen days ago' stops meaning
+// anything and the date says it better.
 function ago(iso){
   const then = new Date(iso), now = new Date();
   const d0 = new Date(then.getFullYear(), then.getMonth(), then.getDate());
@@ -871,11 +876,10 @@ function ago(iso){
   const days = Math.round((n0 - d0) / 86400000);
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
-  if (days < 30) return `${days} days ago`;
-  return then.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-}
-function stamp(iso){
-  return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+  if (days < 14) return `${days} days ago`;
+  const fmt = { day:'numeric', month:'short' };
+  if (then.getFullYear() !== now.getFullYear()) fmt.year = 'numeric';
+  return 'on ' + then.toLocaleDateString('en-GB', fmt);
 }
 
 // A build's state belongs on the card it came from, not in a banner over the
@@ -916,7 +920,7 @@ function paintCards(jobs){
 
     el.className = 'meta';
     el.innerHTML = ok
-      ? `<span class="dot"></span>Last upload <b>${stamp(ok)}</b> · ${ago(ok)}`
+      ? `<span class="dot"></span>Last uploaded <b>${ago(ok)}</b>`
       : `<span class="dot none"></span>Nothing uploaded yet`;
   });
 }
