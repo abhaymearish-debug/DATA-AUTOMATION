@@ -204,6 +204,37 @@ def _sweep_cache() -> None:
             pass
 
 
+def warm_cache() -> None:
+    """Parse anything not parsed yet, off the critical path.
+
+    A deploy comes up with an empty cache, and the first person to open the
+    daily report would otherwise pay for every day file in it. This runs on a
+    thread at startup: by the time anybody has signed in, the reading is done.
+    Best-effort - a failure here costs nothing but the speed it was buying.
+    """
+    steps = (
+        ("master data", lambda: load_master()),
+        ("shop day files", lambda: load_shop_daily_raws()),
+        ("secondary dispatch", lambda: secondary_lines()),
+        ("cumulative periods", lambda: [cumulative_lines(p["path"])
+                                        for p in cumulative_periods()]),
+        # A window that runs past the last cumulative pull is stitched from
+        # day files, which are read a second way - so warm that reading too.
+        ("day files, stitched", lambda: [_day_lines(f, load_master())
+                                         for f in shop_day_files().values()]),
+        ("warehouse stock", lambda: load_stock_rows()),
+    )
+    for what, run in steps:
+        try:
+            began = datetime.now()
+            run()
+            took = (datetime.now() - began).total_seconds()
+            if took > 0.5:
+                print(f"[warm] {what}: {took:.1f}s")
+        except Exception as exc:                       # noqa: BLE001
+            print(f"[warm] {what} skipped — {exc}")
+
+
 def canonical_warehouse(raw) -> str:
     """'WH-KOLLAM FL9-KLM-01/2026-27' -> 'KOLLAM'. Handles FL9 and RFL9."""
     if not raw:
@@ -328,12 +359,22 @@ def load_dispatch_lines(workbook: Path) -> list[dict]:
     Cached on the workbook's mtime, because a build replaces the file and the
     page must never serve figures from the version before it.
     """
-    key = f"lines:{workbook}:{workbook.stat().st_mtime_ns}"
+    key = f"lines:{workbook}:{workbook.stat().st_mtime_ns}:{_master_stamp()}"
     with _CACHE_LOCK:
         hit = _CACHE.get(key)
     if hit:
         return hit[1]
+    got = [dict(l, date=date.fromisoformat(l["date"]))
+           for l in _parsed("dispatch", workbook,
+                            lambda: [dict(l, date=l["date"].isoformat())
+                                     for l in _dispatch_lines_read(workbook)])]
+    with _CACHE_LOCK:
+        _CACHE[key] = (0.0, got)
+    return got
 
+
+def _dispatch_lines_read(workbook: Path) -> list[dict]:
+    """The workbook itself, read start to finish. Cached by its caller."""
     master = load_master()
     wb = openpyxl.load_workbook(workbook, read_only=True, data_only=True)
     sheets = [s for s in wb.sheetnames if "COMBINED DISPATCH" in s.upper()]
@@ -387,9 +428,6 @@ def load_dispatch_lines(workbook: Path) -> list[dict]:
             "cases": qty,
         })
     wb.close()
-
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, lines)
     return lines
 
 

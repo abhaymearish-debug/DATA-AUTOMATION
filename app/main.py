@@ -163,6 +163,12 @@ def _startup() -> None:
     for p in app.state.problems:
         print(f"[startup] PROBLEM: {p}")
 
+    # Every report is a read over uploaded workbooks, and openpyxl is the whole
+    # cost. It is paid once per file and then cached, but somebody has to pay
+    # it - and it should not be the first person to open a report after a
+    # deploy. A thread does the reading while the server is coming up.
+    threading.Thread(target=reports_api.warm_cache, name="warm", daemon=True).start()
+
 
 # ---------------------------------------------------------------------------
 # Auth plumbing
@@ -1848,15 +1854,41 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     # write this book. The row number is known - it is counted here - and the
     # cells are addressed directly, which is the same work done once.
     wide = len(headings)
+    figures_at = wide - 3          # the four measures always close the row
+    figures = "#,##0" if round_off else "#,##0.00"
     at = 3
 
-    def dress(row: int, font, fill=None, level: int = 0) -> None:
+    # Setting a cell's font, fill, border and format costs a recursive hash of
+    # each of those objects - openpyxl looks them up in the workbook's style
+    # tables - and sixty-five thousand cells is a hundred and eighty thousand
+    # of those hashes, which was the whole two seconds. Each distinct look is
+    # therefore built once, on a scratch sheet, and what the cells are handed
+    # afterwards is the finished index, not the objects.
+    from copy import copy as _copy
+    scratch = wb.create_sheet("_styles")
+
+    def look(font, fill=None, align=None, fmt="General"):
+        c = scratch.cell(row=1, column=1)
+        c.border = box
+        c.font = font
+        c.fill = fill if fill is not None else PatternFill()
+        c.alignment = align if align is not None else Alignment()
+        c.number_format = fmt
+        return _copy(c._style)
+
+    LOOKS = {}
+    for name, font, fill in (("shop", F_SHOP, None), ("shopband", F_SHOP, FILL_PAPER),
+                             ("brand", F_BRAND, None), ("pack", F_PACK, None),
+                             ("band", F_BAND, FILL_NAVY), ("grand", F_GRAND, FILL_GOLD)):
+        LOOKS[name] = (look(font, fill, AL_MID),            # the key columns
+                       look(font, fill),                    # the shop name
+                       look(font, fill, AL_RIGHT, figures)) # the four measures
+
+    def dress(row: int, name: str, level: int = 0) -> None:
+        keyed, plain, figure = LOOKS[name]
         for col in range(1, wide + 1):
-            cell = ws.cell(row=row, column=col)
-            cell.border = box
-            cell.font = font
-            if fill is not None:
-                cell.fill = fill
+            ws.cell(row=row, column=col)._style = _copy(
+                figure if col >= figures_at else keyed if col < 4 else plain)
         if level:
             ws.row_dimensions[row].outlineLevel = level
 
@@ -1877,43 +1909,35 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
             at += 1
             # Three collapsible levels, the way the screen folds: bond, then
             # shop, then the brand and pack lines under it.
-            dress(at, F_SHOP, FILL_PAPER if i % 2 else None, 1)
+            dress(at, "shopband" if i % 2 else "shop", 1)
 
             for brand in sorted(by_shop.get(code, {})):
                 packs = by_shop[code][brand]
                 sub = [sum(packs[pk][k] for pk in packs) for k in range(4)]
                 ws.append(["", "", "", f"    {brand}", *[round(v, 2) for v in sub]])
                 at += 1
-                dress(at, F_BRAND, None, 2)
+                dress(at, "brand", 2)
                 for pack in sorted(packs):
                     ws.append(["", "", "", f"        {pack}",
                                *[round(v, 2) for v in packs[pack]]])
                     at += 1
-                    dress(at, F_PACK, None, 3)
+                    dress(at, "pack", 3)
 
         ws.append([g["cluster"] or "", g["bond"], "", f"{g['bond'].title()} total",
                    *g["totals"]])
         at += 1
-        dress(at, F_BAND, FILL_NAVY)
+        dress(at, "band")
 
     # The grand total rounds once from the unrounded figures, never from the
     # bond totals - adding fifteen rounded numbers drifts.
     ws.append(["", "", "", "GRAND TOTAL", *data["total"]])
     at += 1
-    dress(at, F_GRAND, FILL_GOLD)
-
-    figures = "#,##0" if round_off else "#,##0.00"
-    for row in ws.iter_rows(min_row=4, min_col=5):
-        for cell in row:
-            cell.alignment = AL_RIGHT
-            cell.number_format = figures
-    for row in ws.iter_rows(min_row=4, min_col=1, max_col=3):
-        for cell in row:
-            cell.alignment = AL_MID
+    dress(at, "grand")
 
     widths = {"A": 9, "B": 18, "C": 12, "D": 36, "E": 13, "F": 13, "G": 13, "H": 13}
     for col, wide in widths.items():
         ws.column_dimensions[col].width = wide
+    wb.remove(scratch)
     ws.freeze_panes = "E4"
     ws.auto_filter.ref = f"A3:{last_col}{at - 1}"
     ws.sheet_properties.outlinePr.summaryBelow = True
