@@ -1267,10 +1267,12 @@ def brandwise_xlsx(
             c.number_format = fmt
         return c
 
-    def nice(iso):
-        if not iso:
+    def nice(value):
+        # The window arrives as dates, the span as ISO text - the band prints
+        # either.
+        if not value:
             return ""
-        d = date.fromisoformat(iso)
+        d = value if isinstance(value, date) else date.fromisoformat(str(value)[:10])
         return f"{d.day} {reports_pdf._MONTH_ABBR[d.month - 1]} {d.year}"
 
     span_dates = data.get("span") or {}
