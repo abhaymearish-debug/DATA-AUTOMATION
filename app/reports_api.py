@@ -2256,8 +2256,23 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
 
 
 def _secondary_days() -> set:
+    """The days a secondary upload answers for - not the days stock moved.
+
+    This counted dispatch lines, so a day whose export came back with nothing
+    on it - a genuine nil day, and there are several every month - was marked
+    on the calendar as a day nobody had uploaded. August 2026 read 15 of 31
+    against 22 files actually in: the seven nil days were being reported as
+    holes somebody still had to go and fill.
+
+    A day is answered when a file was uploaded for it. What that file then
+    says - a hundred lines or none - is the report's business, not the
+    calendar's. Days that only the month's built workbook still holds come
+    through the lines, which is why both halves are here.
+    """
     lines, _sources = secondary_lines()
-    return {l["date"] for l in lines if l.get("date")}
+    days = {l["date"] for l in lines if l.get("date")}
+    days |= {end for end, _path in secondary_raw_files()}
+    return days
 
 
 def _warehouse_days() -> set:
