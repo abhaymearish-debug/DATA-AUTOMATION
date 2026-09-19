@@ -9,7 +9,18 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libreoffice-calc \
         fonts-dejavu \
+        tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# The container runs on Kerala time. Everything the app stamps for a person to
+# read is UTC with its offset attached, so the browser has always shown those
+# correctly - but a few things carry the machine's own local time and have no
+# room for an offset. A zip records each file's time with no timezone at all,
+# so a book of bond PDFs built at 12:25 in Kannur unpacked as 6:55 in Finder.
+# `date.today()` is the other one: between midnight and half past five, a UTC
+# machine still thinks it is yesterday, and a day uploaded then would file
+# itself under the wrong date.
+ENV TZ=Asia/Kolkata
 
 WORKDIR /srv
 

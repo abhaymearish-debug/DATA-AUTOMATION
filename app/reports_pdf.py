@@ -1133,7 +1133,7 @@ def _pb_title(c, group: str, month_label: str, line: str, first: bool) -> float:
         c.drawString(PB_L, PB_H - 48.0, group)
         c.setFillColor(PB_SUB)
         c.setFont(BOOK, 9)
-        c.drawString(PB_L, PB_H - 64.0, f"Purchase Instruction  ·  1 {month_label.upper()}")
+        c.drawString(PB_L, PB_H - 64.0, f"Purchase Instruction  ·  {month_label.upper()}")
         c.setFillColor(PB_GOLD_T)
         c.setFont(BOLD, 9)
         c.drawString(PB_L, PB_H - 76.0, line)
@@ -1148,7 +1148,7 @@ def _pb_title(c, group: str, month_label: str, line: str, first: bool) -> float:
     c.drawString(PB_L, PB_H - 22.0, group)
     c.setFillColor(PB_GOLD_T)
     c.setFont(BOLD, 8.5)
-    _pb_right(c, PB_R, PB_H - 22.0, f"Purchase Instruction · 1 {month_label.upper()}",
+    _pb_right(c, PB_R, PB_H - 22.0, f"Purchase Instruction · {month_label.upper()}",
               BOLD, 8.5)
     c.setFillColor(PB_GOLD)
     c.rect(0, PB_H - PB_CONT_H - 2.0, PB_W, 2.0, stroke=0, fill=1)
@@ -1182,8 +1182,25 @@ def build_pi_group_pdf(group: str, month_label: str, brands: list,
     c = pdfcanvas.Canvas(str(out_path), pagesize=(PB_W, PB_H))
     c.setTitle(f"{group} - Purchase Instruction {month_label}")
 
-    line = (f"{len(shops)} shop{'' if len(shops) == 1 else 's'}  ·  "
-            f"{len(brands)} brand{'' if len(brands) == 1 else 's'} on indent")
+    def on_indent(cells: dict) -> int:
+        """Brands this sheet actually instructs a buy of.
+
+        The instruction is RL, RQ and MQ; L3MS is what the shop sold over the
+        last three months and is history, not an indent. So a brand with a
+        year of sales behind it and nothing asked for this month does not
+        count - which is the difference between 'eight brands' on every block
+        and a number worth reading.
+        """
+        return sum(1 for b in brands
+                   if any((cells.get(b["key"]) or {}).get(k)
+                          for k, _ in PB_COLS if k != "l3ms"))
+
+    def brand_chip(cells: dict) -> str:
+        n = on_indent(cells)
+        return f"{n} brand{'' if n == 1 else 's'}"
+
+    line = (f"{len(shops)} shop{'' if len(shops) == 1 else 's'}  \u00b7  "
+            f"{brand_chip(total_row.get('cells') or {})} on indent")
     y = _pb_title(c, group, month_label, line, first=True)
 
     def rows_for(cells):
@@ -1204,7 +1221,7 @@ def build_pi_group_pdf(group: str, month_label: str, brands: list,
             c.showPage()
             y = _pb_title(c, group, month_label, line, first=False)
         y = _pb_block(c, y, str(shop.get("label", "")),
-                      f"{len(brands)} brand{'' if len(brands) == 1 else 's'}",
+                      brand_chip(shop.get("cells") or {}),
                       rows_for(shop.get("cells") or {}),
                       shop.get("total") or {})
         y -= 12.0
