@@ -273,9 +273,8 @@ async function load(refresh){
   Cal.setData(d.days_with_data || [], []);
   Cal.init(FROM, TO, onPick);
   render(d);
-  foot.textContent =
-    `${d.rows.filter(r=>r.kind==='row').length} ${d.label.toLowerCase()}s · ${d.brands.length} brands · `
-    + `source: ${d.workbook}`;
+  // The row count, the brand columns and the period are all on screen already.
+  foot.textContent = '';
 }
 
 function fill(sel, values, placeholder){

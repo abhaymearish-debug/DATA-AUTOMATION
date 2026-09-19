@@ -348,13 +348,10 @@ function render(d){
   grid.querySelector('tbody').innerHTML = html;
   for (const k of open) paint(k, span);
 
-  const g = d.rows.find(r => r.kind === 'grand');
-  foot.textContent = g
-    ? `${esc(d.month_label)} · ${g.shops} shops · MQ ${num(g.total.mq)} cs · `
-      + `RL ${num(g.total.rl)} + RQ ${num(g.total.rq)} · L3MS ${num(g.total.l3ms)} btl`
-      + (d.prior ? ` · ${esc(d.prior_label)} MQ ${num(g.prior_mq)} (${g.delta > 0 ? '+' : ''}${num(g.delta)})` : '')
-      + (d.unknown_codes.length ? ` · unknown brand codes: ${d.unknown_codes.join(', ')}` : '')
-    : '';
+  // The grand total row says all of this. The line only speaks when a brand
+  // code came back that the master data does not know.
+  foot.textContent = d.unknown_codes.length
+    ? `Unknown brand codes: ${d.unknown_codes.join(', ')}` : '';
 }
 
 function toggle(key){
