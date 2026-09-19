@@ -1792,6 +1792,20 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     INK, HAIR = "FF28324A", "FFD9DEE9"
     thin = Side(style="thin", color=HAIR)
     box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    # Eight thousand rows is sixty-five thousand cells, and openpyxl charges
+    # for every style OBJECT, not for every cell it is put on: building a new
+    # Font per cell took twenty-six seconds to write this book. Built once
+    # here and shared, it is a couple.
+    F_SHOP = Font(bold=True, size=10, color=INK)
+    F_BRAND = Font(bold=True, size=9, color=INK)
+    F_PACK = Font(size=9, color="FF6B7280")
+    F_BAND = Font(bold=True, color=GOLD, size=10)
+    F_GRAND = Font(bold=True, color=NAVY, size=11)
+    FILL_PAPER = PatternFill("solid", fgColor=PAPER)
+    FILL_NAVY = PatternFill("solid", fgColor=NAVY)
+    FILL_GOLD = PatternFill("solid", fgColor=GOLD)
+    AL_RIGHT = Alignment(horizontal="right")
+    AL_MID = Alignment(horizontal="center")
 
     wb = Workbook()
     ws = wb.active
@@ -1829,6 +1843,24 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
         cell.border = box
     ws.row_dimensions[3].height = 22
 
+    # ws[ws.max_row] looks harmless and is quadratic: max_row walks the sheet,
+    # so dressing eight thousand rows one at a time took twenty-two seconds to
+    # write this book. The row number is known - it is counted here - and the
+    # cells are addressed directly, which is the same work done once.
+    wide = len(headings)
+    at = 3
+
+    def dress(row: int, font, fill=None, level: int = 0) -> None:
+        for col in range(1, wide + 1):
+            cell = ws.cell(row=row, column=col)
+            cell.border = box
+            cell.font = font
+            if fill is not None:
+                cell.fill = fill
+        if level:
+            ws.row_dimensions[row].outlineLevel = level
+
+
     detail = reports_api.window_lines(chosen["start"], chosen["end"])
     lines = {} if "error" in detail else detail["lines"]
     by_shop: dict = {}
@@ -1842,62 +1874,48 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
             ws.append([g["cluster"] or "", g["bond"],
                        int(code) if code.isdigit() and not code.startswith("0") else code,
                        shop["name"], *shop["values"]])
-            r = ws.max_row
+            at += 1
             # Three collapsible levels, the way the screen folds: bond, then
             # shop, then the brand and pack lines under it.
-            ws.row_dimensions[r].outlineLevel = 1
-            band = PatternFill("solid", fgColor=PAPER) if i % 2 else None
-            for cell in ws[r]:
-                cell.border = box
-                cell.font = Font(bold=True, size=10, color=INK)
-                if band:
-                    cell.fill = band
+            dress(at, F_SHOP, FILL_PAPER if i % 2 else None, 1)
 
             for brand in sorted(by_shop.get(code, {})):
                 packs = by_shop[code][brand]
                 sub = [sum(packs[pk][k] for pk in packs) for k in range(4)]
                 ws.append(["", "", "", f"    {brand}", *[round(v, 2) for v in sub]])
-                ws.row_dimensions[ws.max_row].outlineLevel = 2
-                for cell in ws[ws.max_row]:
-                    cell.border = box
-                    cell.font = Font(bold=True, size=9, color=INK)
+                at += 1
+                dress(at, F_BRAND, None, 2)
                 for pack in sorted(packs):
                     ws.append(["", "", "", f"        {pack}",
                                *[round(v, 2) for v in packs[pack]]])
-                    ws.row_dimensions[ws.max_row].outlineLevel = 3
-                    for cell in ws[ws.max_row]:
-                        cell.border = box
-                        cell.font = Font(size=9, color="FF6B7280")
+                    at += 1
+                    dress(at, F_PACK, None, 3)
 
         ws.append([g["cluster"] or "", g["bond"], "", f"{g['bond'].title()} total",
                    *g["totals"]])
-        for cell in ws[ws.max_row]:
-            cell.fill = PatternFill("solid", fgColor=NAVY)
-            cell.font = Font(bold=True, color=GOLD, size=10)
-            cell.border = box
+        at += 1
+        dress(at, F_BAND, FILL_NAVY)
 
     # The grand total rounds once from the unrounded figures, never from the
     # bond totals - adding fifteen rounded numbers drifts.
     ws.append(["", "", "", "GRAND TOTAL", *data["total"]])
-    for cell in ws[ws.max_row]:
-        cell.fill = PatternFill("solid", fgColor=GOLD)
-        cell.font = Font(bold=True, color=NAVY, size=11)
-        cell.border = box
+    at += 1
+    dress(at, F_GRAND, FILL_GOLD)
 
     figures = "#,##0" if round_off else "#,##0.00"
     for row in ws.iter_rows(min_row=4, min_col=5):
         for cell in row:
-            cell.alignment = Alignment(horizontal="right")
+            cell.alignment = AL_RIGHT
             cell.number_format = figures
     for row in ws.iter_rows(min_row=4, min_col=1, max_col=3):
         for cell in row:
-            cell.alignment = Alignment(horizontal="center")
+            cell.alignment = AL_MID
 
     widths = {"A": 9, "B": 18, "C": 12, "D": 36, "E": 13, "F": 13, "G": 13, "H": 13}
     for col, wide in widths.items():
         ws.column_dimensions[col].width = wide
     ws.freeze_panes = "E4"
-    ws.auto_filter.ref = f"A3:{last_col}{ws.max_row - 1}"
+    ws.auto_filter.ref = f"A3:{last_col}{at - 1}"
     ws.sheet_properties.outlinePr.summaryBelow = True
     ws.sheet_view.showGridLines = False
 
