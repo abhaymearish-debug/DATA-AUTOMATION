@@ -278,23 +278,6 @@
    handed over here rather than fetched. #}
 <script type="application/json" data-source="srcLine">{{ source_block|tojson }}</script>
 
-<p class="status">
-  {% if prev %}Compared against {{ prev.short }}.{% else %}Last month's cumulative for this
-    window has not been uploaded, so LM and Trend have nothing to stand on and read
-    &mdash;.{% endif %}
-  Cases{% if round_off %}, rounded to whole numbers{% endif %}. Every figure is rounded from its
-  own unrounded total, so a column can read one apart from the sum of the rows above it and both
-  be right.
-  {% if basis %}
-    Averages are over
-    <b>{{ basis.open }}</b> trading day{{ '' if basis.open == 1 else 's' }}{% if basis.closed %} —
-      {{ basis.span }} in the window, less {{ basis.closed|length }} the leave calendar says nobody
-      opened ({{ basis.closed|join(', ') }}){% endif %}.
-    {% if basis.closed %}<a class="lv" href="/settings/leaves/shop?month={{ basis.closed[0][:7] }}">Shop leaves</a>{% endif %}
-  {% else %}
-    Averages are over {{ chosen.days }} day{{ '' if chosen.days == 1 else 's' }}.
-  {% endif %}
-</p>
 {% endif %}
 {% endif %}
 {% endblock %}

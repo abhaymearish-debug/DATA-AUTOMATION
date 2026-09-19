@@ -222,14 +222,6 @@
 {# Server-rendered, so the block travels with the page rather than being fetched. #}
 <script type="application/json" data-source="srcLine">{{ data.source_block|default({})|tojson }}</script>
 
-<p class="status">
-  Cases. <strong>Total liquidation is shop plus Fed/Bar</strong>, not shop plus secondary — secondary
-  is stock moving down the chain, so adding it would count every case a shop both received and sold.
-  Shop and total average over the {{ data.days.span }} days this window spans{% if
-    data.days.prev_span and data.days.prev_span != data.days.span %} and the
-    {{ data.days.prev_span }} the one it is set against does{% endif %}; the two dispatch
-  columns average over the {{ data.days.dispatch[0] }} days a dispatch actually went out.
-</p>
 {% endif %}
 {% endblock %}
 
