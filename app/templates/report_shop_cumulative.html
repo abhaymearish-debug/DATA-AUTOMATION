@@ -174,7 +174,9 @@
               border-top:1px solid var(--line); }
 
   /* The last row of the table, not a card after it. */
-  .grand { display:flex; align-items:stretch; gap:11px; min-height:54px;
+  /* The total closes the table the way the header opens it, so the two bands
+     are the same height. */
+  .grand { display:flex; align-items:stretch; gap:11px; min-height:48px;
            padding:0 15px; background:var(--gold); color:#1B2A4A; font-weight:700; }
   .grand .pad, .grand .nm { align-self:center; }
   .grand .pad { width:10px; flex:none; }
