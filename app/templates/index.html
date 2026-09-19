@@ -177,6 +177,58 @@
   .act.danger { border-color:#FCA5A5; color:#991B1B; }
   .act.danger:hover { background:#FEF2F2; }
   .empty { color:var(--muted); font-size:13.5px; padding:20px 2px; text-align:center; }
+
+  /* Which month a batch is for. The files say so themselves, but a folder of
+     295 of them is dropped in without opening one, so the month is stated
+     here and checked against what the files declare. */
+  .mpick { display:grid; grid-template-columns:1.5fr 1fr; gap:9px; margin-top:4px; }
+  .mpick select { width:100%; padding:10px 32px 10px 12px; border:1px solid var(--line);
+                  border-radius:10px; background:var(--card); color:var(--ink);
+                  font:inherit; font-size:14px; font-weight:650; cursor:pointer;
+                  appearance:none; -webkit-appearance:none;
+                  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%236B7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+                  background-repeat:no-repeat; background-position:right 11px center;
+                  background-size:11px; }
+  .mpick select:hover { background-color:var(--hover); }
+  .mpick select:focus { outline:none; border-color:var(--blue); }
+
+  /* The receipt. 295 files go in at once and nobody opens them one by one,
+     so the app says what it made of every last one of them. */
+  .rsum { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
+          padding-bottom:13px; margin-bottom:14px; border-bottom:1px solid var(--line); }
+  .rsum b { font-size:16px; font-weight:700; }
+  .rsum span { font-size:12.5px; color:var(--muted); }
+  .tiles { display:grid; gap:9px; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); }
+  .tile { border:1px solid var(--line); border-radius:11px; padding:11px 12px;
+          background:var(--card); }
+  .tile .n { font-size:22px; font-weight:750; line-height:1.05; color:var(--ink); }
+  .tile .k { font-size:10.5px; letter-spacing:.5px; text-transform:uppercase;
+             color:var(--muted); font-weight:700; margin-top:6px; line-height:1.35; }
+  .tile.good { background:#F0FDF4; border-color:#BBF7D0; }
+  .tile.good .n { color:#065F46; }
+  .tile.warn { background:#FFFBEB; border-color:#FDE68A; }
+  .tile.warn .n { color:#92400E; }
+  .tile.hot  { background:#FEF2F2; border-color:#FECACA; }
+  .tile.hot .n { color:#991B1B; }
+  .tile.nil { background:var(--row); border-color:var(--line); }
+  .tile.nil .n { color:var(--zero); }
+  .rnote { font-size:12.5px; color:var(--muted); margin-top:14px; line-height:1.55; }
+  .rnote b { color:var(--ink); font-weight:650; }
+  .rlist { margin-top:15px; border-top:1px solid var(--line); padding-top:13px; }
+  .rlist h5 { margin:0 0 9px; font-size:11px; letter-spacing:.6px; text-transform:uppercase;
+              color:var(--muted); font-weight:700; }
+  .rrow { display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:8px;
+          font-size:12.5px; }
+  .rrow:nth-child(even) { background:var(--row); }
+  .rrow .who { font-weight:650; color:var(--ink); flex:1; min-width:0;
+               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rrow .why { flex:none; color:var(--muted); }
+  .rtag { flex:none; min-width:74px; text-align:center; font-size:10px; font-weight:700;
+          letter-spacing:.4px; text-transform:uppercase; border-radius:20px; padding:3px 8px; }
+  .rtag.blank { background:#FEF3C7; color:#92400E; }
+  .rtag.other_month { background:#FFEDD5; color:#9A3412; }
+  .rtag.duplicate { background:#E0E7FF; color:#3730A3; }
+  .rtag.failed { background:#FEE2E2; color:#991B1B; }
 </style>
 {% endblock %}
 
@@ -256,6 +308,16 @@
         <input type="hidden" id="upFrom"><input type="hidden" id="upTo">
       </div>
 
+      <!-- A batch of instructions: the month it is for, stated up front. -->
+      <div id="upMonth" hidden>
+        <label>Month this instruction is for</label>
+        <div class="mpick">
+          <select id="upMon"></select>
+          <select id="upYr"></select>
+        </div>
+        <div class="rangeSay" id="monSay"></div>
+      </div>
+
       <label id="upFilesLabel">File</label>
       <label class="drop" id="upDrop">
         <input type="file" id="upFiles" accept=".xlsx,.xls">
@@ -301,6 +363,16 @@
     <footer><button class="btn" onclick="closeHistory()">Close</button></footer>
   </div>
 </div>
+
+<!-- what landed -->
+<div class="veil" id="rVeil" onclick="if(event.target===this)closeReceipt()">
+  <div class="modal wide">
+    <header><h4 id="rTitle">Upload receipt</h4>
+      <button type="button" onclick="closeReceipt()">&times;</button></header>
+    <div class="body scroll" id="rBody"></div>
+    <footer><button class="btn primary" onclick="closeReceipt()">Done</button></footer>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -334,9 +406,13 @@ function openUpload(c){
   // cannot see is a date you cannot check - so it is shown and editable, just
   // filled in for you the moment a file is chosen.
   // A batch names its own month - every file in it carries a Report Month,
-  // and ~295 of them agreeing beats one date typed into a box - so that card
-  // gets no date control at all.
+  // and ~295 of them agreeing beats one date typed into a box. The month is
+  // still picked here, because a folder is dropped in without opening a file:
+  // it is checked against what the files declare, and the upload is refused
+  // if they disagree.
   upWhen.hidden = (c.mode === 'batch');
+  upMonth.hidden = !wantsMonth(c);
+  if (!upMonth.hidden) initMonth();
   upDayLabel.textContent =
       c.mode === 'range' ? 'Days this pull covers'
     : c.mode === 'files' ? 'Date this export covers (read from the file name)'
@@ -409,11 +485,46 @@ function saySpan(){
   }
 }
 
+/* ---------------- the month a batch is for ----------------
+   Only the instruction needs it: the issue consolidation states its own date
+   range in every file and is uploaded a period at a time. */
+
+function wantsMonth(c){ return c.mode === 'batch' && c.stream === 'purchase_instruction'; }
+
+function initMonth(){
+  if (upMon.options.length) { sayMonth(); return; }
+  const now = new Date();
+  upMon.innerHTML = MONTH_NAMES.map((m, i) =>
+    `<option value="${i + 1}">${m}</option>`).join('');
+  const y = now.getFullYear();
+  upYr.innerHTML = [y - 2, y - 1, y, y + 1].map(v =>
+    `<option value="${v}">${v}</option>`).join('');
+  upMon.value = now.getMonth() + 1;
+  upYr.value = y;
+  upMon.onchange = upYr.onchange = () => { refreshName(); sayMonth(); };
+  sayMonth();
+}
+
+function monthValue(){
+  return `${upYr.value}-${String(upMon.value).padStart(2,'0')}`;
+}
+
+function monthWords(){
+  return `${MONTH_NAMES[+upMon.value - 1]} ${upYr.value}`;
+}
+
+function sayMonth(){
+  monSay.textContent = 'Every file must name ' + monthWords()
+                     + ' as its Report Month.';
+}
+
 function refreshName(){
   if (!card) return;
   if (card.mode === 'batch'){
     const n = upFiles.files.length;
-    upName.value = n ? `${card.title} - ${n} file${n > 1 ? 's' : ''}` : card.title;
+    const files = n ? ` - ${n} file${n > 1 ? 's' : ''}` : '';
+    const when = wantsMonth(card) && upMon.options.length ? ` - ${monthWords()}` : '';
+    upName.value = card.title + when + files;
   }
   else if (card.mode === 'day')   upName.value = `${card.title} - ${fmt(upDate.value)}`;
   else if (card.mode === 'range') upName.value = `${card.title} - ${fmt(upFrom.value)} to ${fmt(upTo.value)}`;
@@ -511,6 +622,7 @@ async function submitUpload(ev){
   const fd = new FormData();
   for (const f of upFiles.files) fd.append('files', f);
 
+  if (wantsMonth(card)) fd.append('covers_date', monthValue() + '-01');
   if (card.mode === 'day') fd.append('covers_date', upDate.value);
   if (card.mode === 'files' && upDate.value) fd.append('covers_date', upDate.value);
   if (card.mode === 'range'){
@@ -530,6 +642,7 @@ async function submitUpload(ev){
     if (!res.ok) throw new Error(data.error || data.detail || whyFailed(res));
     closeUpload();
     poll(true);
+    if (data.receipt) showReceipt(data.receipt);
   } catch(e){
     upErr.textContent = e.message;
   } finally {
@@ -560,6 +673,71 @@ function whyFailed(res){
     return 'That upload is too large for the server to accept.';
   return `The upload failed and the server did not say why (HTTP ${res.status}).`;
 }
+
+/* ---------------- what landed ----------------
+   A month of instructions is ~295 files that nobody opens one by one. So the
+   app accounts for every one of them: filed, blank, a duplicate, for another
+   month, or unreadable - with the file names for anything that is not filed. */
+
+const RC_WORDS = {
+  blank:       'no instruction lines',
+  other_month: 'for another month - not filed',
+  duplicate:   'second file for the same shop - not filed',
+  failed:      'could not be read',
+};
+
+function tile(n, k, look){
+  return `<div class="tile ${n ? look : 'nil'}"><div class="n">${n}</div>`
+       + `<div class="k">${k}</div></div>`;
+}
+
+function showReceipt(r){
+  const filed = r.ok + r.blank;
+  const bad = r.failed + r.other_month + r.duplicate;
+  rTitle.textContent = `${r.label} instruction — what landed`;
+
+  let h = `<div class="rsum"><b>${r.files} file${r.files === 1 ? '' : 's'} read</b>`
+        + `<span>${filed} filed for ${esc(r.label)}`
+        + (bad ? ` · ${bad} not filed` : '') + `</span></div>`;
+
+  h += '<div class="tiles">'
+     + tile(r.ok, 'With an instruction', 'good')
+     + tile(r.blank, 'Blank — nothing to buy', 'warn')
+     + tile(r.duplicate, 'Duplicate shop', 'warn')
+     + tile(r.other_month, 'Another month', 'warn')
+     + tile(r.failed, 'Unreadable', 'hot')
+     + '</div>';
+
+  h += `<div class="rnote">Filed under <b>${esc(r.label)}</b>: `
+     + `<b>${r.shops}</b> shop${r.shops === 1 ? '' : 's'}`
+     + (r.warehouses ? ` across <b>${r.warehouses}</b> warehouses` : '') + '. '
+     + (r.blank ? `A blank sheet is a real answer — KSBC gave that shop nothing this month — `
+                + `so those ${r.blank} are kept and counted as zero.` : '')
+     + '</div>';
+
+  if (r.missing_n){
+    const names = (r.missing || []).map(esc).join(', ');
+    h += `<div class="rnote"><b>${r.missing_n}</b> shop`
+       + `${r.missing_n === 1 ? '' : 's'} in master data had no file in this batch`
+       + (names ? `: ${names}${r.missing_n > (r.missing || []).length ? ' …' : ''}` : '')
+       + '.</div>';
+  }
+
+  const probs = r.problems || [];
+  if (probs.length){
+    h += '<div class="rlist"><h5>Every file that is not a plain instruction</h5>'
+       + probs.map(x =>
+           `<div class="rrow"><span class="rtag ${x.state}">${x.state.replace('_',' ')}</span>`
+         + `<span class="who">${esc(x.shop || x.name || '')}</span>`
+         + `<span class="why">${esc(x.why || RC_WORDS[x.state] || '')}</span></div>`).join('')
+       + '</div>';
+  }
+
+  rBody.innerHTML = h;
+  rVeil.classList.add('on');
+}
+
+function closeReceipt(){ rVeil.classList.remove('on'); }
 
 /* ---------------- card state ---------------- */
 

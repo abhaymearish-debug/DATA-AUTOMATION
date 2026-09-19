@@ -22,6 +22,12 @@
   .row .me { font-size:10px; letter-spacing:.6px; text-transform:uppercase;
              color:var(--muted); border:1px solid var(--line); border-radius:20px;
              padding:2px 9px; }
+  .row .own { font-size:10px; letter-spacing:.6px; text-transform:uppercase;
+              font-weight:700; color:#7A5200; background:var(--gold);
+              border-radius:20px; padding:2px 9px; }
+  .hint { font-size:12.5px; color:var(--muted); margin-top:16px; padding-top:14px;
+          border-top:1px solid var(--line); line-height:1.55; }
+  .hint b { color:var(--ink); font-weight:650; }
   .row .sp { margin-left:auto; }
   .note { background:#ECFDF5; border:1px solid #A7F3D0; color:#065F46;
           border-radius:10px; padding:11px 14px; font-size:13.5px; margin-bottom:16px;
@@ -38,13 +44,15 @@
 
 <div class="wrap">
   <h3>Who can sign in</h3>
-  <p class="sub">Anyone listed here can open this app and see every report in it.</p>
+  <p class="sub">Anyone listed here can open this app and see every report in it.
+    Only the owner can add or remove an account.</p>
   {% for p in people %}
     <div class="row">
       <span class="who">{{ p }}</span>
+      {% if p == owner %}<span class="own">owner</span>{% endif %}
       {% if p == user %}<span class="me">you</span>{% endif %}
       <span class="sp">
-        {% if p != user %}
+        {% if can_manage and p != user and p != owner %}
         <form method="post" action="/settings/people/remove"
               onsubmit="return confirm('Remove {{ p }}? They will not be able to sign in again.')">
           <input type="hidden" name="email" value="{{ p }}">
@@ -54,8 +62,17 @@
       </span>
     </div>
   {% endfor %}
+  <div class="hint">
+    {% if can_manage %}
+      You own this install. Nobody else can add or remove an account, and your
+      own account cannot be removed from inside the app.
+    {% else %}
+      <b>{{ owner }}</b> owns this install. Ask them to add or remove an account.
+    {% endif %}
+  </div>
 </div>
 
+{% if can_manage %}
 <div class="wrap">
   <h3>Add someone</h3>
   <p class="sub">
@@ -77,4 +94,5 @@
     <div style="margin-top:18px"><button class="act primary" type="submit">Add account</button></div>
   </form>
 </div>
+{% endif %}
 {% endblock %}

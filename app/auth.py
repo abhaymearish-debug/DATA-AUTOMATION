@@ -123,6 +123,74 @@ def save_users(users: dict[str, str]) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# The owner
+#
+# Everyone who can sign in reads every report; only one account manages who
+# those people are. Without this, any colleague could remove any other - the
+# install included its own owner - and the only way back was wiping the auth
+# file on the server.
+# ---------------------------------------------------------------------------
+
+
+def _owner_file() -> Path:
+    return config.WORKSPACE_ROOT / "_auth" / "owner.json"
+
+
+def set_owner(email: str) -> None:
+    email = (email or "").strip().lower()
+    if not email:
+        return
+    f = _owner_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"email": email}, indent=2))
+    try:
+        os.chmod(f, 0o600)
+    except OSError:
+        pass
+
+
+def owner() -> str:
+    """The one account that can add or remove people.
+
+    Claimed by the first account created. An install that was already running
+    before this existed has no file, so the first account in users.json - the
+    one the handover page made - is taken as the owner and written down: the
+    same answer, without anybody having to do anything.
+
+    KSD_OWNER_EMAIL overrides both, and is the way back in. The owner cannot be
+    removed from inside the app, so the only remaining lock-out is losing that
+    account, and this settles it in Render without touching any data.
+    """
+    forced = (getattr(config, "OWNER_EMAIL", "") or "").strip().lower()
+    if forced:
+        return forced
+    f = _owner_file()
+    if f.is_file():
+        try:
+            got = json.loads(f.read_text())
+            email = str(got.get("email") or "").strip().lower()
+            if email:
+                return email
+        except (json.JSONDecodeError, OSError):
+            pass
+    users = load_users()
+    if not users:
+        return ""
+    # Accounts are written in the order they were created, so the first one is
+    # the account that set this install up. Colleagues added later were invited
+    # from inside the app and are not on the deploy-time allowlist, so when
+    # that allowlist says anything, it settles it.
+    first = next((e for e in users if e in config.ALLOWED_EMAILS), next(iter(users)))
+    set_owner(first)
+    return first
+
+
+def is_owner(email: str) -> bool:
+    who = owner()
+    return bool(who) and (email or "").strip().lower() == who
+
+
 def set_password(email: str, password: str) -> None:
     """Used by scripts/bootstrap_user.py. Refuses addresses outside the allowlist."""
     email = email.strip().lower()

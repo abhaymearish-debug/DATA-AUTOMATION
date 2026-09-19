@@ -970,3 +970,231 @@ def build_target_pdf(data: dict, out_path: Path, *, rows: list | None = None,
     c.showPage()
     c.save()
     return out_path
+
+
+# ---------------------------------------------------------------------------
+# Purchase instruction - one sheet per bond
+#
+# MEASURED, NOT APPROXIMATED
+# --------------------------
+# Read out of the content stream of the Aluva sheet the office already uses:
+#
+#     page          A4 portrait, 595.28 x 841.89
+#     title band    85pt navy; house name Bold 10 gold at (20, 819.89),
+#                   bond Bold 22 white at 793.89, the line under it Book 9 in
+#                   0.706,0.765,0.843 at 777.89, the count Bold 9 gold at
+#                   765.89, closed by a 3pt gold rule
+#     block bar     24pt navy from x=20, width 555.28, with a 4pt gold tab;
+#                   title Bold 11 white at x=32, right label Bold 9 gold
+#     caption       14pt on 0.94,0.95,0.97, Oblique 7.5 in 0.392,0.431,0.49
+#     head row      18pt navy to x=485, gold from there; labels Bold 8.5
+#     data row      18pt, white over 0.96,0.97,0.99, the MQ block on cream
+#     total row     20pt on 0.9,0.93,0.97, Bold 9
+#     columns       brand at x=30; figures right-aligned at 314.78, 395.1,
+#                   475.1, 565.4
+#     a nil         prints as a full stop, not a zero and not a dash
+# ---------------------------------------------------------------------------
+
+PB_W, PB_H = 595.28, 841.89
+PB_L, PB_R = 20.0, 575.28
+PB_TITLE_H = 85.0
+PB_RULE_H = 3.0
+PB_BAR_H = 24.0
+PB_TAB_W = 4.0
+PB_CAP_H = 14.0
+PB_HEAD_H = 18.0
+PB_ROW_H = 18.0
+PB_TOT_H = 20.0
+PB_MQ_X = 485.0
+PB_BOT = 34.0
+PB_CONT_H = 34.0
+
+PB_NAVY = colors.Color(0.04, 0.17, 0.32)
+PB_NAVY_T = colors.Color(0.043, 0.173, 0.322)
+PB_GOLD = colors.Color(0.98, 0.69, 0.10)
+PB_GOLD_T = colors.Color(0.98, 0.686, 0.098)
+PB_SUB = colors.Color(0.706, 0.765, 0.843)
+PB_CAP_BG = colors.Color(0.94, 0.95, 0.97)
+PB_CAP_T = colors.Color(0.392, 0.431, 0.49)
+PB_INK = colors.Color(0.118, 0.137, 0.176)
+PB_ZEBRA = colors.Color(0.96, 0.97, 0.99)
+PB_CREAM = colors.Color(1.0, 0.98, 0.90)
+PB_TOTBG = colors.Color(0.90, 0.93, 0.97)
+PB_TOTMQ = colors.Color(1.0, 0.92, 0.70)
+PB_WHITE = colors.Color(1, 1, 1)
+
+# right edges, measured
+PB_COLS = [("l3ms", 314.78), ("rl", 395.10), ("rq", 475.10), ("mq", 565.40)]
+PB_LABELS = {"l3ms": "L3MS", "rl": "RL", "rq": "RQ", "mq": "MQ"}
+
+
+def _pb_num(value) -> str:
+    """A nil is a full stop here. The office's sheet prints it that way, and a
+    page of zeros reads as data when it is the absence of any."""
+    n = int(value or 0)
+    if not n:
+        return "."
+    # Indian grouping, the way every other figure in this app is written.
+    s = str(abs(n))
+    if len(s) > 3:
+        head, tail = s[:-3], s[-3:]
+        parts = []
+        while len(head) > 2:
+            parts.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            parts.insert(0, head)
+        s = ",".join(parts) + "," + tail
+    return ("-" if n < 0 else "") + s
+
+
+def _pb_right(c, x: float, y: float, text: str, font: str, size: float) -> None:
+    c.setFont(font, size)
+    c.drawString(x - _w(text, font, size), y, text)
+
+
+def _pb_block(c, y: float, title: str, right: str, rows: list, totals: dict,
+              caption: str = "") -> float:
+    """One bar, its table, its total. Returns the y it finished at."""
+    c.setFillColor(PB_NAVY)
+    c.rect(PB_L, y - PB_BAR_H, PB_R - PB_L, PB_BAR_H, stroke=0, fill=1)
+    c.setFillColor(PB_GOLD)
+    c.rect(PB_L, y - PB_BAR_H, PB_TAB_W, PB_BAR_H, stroke=0, fill=1)
+    c.setFillColor(PB_WHITE)
+    c.setFont(BOLD, 11)
+    c.drawString(32.0, y - 16.0, title)
+    if right:
+        c.setFillColor(PB_GOLD_T)
+        _pb_right(c, PB_R, y - 16.0, right, BOLD, 9)
+    y -= PB_BAR_H
+
+    if caption:
+        c.setFillColor(PB_CAP_BG)
+        c.rect(PB_L, y - PB_CAP_H, PB_R - PB_L, PB_CAP_H, stroke=0, fill=1)
+        c.setFillColor(PB_CAP_T)
+        c.setFont("Helvetica-Oblique", 7.5)
+        c.drawString(32.0, y - 10.0, caption)
+        y -= PB_CAP_H
+
+    c.setFillColor(PB_NAVY)
+    c.rect(PB_L, y - PB_HEAD_H, PB_MQ_X - PB_L, PB_HEAD_H, stroke=0, fill=1)
+    c.setFillColor(PB_GOLD)
+    c.rect(PB_MQ_X, y - PB_HEAD_H, PB_R - PB_MQ_X, PB_HEAD_H, stroke=0, fill=1)
+    c.setFillColor(PB_GOLD_T)
+    c.setFont(BOLD, 8.5)
+    c.drawString(30.0, y - 12.0, "BRAND")
+    for key, edge in PB_COLS:
+        c.setFillColor(PB_NAVY_T if key == "mq" else PB_GOLD_T)
+        _pb_right(c, edge, y - 12.0, PB_LABELS[key], BOLD, 8.5)
+    y -= PB_HEAD_H
+
+    for i, row in enumerate(rows):
+        c.setFillColor(PB_WHITE if i % 2 == 0 else PB_ZEBRA)
+        c.rect(PB_L, y - PB_ROW_H, PB_MQ_X - PB_L, PB_ROW_H, stroke=0, fill=1)
+        c.setFillColor(PB_CREAM)
+        c.rect(PB_MQ_X, y - PB_ROW_H, PB_R - PB_MQ_X, PB_ROW_H, stroke=0, fill=1)
+        c.setFillColor(PB_INK)
+        c.setFont(BOOK, 8.5)
+        c.drawString(30.0, y - 12.0, str(row["label"]))
+        for key, edge in PB_COLS:
+            bold = key == "mq"
+            c.setFillColor(PB_NAVY_T if bold else PB_INK)
+            _pb_right(c, edge, y - 12.0, _pb_num(row.get(key)),
+                      BOLD if bold else BOOK, 8.5)
+        y -= PB_ROW_H
+
+    c.setFillColor(PB_TOTBG)
+    c.rect(PB_L, y - PB_TOT_H, PB_MQ_X - PB_L, PB_TOT_H, stroke=0, fill=1)
+    c.setFillColor(PB_TOTMQ)
+    c.rect(PB_MQ_X, y - PB_TOT_H, PB_R - PB_MQ_X, PB_TOT_H, stroke=0, fill=1)
+    c.setFillColor(PB_NAVY_T)
+    c.setFont(BOLD, 9)
+    c.drawString(30.0, y - 13.0, "TOTAL")
+    for key, edge in PB_COLS:
+        _pb_right(c, edge, y - 13.0, _pb_num(totals.get(key)), BOLD, 9)
+    return y - PB_TOT_H
+
+
+def _pb_block_height(rows: int, caption: bool) -> float:
+    return (PB_BAR_H + (PB_CAP_H if caption else 0.0)
+            + PB_HEAD_H + rows * PB_ROW_H + PB_TOT_H)
+
+
+def _pb_title(c, group: str, month_label: str, line: str, first: bool) -> float:
+    """The band at the top. Full on page one, a thin strip after it."""
+    if first:
+        c.setFillColor(PB_NAVY)
+        c.rect(0, PB_H - PB_TITLE_H, PB_W, PB_TITLE_H, stroke=0, fill=1)
+        c.setFillColor(PB_GOLD_T)
+        c.setFont(BOLD, 10)
+        c.drawString(PB_L, PB_H - 22.0, "K.S. DISTILLERY")
+        c.setFillColor(PB_WHITE)
+        c.setFont(BOLD, 22)
+        c.drawString(PB_L, PB_H - 48.0, group)
+        c.setFillColor(PB_SUB)
+        c.setFont(BOOK, 9)
+        c.drawString(PB_L, PB_H - 64.0, f"Purchase Instruction  ·  1 {month_label.upper()}")
+        c.setFillColor(PB_GOLD_T)
+        c.setFont(BOLD, 9)
+        c.drawString(PB_L, PB_H - 76.0, line)
+        c.setFillColor(PB_GOLD)
+        c.rect(0, PB_H - PB_TITLE_H - PB_RULE_H, PB_W, PB_RULE_H, stroke=0, fill=1)
+        return PB_H - PB_TITLE_H - PB_RULE_H - 13.0
+
+    c.setFillColor(PB_NAVY)
+    c.rect(0, PB_H - PB_CONT_H, PB_W, PB_CONT_H, stroke=0, fill=1)
+    c.setFillColor(PB_WHITE)
+    c.setFont(BOLD, 11)
+    c.drawString(PB_L, PB_H - 22.0, group)
+    c.setFillColor(PB_GOLD_T)
+    c.setFont(BOLD, 8.5)
+    _pb_right(c, PB_R, PB_H - 22.0, f"Purchase Instruction · 1 {month_label.upper()}",
+              BOLD, 8.5)
+    c.setFillColor(PB_GOLD)
+    c.rect(0, PB_H - PB_CONT_H - 2.0, PB_W, 2.0, stroke=0, fill=1)
+    return PB_H - PB_CONT_H - 2.0 - 13.0
+
+
+def build_pi_group_pdf(group: str, month_label: str, brands: list,
+                       total_row: dict, shops: list, out_path: Path) -> Path:
+    """One bond's (or warehouse's) instruction: its total, then every shop.
+
+    `brands` is [{key, label}]; `total_row` and each shop carry a cells dict
+    keyed by brand and a totals dict.
+    """
+    c = pdfcanvas.Canvas(str(out_path), pagesize=(PB_W, PB_H))
+    c.setTitle(f"{group} - Purchase Instruction {month_label}")
+
+    line = (f"{len(shops)} shop{'' if len(shops) == 1 else 's'}  ·  "
+            f"{len(brands)} brand{'' if len(brands) == 1 else 's'} on indent")
+    y = _pb_title(c, group, month_label, line, first=True)
+
+    def rows_for(cells):
+        return [{"label": b["label"], **{k: (cells.get(b["key"]) or {}).get(k, 0)
+                                         for k, _ in PB_COLS}} for b in brands]
+
+    y = _pb_block(c, y, f"{group} TOTAL",
+                  f"{len(shops)} shop{'' if len(shops) == 1 else 's'}",
+                  rows_for(total_row.get("cells") or {}),
+                  total_row.get("total") or {},
+                  caption="Sum of every shop below. L3MS in bottles · "
+                          "RL / RQ / MQ in cases.")
+    y -= 12.0
+
+    for shop in shops:
+        need = _pb_block_height(len(brands), caption=False)
+        if y - need < PB_BOT:
+            c.showPage()
+            y = _pb_title(c, group, month_label, line, first=False)
+        live = sum(1 for b in brands
+                   if any((shop.get("cells") or {}).get(b["key"], {}).get(k)
+                          for k, _ in PB_COLS))
+        y = _pb_block(c, y, str(shop.get("label", "")),
+                      f"{live} brand{'' if live == 1 else 's'}",
+                      rows_for(shop.get("cells") or {}),
+                      shop.get("total") or {})
+        y -= 12.0
+
+    c.showPage()
+    c.save()
+    return out_path

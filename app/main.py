@@ -206,6 +206,9 @@ def first_run(request: Request, email: str = Form(...), password: str = Form(...
         auth.set_password(email, password)
     except ValueError as exc:
         return again(str(exc))
+    # The install belongs to whoever sets it up. Everybody added later can read
+    # every report; only this account decides who they are.
+    auth.set_owner(email)
     return RedirectResponse("/login?error=Password+set.+Sign+in+with+it.", status_code=303)
 
 
@@ -243,8 +246,10 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
 # ---------------------------------------------------------------------------
 #
 # Adding a colleague used to mean editing render.yaml and redeploying. It is a
-# normal Tuesday thing to do, so it belongs in the app: anybody already signed
-# in can add an account, and the address is allowed from that moment.
+# normal Tuesday thing to do, so it belongs in the app - but with one hand on
+# it. The owner adds and removes accounts; everybody else can see who holds
+# one and nothing more. Before this, any account could remove any other, the
+# owner's included, and the only way back was wiping the auth file on Render.
 
 
 @app.get("/settings/people", response_class=HTMLResponse)
@@ -254,19 +259,22 @@ def people_page(request: Request, note: str = "", error: str = ""):
         request, "settings_people.html",
         {"user": user, "page": "people", "started_at": STARTED_AT,
          "problems": getattr(app.state, "problems", []),
-         "people": sorted(auth.load_users()), "note": note, "error": error},
+         "people": sorted(auth.load_users()), "owner": auth.owner(),
+         "can_manage": auth.is_owner(user), "note": note, "error": error},
     )
 
 
 @app.post("/settings/people/add")
 def people_add(request: Request, email: str = Form(...), password: str = Form(...),
                confirm: str = Form("")):
-    require_user(request)
+    me = require_user(request)
     email = (email or "").strip().lower()
 
     def back(**kw):
         return RedirectResponse("/settings/people?" + urlencode(kw), status_code=303)
 
+    if not auth.is_owner(me):
+        return back(error="Only the owner of this install can add an account.")
     if password != confirm:
         return back(error="Those two passwords are not the same.")
     if email in auth.load_users():
@@ -284,10 +292,18 @@ def people_add(request: Request, email: str = Form(...), password: str = Form(..
 def people_remove(request: Request, email: str = Form(...)):
     me = require_user(request)
     email = (email or "").strip().lower()
+
+    def back(**kw):
+        return RedirectResponse("/settings/people?" + urlencode(kw), status_code=303)
+
+    if not auth.is_owner(me):
+        return back(error="Only the owner of this install can remove an account.")
     if email == me:
-        return RedirectResponse(
-            "/settings/people?" + urlencode({"error": "You cannot remove your own account."}),
-            status_code=303)
+        return back(error="You cannot remove your own account.")
+    # Belt and braces: the owner is the only account that cannot be removed,
+    # so an install can never be left with nobody able to manage it.
+    if auth.is_owner(email):
+        return back(error="The owner's account cannot be removed.")
     users = auth.load_users()
     users.pop(email, None)
     auth.save_users(users)
@@ -434,6 +450,7 @@ async def build(
 
     try:
         placed: list[Path] = []
+        receipt: dict | None = None
 
         for upload in files:
             suffix = Path(upload.filename or "").suffix.lower()
@@ -544,22 +561,34 @@ async def build(
             job.spans_from = _first_dispatch_day(target)
 
         elif stream_key == "purchase_instruction":
-            # The month is in the files, not in the dialog: every instruction
-            # names its own Report Month, and ~295 of them agreeing is a better
-            # answer than one typed date. pi.store() files them under it, and
-            # refuses a batch that turns out to span two months.
+            # The month is picked in the dialog, but the files still name their
+            # own Report Month - and ~295 of them agreeing beats one typed date.
+            # So the pick is a check: pi.store() files the batch under the month
+            # the files declare and refuses it if that is not the month picked.
+            expect = ""
+            if covers_date:
+                try:
+                    expect = _parse_date(covers_date).strftime("%Y-%m")
+                except UploadRejected:
+                    expect = ""
             staged = []
             for upload in files:
                 target = scratch_dir / (upload.filename or "pi.xls")
                 _save_upload(upload, target)
                 staged.append(target)
-            got = pi_mod.store(staged)
+            got = pi_mod.store(staged, expect=expect)
             if "error" in got:
                 raise UploadRejected(got["error"])
             placed = sorted(pi_mod.month_dir(got["month"]).glob("*.xls*"))
             job.covers = f"{got['month']}-01"
-            job.note = (f"{got['label']}: {got['shops']} shops"
-                        + (f", {got['blank']} with no instruction" if got["blank"] else ""))
+            job.note = (f"{got['label']}: {got['ok']} shops with an instruction"
+                        + (f", {got['blank']} blank" if got["blank"] else "")
+                        + (f", {got['failed']} unreadable" if got["failed"] else ""))
+            # What landed, file by file. The operator drops 295 files in one go;
+            # a count they can check is the difference between a report they
+            # trust and one they hope about.
+            receipt = got
+            job.summary["receipt"] = got
 
         elif stream_key == "item_issue":
             # Same reasoning as the instruction: every export states the range
@@ -592,7 +621,10 @@ async def build(
         return JSONResponse({"job_id": job.id, "error": str(exc)}, status_code=400)
 
     threading.Thread(target=run_pipeline, args=(job, ctx), daemon=True).start()
-    return JSONResponse({"job_id": job.id}, status_code=202)
+    reply = {"job_id": job.id}
+    if receipt:
+        reply["receipt"] = receipt
+    return JSONResponse(reply, status_code=202)
 
 
 _WH_DATE_RE = re.compile(r"^Report[ _](\d{1,2})-([A-Za-z]{3})-(\d{4})", re.IGNORECASE)

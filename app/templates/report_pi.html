@@ -65,7 +65,7 @@
      times the width of one carrying dashes. Every brand gets the same block. */
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
           table-layout:fixed; }
-  col.c-nm { width:210px; }
+  col.c-nm { width:248px; }
   thead th { position:sticky; background:var(--navy); color:var(--gold); text-align:center;
              vertical-align:middle; font-weight:700; font-size:9.5px; letter-spacing:.5px;
              text-transform:uppercase; line-height:1.28; padding:9px 8px;
@@ -88,9 +88,15 @@
   /* The name column is fixed while the rest scrolls beneath it, so it needs an
      edge to hide behind - without one, a half-scrolled column printed its
      digits sliced down the middle and read as a rendering fault. */
+  /* 9003-KOLLENGODE(VANDITHAVALAM) is wider than any column would sensibly
+     be, and with nothing to stop it the name ran straight over the L3MS
+     figure beside it. Cut it to the column and let the full name live in the
+     tooltip - a truncated name still reads; a name printed over a number
+     makes both unreadable. */
   tbody td:first-child { text-align:left; position:sticky; left:0; z-index:2;
                          background:var(--card); font-weight:650; padding-left:16px;
                          border-left:0; border-right:1px solid var(--line);
+                         overflow:hidden; text-overflow:ellipsis;
                          box-shadow:7px 0 9px -7px rgba(16,24,40,.30); }
   thead tr:first-child th:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
   tbody td.mq { font-weight:700; }
@@ -106,7 +112,10 @@
   tbody tr.cl td { border-left-color:#22407F; }
 
   td.nm .opener { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
-                  user-select:none; }
+                  user-select:none; max-width:100%; min-width:0; }
+  td.nm .opener .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                       min-width:0; }
+  td.nm .opener .n { flex:none; }
   td.nm .chev { width:9px; font-size:9px; color:var(--muted); transition:transform .16s;
                 flex:none; }
   tr.open td.nm .chev { transform:rotate(90deg); color:var(--blue); }
@@ -114,6 +123,11 @@
   tbody tr.shop td, tbody tr.shop td:first-child { background:#F7F9FC; font-size:12.5px;
       height:28px; color:#3F4A5E; font-weight:500; border-bottom:1px solid #EEF1F6; }
   tbody tr.shop td:first-child { padding-left:40px; }
+  /* The name clips inside its own box so the 'no instruction' chip after it
+     is never the thing that gets cut off. */
+  td .sn { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+           white-space:nowrap; vertical-align:middle; }
+  tbody tr.shop.blank td:first-child .sn { max-width:calc(100% - 104px); }
   tbody tr.shop:hover td, tbody tr.shop:hover td:first-child { background:#EDF1F8; }
   tbody tr.shop.blank td:first-child::after { content:'no instruction'; margin-left:9px;
       font-size:9.5px; letter-spacing:.5px; text-transform:uppercase; font-weight:700;
@@ -135,11 +149,6 @@
       <label class="fitem">
         <span class="fi-k">Month</span>
         <div class="selw"><select id="fMonth" onchange="load()"></select><i>&#9662;</i></div>
-      </label>
-      <span class="fdiv"></span>
-      <label class="fitem">
-        <span class="fi-k">Against</span>
-        <div class="selw"><select id="fPrior" onchange="load()"></select><i>&#9662;</i></div>
       </label>
       <span class="fdiv"></span>
       <div class="fitem">
@@ -209,7 +218,7 @@ function shown(){ return measure === 'all' ? ['l3ms','rl','rq','mq'] : [measure]
 function params(){
   const p = new URLSearchParams({view});
   if (fMonth.value) p.set('month', fMonth.value);
-  if (fPrior.value) p.set('prior', fPrior.value);
+  p.set('prior', '-');           // no comparison: the page does not offer one
   if (+fCluster.value) p.set('cluster', fCluster.value);
   return p;
 }
@@ -253,11 +262,6 @@ function fillMonths(d){
   const opts = (d.months || []).map(m =>
     `<option value="${m.key}"${m.key === d.month ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
   if (fMonth.innerHTML !== opts) fMonth.innerHTML = opts;
-  const prior = `<option value="-">Nothing</option>` + (d.months || [])
-    .filter(m => m.key !== d.month)
-    .map(m => `<option value="${m.key}"${m.key === d.prior ? ' selected' : ''}>${esc(m.label)}</option>`).join('');
-  if (fPrior.innerHTML !== prior) fPrior.innerHTML = prior;
-  if (!d.prior) fPrior.value = '-';
 }
 
 function flag(d){
@@ -333,13 +337,19 @@ function render(d){
   d.brands = d.brands.slice().sort((a, b) => a.full.localeCompare(b.full));
   bandSub.textContent =
     `PURCHASE INSTRUCTION \u00b7 1 ${(d.month_label || '').toUpperCase()}`;
-  const ms = shown().length;
-  const each = ms > 1 ? 62 : 104;            // a measure column
+  // L3MS runs to seven digits in Indian grouping - 7,22,134 - so it gets a
+  // wider column than the three case measures beside it. Every brand still
+  // gets the same block, which is what keeps the grid readable across.
+  const measures = shown();
+  const W = {l3ms: 88, rl: 58, rq: 58, mq: 62};
+  const widths = measures.length > 1
+    ? measures.map(m => W[m]) : [measures[0] === 'l3ms' ? 118 : 104];
+  const blockW = widths.reduce((a, b) => a + b, 0);
   const blocks = d.brands.length + 1;        // the brands, plus Total
   grid.querySelector('colgroup').innerHTML =
-    `<col class="c-nm">` + `<col style="width:${each}px">`.repeat(blocks * ms)
-    + (d.prior ? `<col style="width:104px"><col style="width:96px">` : '');
-  grid.style.minWidth = (210 + blocks * ms * each + (d.prior ? 200 : 0)) + 'px';
+    `<col class="c-nm">`
+    + widths.map(w => `<col style="width:${w}px">`).join('').repeat(blocks);
+  grid.style.minWidth = (248 + blocks * blockW) + 'px';
   grid.querySelector('thead').innerHTML = head(d);
   const span = 1 + (d.brands.length + 1) * shown().length + (d.prior ? 2 : 0);
 
@@ -348,9 +358,10 @@ function render(d){
     if (r.kind === 'group'){
       const n = r.shops + (r.blank ? ` · ${r.blank} blank` : '');
       html += `<tr class="g" data-key="${esc(r.key)}">
-          <td class="nm"><span class="opener" onclick="toggle('${esc(r.key)}')">
-            <span class="chev">&#9654;</span>${esc(r.label)}
-            <span style="color:var(--muted);font-weight:500;font-size:11.5px">${n}</span>
+          <td class="nm" title="${esc(r.label)}">
+            <span class="opener" onclick="toggle('${esc(r.key)}')">
+            <span class="chev">&#9654;</span><span class="lbl">${esc(r.label)}</span>
+            <span class="n" style="color:var(--muted);font-weight:500;font-size:11.5px">${n}</span>
           </span></td>${cells(r.cells, r.total)}${delta(r)}</tr>`;
     } else {
       html += `<tr class="${r.kind === 'grand' ? 'gt' : 'cl'}">
@@ -386,7 +397,7 @@ function paint(key, span){
   row.classList.add('open');
   const html = shops.map(s =>
     `<tr class="shop${s.blank ? ' blank' : ''}" data-of="${esc(key)}">
-       <td>${esc(s.name)}</td>${cells(s.cells, s.total)}` +
+       <td title="${esc(s.name)}"><span class="sn">${esc(s.name)}</span></td>${cells(s.cells, s.total)}` +
     (DATA.prior ? `<td>${num(s.prior_mq || 0)}</td><td></td>` : '') + `</tr>`).join('');
   row.insertAdjacentHTML('afterend', html);
 }

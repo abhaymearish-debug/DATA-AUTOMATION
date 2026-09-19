@@ -39,7 +39,7 @@ import os
 import re
 import shutil
 import threading
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -171,44 +171,121 @@ def month_dir(key: str) -> Path:
     return root() / key
 
 
-def store(paths: list[Path]) -> dict:
-    """File a batch of raws under the month they say they are for.
+def _blank_of(d: dict) -> bool:
+    return not d["rows"]
+
+
+def _shop_of(d: dict) -> str:
+    code, name = d.get("shop_code") or "", d.get("shop_name") or ""
+    return f"{code} - {name}".strip(" -") or (d.get("file") or "")
+
+
+def store(paths: list[Path], expect: str = "") -> dict:
+    """File a batch of raws under the month they are for, and say what landed.
 
     A month is replaced whole rather than merged: a second export of the same
     month is a correction, and half of one export beside half of another is
     the one state nobody could reason about.
+
+    `expect` is the month picked in the dialog. The files still name their own
+    month - ~295 of them agreeing is the better answer - so the pick is used
+    as a check, not an override: files for another month are set aside and
+    named, rather than filed under a month they do not belong to.
+
+    The return is a receipt: every file is accounted for as filed, blank,
+    a duplicate, for another month, or unreadable.
     """
-    by_month: dict[str, list[tuple[Path, dict]]] = defaultdict(list)
-    skipped: list[str] = []
+    seen: list[tuple[Path, dict, str]] = []
+    problems: list[dict] = []
+
     for p in paths:
         parsed = parse_file(p)
         key = month_key(parsed, p.name)
-        if not key or not parsed["shop_code"]:
-            skipped.append(p.name)
+        if not parsed["shop_code"] or not key:
+            why = ("no shop could be read out of it" if not parsed["shop_code"]
+                   else "it names no report month")
+            problems.append({"name": p.name, "state": "failed", "why": why})
             continue
-        by_month[key].append((p, parsed))
+        seen.append((p, parsed, key))
 
-    if not by_month:
-        return {"error": "None of those files look like a KSBC purchase instruction "
-                         "export — no shop or report month could be read out of them."}
-    if len(by_month) > 1:
-        months = ", ".join(month_label(k) for k in sorted(by_month))
+    if not seen:
+        return {"error": f"None of those {len(paths)} files look like a KSBC purchase "
+                         "instruction export - no shop or report month could be read "
+                         "out of any of them."}
+
+    counts = Counter(k for _p, _d, k in seen)
+    if expect:
+        key = expect
+        if key not in counts:
+            found = ", ".join(month_label(k) for k in sorted(counts))
+            return {"error": f"You picked {month_label(expect)}, but these files are "
+                             f"for {found}. Change the month, or pick the right files."}
+    elif len(counts) > 1:
+        months = ", ".join(month_label(k) for k in sorted(counts))
         return {"error": f"Those files cover more than one month ({months}). "
                          "Upload one month's instruction at a time."}
+    else:
+        key = next(iter(counts))
 
-    key, items = next(iter(by_month.items()))
+    keep: list[tuple[Path, dict]] = []
+    for p, d, k in seen:
+        if k == key:
+            keep.append((p, d))
+        else:
+            problems.append({"name": p.name, "state": "other_month",
+                             "shop": _shop_of(d), "why": f"is for {month_label(k)}"})
+
+    # Two files for one shop would be counted twice by load(), so only one is
+    # filed. An instruction beats an empty sheet; failing that, the later file
+    # wins, since a re-export is a correction.
+    by_shop: dict[str, tuple[Path, dict]] = {}
+    for p, d in keep:
+        code = d["shop_code"]
+        old = by_shop.get(code)
+        if old is None:
+            by_shop[code] = (p, d)
+            continue
+        drop = old if (_blank_of(old[1]) and not _blank_of(d)) else (p, d)
+        win = (p, d) if drop is old else old
+        by_shop[code] = win
+        problems.append({"name": drop[0].name, "state": "duplicate",
+                         "shop": _shop_of(d), "why": f"same shop as {win[0].name}"})
+
     folder = month_dir(key)
     if folder.exists():
         shutil.rmtree(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    for p, _parsed in items:
+    for p, _d in by_shop.values():
         shutil.copy2(p, folder / p.name)
 
-    blank = sum(1 for _p, d in items if not d["rows"])
+    blanks = [d for _p, d in by_shop.values() if _blank_of(d)]
+    for d in sorted(blanks, key=_shop_of):
+        problems.append({"name": d["file"], "state": "blank", "shop": _shop_of(d),
+                         "why": "no instruction lines - nothing to buy"})
+
+    missing: list[str] = []
+    try:
+        for code, info in pi_master().items():
+            if code not in by_shop:
+                missing.append(str(info.get("name") or code))
+    except Exception:
+        missing = []
+
     _CACHE.pop(key, None)
-    return {"month": key, "label": month_label(key), "files": len(items),
-            "shops": len({d["shop_code"] for _p, d in items}),
-            "blank": blank, "skipped": skipped}
+    return {
+        "month": key, "label": month_label(key),
+        "files": len(paths),
+        "shops": len(by_shop),
+        "ok": len(by_shop) - len(blanks),
+        "blank": len(blanks),
+        "duplicate": sum(1 for x in problems if x["state"] == "duplicate"),
+        "other_month": sum(1 for x in problems if x["state"] == "other_month"),
+        "failed": sum(1 for x in problems if x["state"] == "failed"),
+        "warehouses": len({(d.get("warehouse") or "").strip()
+                           for _p, d in by_shop.values() if d.get("warehouse")}),
+        "missing": sorted(missing)[:40], "missing_n": len(missing),
+        "problems": problems[:400],
+    }
 
 
 _CACHE: dict = {}

@@ -106,6 +106,11 @@ ALLOWED_EMAILS = [
     if e.strip()
 ]
 
+# Who may add and remove accounts. Normally the first account created owns the
+# install and this is left unset; setting it here overrides that, which is the
+# way back in if the owner's own account is ever lost - no data is touched.
+OWNER_EMAIL = os.environ.get("KSD_OWNER_EMAIL", "").strip().lower()
+
 SESSION_MAX_AGE_SECONDS = int(os.environ.get("KSD_SESSION_MAX_AGE", 60 * 60 * 12))
 
 # Session cookies are Secure by default. Only ever set KSD_COOKIE_SECURE=0 for
