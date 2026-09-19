@@ -48,15 +48,6 @@
   .banner { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
             border-radius:11px; padding:13px 15px; font-size:13.5px; margin-bottom:11px; }
 
-  /* One band, not two. The house name sat over the table on navy and said
-     nothing the sidebar does not already say, on the one report whose table is
-     wide enough to need every row of height it can get. What is left is the
-     line that carries information: the report and the month it is for. */
-  .bands { border:1px solid var(--line); border-bottom:0; border-radius:14px 14px 0 0;
-           overflow:hidden; }
-  .bands .b2 { background:var(--gold); color:#0B2C52; font-size:12.5px; font-weight:800;
-               letter-spacing:.8px; text-transform:uppercase; padding:9px 16px; }
-  .tablewrap.under { border-radius:0 0 14px 14px; }
 
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
                overflow:auto; max-height:72vh; box-shadow:0 1px 2px rgba(16,24,40,.05); }
@@ -187,10 +178,7 @@
 </div>
 
 <div id="msg"></div>
-<div class="bands">
-  <div class="b2" id="bandSub">PURCHASE INSTRUCTION</div>
-</div>
-<div class="tablewrap under"><table id="grid">
+<div class="tablewrap"><table id="grid">
   <colgroup></colgroup>
   <thead><tr><th>Bond</th></tr></thead>
   <tbody><tr><td>Loading…</td></tr></tbody>
@@ -342,8 +330,6 @@ function delta(r){
 function render(d){
   // The office reads its brands alphabetically by the full name; so does this.
   d.brands = d.brands.slice().sort((a, b) => a.full.localeCompare(b.full));
-  bandSub.textContent =
-    `PURCHASE INSTRUCTION \u00b7 1 ${(d.month_label || '').toUpperCase()}`;
   // L3MS runs to seven digits in Indian grouping - 7,22,134 - so it gets a
   // wider column than the three case measures beside it. Every brand still
   // gets the same block, which is what keeps the grid readable across.

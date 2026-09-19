@@ -377,6 +377,7 @@ function visibleRows(wh){
 
 function render(){
   if (!DATA) return;
+  requestAnimationFrame(fitTable);   // the footnote can grow a line
   const d = DATA;
   const pct = (a,b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
   const narrowed = !!q_.value.trim();
@@ -558,6 +559,22 @@ function dlPdf(scope){
     if (c === 3) setTimeout(render, 1500);
   }, i * 900));
 }
+
+/* The table ends where the window does, less the footnote and a margin. It
+   used to stop at a fixed distance from the bottom, a figure tuned when the
+   filters took two rows - so when they became one, the page kept the space
+   and printed nothing in it. Measured rather than guessed, it is right on any
+   screen and stays right if the filter row wraps. */
+function fitTable(){
+  const wrap = document.querySelector('.tablewrap');
+  if (!wrap) return;
+  const foot = document.querySelector('.status');
+  const room = innerHeight - wrap.getBoundingClientRect().top
+             - (foot ? foot.offsetHeight : 0) - 6;
+  wrap.style.maxHeight = Math.max(260, Math.round(room)) + 'px';
+}
+addEventListener('resize', fitTable);
+fitTable();
 
 load();
 </script>
