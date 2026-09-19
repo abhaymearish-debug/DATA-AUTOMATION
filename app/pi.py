@@ -519,7 +519,7 @@ def source_for(month: str, prior: str = "") -> dict:
         return _r.src_leg(label, [{"title": month_label(key),
                                    "kind": "purchase instruction",
                                    "stream": _r.STREAM["purchase"],
-                                   "name": note}], tone=tone)
+                                   "detail": note}], tone=tone)
 
     legs = [l for l in (leg(month, "This month"),
                         leg(prior, "Compared against", "green")) if l]

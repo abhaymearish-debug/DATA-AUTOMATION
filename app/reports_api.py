@@ -59,6 +59,17 @@ STREAM = {
     "warehouse":       "Warehouse Physical Stock",
     "purchase":        "Purchase Instruction",
 }
+# The same colours the Status Calendar gives each stream, so a card reads as
+# the same thing in both places: you learn the colour once.
+STREAM_TINT = {
+    STREAM["shop_cumulative"]: "#2563EB",
+    STREAM["shop_daily"]:      "#0EA5E9",
+    STREAM["secondary"]:       "#10B981",
+    STREAM["item_issue"]:      "#8B5CF6",
+    STREAM["warehouse"]:       "#F59E0B",
+    STREAM["purchase"]:        "#E11D48",
+}
+
 # A shop window is tiled by whichever files cover it, and the two kinds come
 # off two different cards.
 CHAIN_STREAM = {"cumulative": STREAM["shop_cumulative"], "daily": STREAM["shop_daily"]}
@@ -78,6 +89,10 @@ def src_windows(chain: list) -> list:
 
 
 def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
+    for it in items or []:
+        tint = STREAM_TINT.get(it.get("stream", ""))
+        if tint:
+            it["tint"] = tint
     return {"leg": label, "note": note, "tone": tone, "items": items}
 
 
@@ -140,9 +155,15 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
         if a and b and lo and hi and (b < lo or a > hi):
             continue
         if book is not None and name == book.name:
-            # Its name reads like another report, so it leads with what it is.
-            items.append({"kind": "built workbook", "stream": STREAM["secondary"],
-                          "title": _sec_book_title(name), "name": name})
+            # Leads with its days like everything else; what it IS goes on the
+            # line under, because its name reads like another report entirely.
+            it = {"kind": "built workbook", "stream": STREAM["secondary"],
+                  "detail": "built from your daily uploads", "name": name}
+            if a and b:
+                it["from"], it["to"] = a.isoformat(), b.isoformat()
+            else:
+                it["title"] = _sec_book_title(name)
+            items.append(it)
         elif a and b:
             items.append({"kind": "raw upload", "stream": STREAM["secondary"],
                           "name": name, "from": a.isoformat(), "to": b.isoformat(),

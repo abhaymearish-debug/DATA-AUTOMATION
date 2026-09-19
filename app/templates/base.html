@@ -470,7 +470,7 @@
   .srcitem:last-child { padding-bottom:0; }
   .srcitem::before { content:''; position:absolute; left:-19px; top:4.5px;
                      width:8px; height:8px; border-radius:50%;
-                     background:var(--card); border:2px solid var(--tone);
+                     background:var(--card); border:2px solid var(--tint, var(--tone));
                      box-shadow:0 0 0 3px var(--card); }
   .srcitem .w { display:flex; align-items:center; gap:10px; }
   .srcitem .w b { font-size:12.5px; font-weight:700; color:var(--ink);
@@ -486,11 +486,16 @@
                   letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
                   background:color-mix(in srgb, var(--chip) 62%, transparent);
                   border-radius:6px; padding:3px 7px; }
-  /* The upload card it came off, which is the question the chip is really
-     being asked. It reads above the file name because the card is what you
-     know by name; the file is only how it happens to be spelled on disk. */
-  .srcitem .s { margin-top:3px; font-size:11px; line-height:1.35; font-weight:650;
-                color:var(--ink); letter-spacing:-.05px; }
+  /* The upload card it came off, beside the date rather than under it: the
+     two together are the whole answer. It wears the colour the Status Calendar
+     gives that stream - blue for shop cumulative, sky for shop daily, green
+     for secondary, and so on - so one colour means one thing across the app. */
+  .srcitem .card { margin-left:auto; flex:none; font-size:10.5px; font-weight:700;
+                   letter-spacing:.1px; white-space:nowrap;
+                   border-radius:7px; padding:3px 8px;
+                   color:var(--tint, var(--chip-ink));
+                   background:color-mix(in srgb, var(--tint, var(--chip)) 13%,
+                                        transparent); }
   .srcitem .f { margin-top:2px; font-size:10.5px; line-height:1.4; color:var(--muted);
                 letter-spacing:.1px; overflow:hidden; text-overflow:ellipsis;
                 white-space:nowrap; }
@@ -786,21 +791,24 @@ window.ksdSource = function (block, host) {
       // A file that answers a window leads with the window and names itself
       // underneath; one with no window of its own leads with its name.
       const span = !!(c.from || c.to);
-      const dated = span || !!c.title;
       const lead = span ? ksdSpan(c.from, c.to) : (c.title || name);
-      const under = dated ? name : '';
-      const tag = c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '';
-      // Which card on Raw Data Upload this came off. "Daily" on its own never
-      // said whether it meant shop sales or secondary, which is the first
-      // thing you want to know when you are checking a figure.
-      const from = c.stream
-        ? `<div class="s">${esc(c.stream)}</div>` : '';
-      // Only a date span is short enough to keep on one line. A name or a
-      // said-in-words title wraps instead of being cut off mid-sentence.
-      return `<div class="srcitem${span ? '' : ' nw'}">
-          <div class="w"><b title="${esc(lead)}">${esc(lead)}</b>${tag}</div>
-          ${from}
-          ${under ? `<div class="f" title="${esc(under)}">${esc(under)}</div>` : ''}
+      // Two things, and only two: when, and which card on Raw Data Upload it
+      // came off. The file name used to sit under the date saying the same
+      // thing twice - "1 - 16 Sep 2026" over "2026-09 SEPTEMBER 1-16
+      // CUMULATIVE" - so it moved to the tooltip, where it is there if you
+      // want it and out of the way if you do not.
+      // The card carries the colour the Status Calendar gives that stream, so
+      // the same upload reads as the same thing in both places.
+      const tint = c.tint ? ` style="--tint:${esc(c.tint)}"` : '';
+      const card = c.stream
+        ? `<span class="card"${tint}>${esc(c.stream)}</span>`
+        : (c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '');
+      // A count or a word about the file, where there is one to say - never
+      // the file name, which would only repeat the date above it.
+      const note = c.detail ? `<div class="f">${esc(c.detail)}</div>` : '';
+      return `<div class="srcitem${span ? '' : ' nw'}"${tint}>
+          <div class="w"><b title="${esc(name || lead)}">${esc(lead)}</b>${card}</div>
+          ${note}
         </div>`;
     }).join('');
     // The rail's line is a chain through time, so it is only drawn when the
