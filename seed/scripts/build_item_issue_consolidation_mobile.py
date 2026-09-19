@@ -36,6 +36,26 @@ the grid, banding, colour and type treatment changed. What changed and why:
   * The merged Day Sale / Industry Total rows carry no internal grid (the light
     verticals stop at grid_bot) and sit on their own grey strip.
 
+MASTHEAD / HEADER PASS — 19 Sep 2026 (second round, figures still untouched):
+
+  * The stacked title band + strapline band became ONE masthead: a gold accent
+    bar at the paper edge, a gold rule anchoring a left lockup (letterspaced
+    wordmark over a muted-steel report line), and a gold AS ON pill on the
+    right with the unit note beneath it. It is 8pt SHORTER than the two bands
+    it replaced, so the table gained the height.
+  * The period banners are chips, inset so navy gutters separate them. The
+    LIVE period is a gold chip with navy text; the prior period and DIFFERENCE
+    sit back on a lighter navy. Which month you are reading is now visible at a
+    glance instead of being two lines of identical gold text.
+  * NO LOGO — Abhay's call, 19 Sep 2026. The gold bar stands in for it. Do not
+    reinstate the KSD shield here.
+
+TRAP, hit once and worth keeping in mind: letterspacing is set with `Tc` on a
+text object, and `Tc` is part of the PDF TEXT STATE, which SURVIVES the BT/ET
+block. Leaving it set letterspaced every later drawString on the page -- it
+silently widened the whole table and broke every centred cell. `tracked()`
+resets it to 0 before the text object closes.
+
 Verified against the source PDF by `verify_item_issue_consolidation.py`:
 488 figures identical across 34 rows, every red/green flag still matching the
 sign of its value.
@@ -54,6 +74,8 @@ def hexc(h, a=1):
 # ── palette ──────────────────────────────────────────────────────────────────
 NAVY       = hexc("0B2950")   # masthead, header block, TOTAL row
 NAVY_SOFT  = hexc("1B3C68")   # group dividers in the body
+NAVY_CHIP  = hexc("17355F")   # prior-period / difference chips in the header
+STEEL      = hexc("A9B8D6")   # masthead eyebrow, secondary header ink
 GOLD       = hexc("FFBD31")   # header text, rules
 GOLD_DIM   = hexc("8A6B28")   # intra-group separators inside the header block
 CLUSTER_BG = hexc("FFEFC4")   # sub-total band (was full-chroma amber)
@@ -153,14 +175,17 @@ DATA = [
 
 # ── geometry ─────────────────────────────────────────────────────────────────
 PW, PH   = 595.276, 841.890
-TITLE_H  = 42.0
-SUB_H    = 25.0
-HDR_TOP  = 23.0
+TOPBAR_H = 3.0        # gold accent at the paper edge
+TITLE_H  = 56.0       # masthead: wordmark lockup + as-on pill
+SUB_H    = 0.0        # folded into the masthead
+HDR_TOP  = 24.0
 HDR_BOT  = 25.0
 HDR_H    = HDR_TOP + HDR_BOT
 FOOT_H   = 20.0
 BOTTOM_M = 10.0
-F_TITLE, F_SUB, F_DATA, F_FOOT = 17, 10.5, 10.5, 7.5
+F_TITLE, F_SUB, F_DATA, F_FOOT = 17, 8.5, 10.5, 7.5
+F_PILL   = 9.0
+TRACK    = 1.5        # letterspacing on the wordmark
 PAD      = 2.75
 HAIR     = 0.4
 GRP_RULE = 0.9        # navy group divider in the body
@@ -235,7 +260,7 @@ F_DATA, F_HDR, COLW = solve()
 XS = [0.0]
 for w in COLW: XS.append(XS[-1]+w)
 
-_avail  = PH - TITLE_H - SUB_H - HDR_H - FOOT_H - BOTTOM_M
+_avail  = PH - TOPBAR_H - TITLE_H - SUB_H - HDR_H - FOOT_H - BOTTOM_M
 _units  = sum(WEIGHT[r[0]] for r in DATA)
 UNIT_H  = _avail / _units
 row_h   = lambda kind: UNIT_H * WEIGHT[kind]
@@ -253,6 +278,29 @@ def centred(c, text, font, size, colour, x0, x1, y_mid, dy=0.0):
     c.setFont(font, size); c.setFillColor(colour)
     t = text.replace(NB, " ")
     c.drawString((x0+x1)/2.0 - stringWidth(t,font,size)/2.0, y_mid - size*0.35 + dy, t)
+
+def tracked_width(text, font, size, track):
+    return stringWidth(text, font, size) + track * len(text)
+
+def tracked(c, text, font, size, colour, x, y, track):
+    # Letterspacing lives on the text object, not the canvas -- and Tc is part
+    # of the PDF TEXT STATE, which SURVIVES the BT/ET block. Leaving it set
+    # letterspaces every later drawString on the page (it silently widened the
+    # whole table and broke centring the first time round), so reset it here.
+    t = c.beginText(x, y)
+    t.setFont(font, size); t.setFillColor(colour); t.setCharSpace(track)
+    t.textOut(text)
+    t.setCharSpace(0)
+    c.drawText(t)
+
+def pill(c, text, font, size, x_right, y_mid, bg, ink, padx=9.0, h=18.0):
+    w = stringWidth(text, font, size) + padx * 2
+    x = x_right - w
+    c.setFillColor(bg); c.setStrokeColor(bg); c.setLineWidth(0.6)
+    c.roundRect(x, y_mid - h/2, w, h, h/2, stroke=1, fill=1)
+    c.setFont(font, size); c.setFillColor(ink)
+    c.drawString(x + padx, y_mid - size*0.35, text)
+    return x
 
 def fill(c, x0, x1, y, h, colour):
     c.setFillColor(colour); c.rect(x0, y, x1-x0, h, stroke=0, fill=1)
@@ -275,16 +323,23 @@ def build(path):
     c.setTitle(f"{SUBLEFT} {SUBRIGHT}")
 
     # ── masthead ────────────────────────────────────────────────────────────
-    y = PH - TITLE_H
+    # One band: wordmark lockup on the left, as-on pill on the right.
+    # Replaces the old stacked title band + strapline band, and costs no height.
+    fill(c, 0, PW, PH - TOPBAR_H, TOPBAR_H, GOLD)          # accent at the paper edge
+    y = PH - TOPBAR_H - TITLE_H
     fill(c, 0, PW, y, TITLE_H, NAVY)
-    centred(c, TITLE, "Helvetica-Bold", F_TITLE, GOLD, 0, PW, y + TITLE_H/2)
 
-    y -= SUB_H
-    fill(c, 0, PW, y, SUB_H, NAVY)
-    hline(c, 0, PW, y + SUB_H, GOLD, 0.7)          # hairline splits name from strapline
-    c.setFont("Helvetica-Bold", F_SUB); c.setFillColor(GOLD)
-    c.drawString(12, y + SUB_H/2 - F_SUB*0.35, SUBLEFT)
-    c.drawRightString(PW-12, y + SUB_H/2 - F_SUB*0.35, SUBRIGHT)
+    # a gold bar anchors the lockup where a logo would otherwise sit
+    BAR_W, BAR_H = 3.2, 30.0
+    fill(c, 16.0, 16.0 + BAR_W, y + (TITLE_H - BAR_H)/2, BAR_H, GOLD)
+    tx = 16.0 + BAR_W + 12.0
+
+    tracked(c, TITLE, "Helvetica-Bold", F_TITLE, GOLD, tx, y + 30.0, TRACK)
+    tracked(c, SUBLEFT, "Helvetica-Bold", F_SUB, STEEL, tx, y + 15.0, 0.9)
+
+    pill(c, SUBRIGHT.upper(), "Helvetica-Bold", F_PILL, PW - 16.0, y + 32.0, GOLD, NAVY)
+    c.setFont("Helvetica", 7.0); c.setFillColor(STEEL)
+    c.drawRightString(PW - 16.0, y + 12.0, "ALL FIGURES IN CASES")
 
     # ── header block ────────────────────────────────────────────────────────
     top_y = y - HDR_TOP
@@ -301,17 +356,24 @@ def build(path):
         else:
             centred(c, lines[0], "Helvetica-Bold", F_HDR, GOLD, XS[i], XS[i+1], bot_y + HDR_BOT/2)
 
-    for banner, idxs in ((CUR_BANNER,CUR_COLS), (PRIOR_BANNER,PRIOR_COLS), (DIFF_BANNER,DIFF_COLS)):
-        centred(c, banner, "Helvetica-Bold", F_HDR, GOLD, XS[idxs[0]], XS[idxs[-1]+1], top_y + HDR_TOP/2)
+    # The live period is a gold chip; the prior period and the difference sit
+    # back on a lighter navy. Chips are inset so navy gutters separate them.
+    IN = 1.4
+    for banner, idxs, bg, ink in ((CUR_BANNER,   CUR_COLS,   GOLD,      NAVY),
+                                  (PRIOR_BANNER, PRIOR_COLS, NAVY_CHIP, GOLD),
+                                  (DIFF_BANNER,  DIFF_COLS,  NAVY_CHIP, GOLD)):
+        x0, x1 = XS[idxs[0]] + IN, XS[idxs[-1]+1] - IN
+        c.setFillColor(bg); c.setStrokeColor(bg); c.setLineWidth(0.5)
+        c.roundRect(x0, top_y + IN, x1-x0, HDR_TOP - IN*2, 2.4, stroke=1, fill=1)
+        centred(c, banner, "Helvetica-Bold", F_HDR, ink, x0, x1, top_y + HDR_TOP/2)
 
-    # dim separators inside a group; the banner row stays open so each banner
-    # reads as one block
+    # dim separators inside a group, gold only where a group ends
     for i in range(1, len(COLS)):
         if i in GROUP_EDGES: continue
         vline(c, XS[i], bot_y, bot_y+HDR_BOT, GOLD_DIM, HDR_SEP)
-    hline(c, XS[1], XS[LAST_COL], top_y, GOLD_DIM, HDR_SEP)   # banner / label divide
     for i in GROUP_EDGES:
-        vline(c, XS[i], bot_y, top_y + HDR_TOP, GOLD, 1.3)
+        vline(c, XS[i], bot_y, top_y, GOLD, 1.3)
+        vline(c, XS[i], top_y, top_y + HDR_TOP, NAVY, 1.3)
     hline(c, 0, PW, top_y + HDR_TOP - HDR_EDGE/2, GOLD, HDR_EDGE)
     hline(c, 0, PW, bot_y + HDR_EDGE/2, GOLD, HDR_EDGE)
 
