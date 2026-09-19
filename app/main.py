@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 import shutil
 import threading
-from datetime import date, datetime
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 import subprocess
 import sys
@@ -16,7 +17,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (bootstrap, auth, bondmap, config, itemissue, pi as pi_mod,
+from . import (bootstrap, auth, bondmap, config, itemissue, leaves,
+               pi as pi_mod,
                promote as promote_mod, reports_api, reports_pdf,
                targets as targets_mod)
 from .jobs import STORE, Job, JobContext, JobStatus, run_pipeline
@@ -68,8 +70,12 @@ UPLOAD_CARDS = [
 ]
 
 LEAVE_CARDS = [
-    {"title": "Warehouse Leaves", "icon": "calendar-off"},
-    {"title": "Shop Leaves", "icon": "calendar-off"},
+    {"title": "Warehouse Leaves", "icon": "calendar-off",
+     "href": "/settings/leaves/warehouse",
+     "blurb": "Days a warehouse did not issue"},
+    {"title": "Shop Leaves", "icon": "calendar-off",
+     "href": "/settings/leaves/shop",
+     "blurb": "Days shops were shut - dry days, hartals"},
 ]
 
 # When the process started. Shown in the header so it is obvious at a glance
@@ -311,6 +317,147 @@ def people_remove(request: Request, email: str = Form(...)):
     return RedirectResponse(
         "/settings/people?" + urlencode({"note": f"{email} can no longer sign in."}),
         status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Manage leaves
+#
+# A per-day figure divides by the days the thing could actually sell. Until
+# now that divisor was the calendar, so a month with three dry days read as a
+# month of bad trading. These two calendars are where the closed days live.
+# ---------------------------------------------------------------------------
+
+_LEAVE_LOOK = {
+    "shop": {
+        "heading": "Shop Leaves",
+        "noun_pl": "shops",
+        "blurb": "A day KSBC outlets were shut - a dry day, a hartal, a local "
+                 "festival. Pick the days on the calendar, say who it applies to, "
+                 "and write down why.",
+        "feeds": "Used by <b>Shop Sales Analysis</b>: the per-day rate divides by "
+                 "the days shops could trade, not by every day in the window. A "
+                 "day only leaves a bond's divisor when nobody could open - "
+                 "everyone-shut days, or every shop in that bond named.",
+    },
+    "warehouse": {
+        "heading": "Warehouse Leaves",
+        "noun_pl": "warehouses",
+        "blurb": "A day a KSBC warehouse did not issue. Pick the days on the "
+                 "calendar, say which warehouses, and write down why.",
+        "feeds": "Recorded, and shown here. <b>No report divides by it yet</b> - "
+                 "say the word and secondary-sales dispatch rates can use it.",
+    },
+}
+
+
+def _leave_month(month: str) -> tuple[int, int]:
+    today = date.today()
+    try:
+        year, mon = int(str(month)[:4]), int(str(month)[5:7])
+        date(year, mon, 1)
+        return year, mon
+    except (ValueError, TypeError):
+        return today.year, today.month
+
+
+@app.get("/settings/leaves/{kind}", response_class=HTMLResponse)
+def leaves_page(request: Request, kind: str, month: str = "",
+                note: str = "", error: str = ""):
+    user = require_user(request)
+    look = _LEAVE_LOOK.get(kind)
+    if look is None:
+        raise HTTPException(404, "There is no such leave calendar.")
+
+    year, mon = _leave_month(month)
+    today = date.today()
+    rows = leaves.in_month(kind, year, mon)
+
+    by_day: dict[str, list] = defaultdict(list)
+    for row in rows:
+        by_day[row["date"]].append(row)
+
+    days = []
+    for day in leaves.month_days(year, mon):
+        here = by_day.get(day.isoformat(), [])
+        shut_all = any(r.get("scope") == "all" for r in here)
+        named = [n for r in here if r.get("scope") != "all" for n in (r.get("names") or [])]
+        said = [r.get("reason") for r in here if r.get("reason")]
+        title = ("Everyone shut" if shut_all else
+                 f"{len(named)} {look['noun_pl']} shut" if named else "Open")
+        if said:
+            title += " - " + "; ".join(said)
+        days.append({"iso": day.isoformat(), "dom": day.day,
+                     "all": shut_all, "some": bool(named),
+                     "today": day == today, "title": title})
+
+    if kind == "warehouse":
+        groups = [("", leaves.warehouses())]
+    else:
+        by_bond: dict[str, list] = defaultdict(list)
+        for shop in leaves.shops():
+            by_bond[shop["bond"] or "UNMAPPED"].append(shop["name"])
+        groups = [(bond, by_bond[bond]) for bond in sorted(by_bond)]
+
+    recorded = []
+    for row in sorted(rows, key=lambda r: r["date"]):
+        day = date.fromisoformat(row["date"])
+        names = row.get("names") or []
+        recorded.append({
+            "id": row.get("id", ""), "scope": row.get("scope", "all"),
+            "names": names, "reason": row.get("reason", ""),
+            "nice": f"{day.day} {MONTH_NAMES[day.month - 1][:3].title()}",
+            "who": (f"All {look['noun_pl']}" if row.get("scope") == "all"
+                    else ", ".join(names[:4]) + (f" +{len(names) - 4}" if len(names) > 4 else "")),
+        })
+
+    first = date(year, mon, 1)
+    prev = first - timedelta(days=1)
+    nxt = date(year + (mon == 12), (mon % 12) + 1, 1)
+    return templates.TemplateResponse(
+        request, "settings_leaves.html",
+        {"user": user, "page": f"leaves_{kind}", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", []),
+         "kind": kind, "heading": look["heading"], "noun_pl": look["noun_pl"],
+         "blurb": look["blurb"], "feeds": look["feeds"],
+         "ym": f"{year:04d}-{mon:02d}",
+         "month_label": f"{MONTH_NAMES[mon - 1].title()} {year}",
+         "prev_ym": f"{prev.year:04d}-{prev.month:02d}",
+         "next_ym": f"{nxt.year:04d}-{nxt.month:02d}",
+         "lead": first.weekday(), "days": days, "groups": groups,
+         "recorded": recorded, "note": note, "error": error},
+    )
+
+
+@app.post("/settings/leaves/{kind}/add")
+def leaves_add(request: Request, kind: str, days: str = Form(""),
+               names: list[str] = Form(default=[]), reason: str = Form(""),
+               month: str = Form("")):
+    user = require_user(request)
+    if kind not in leaves.KINDS:
+        raise HTTPException(404, "There is no such leave calendar.")
+    got = leaves.add(kind, [d for d in days.split(",") if d.strip()],
+                     names, reason, user)
+    back = {"month": month}
+    if "error" in got:
+        back["error"] = got["error"]
+    else:
+        said = f"{got['added']} day{'' if got['added'] == 1 else 's'} marked closed"
+        if got["already"]:
+            said += f" ({got['already']} already recorded)"
+        back["note"] = said + f" for {got['who']}."
+    return RedirectResponse(f"/settings/leaves/{kind}?" + urlencode(back), status_code=303)
+
+
+@app.post("/settings/leaves/{kind}/remove")
+def leaves_remove(request: Request, kind: str, id: str = Form(...),
+                  month: str = Form("")):
+    require_user(request)
+    if kind not in leaves.KINDS:
+        raise HTTPException(404, "There is no such leave calendar.")
+    got = leaves.remove(kind, id)
+    back = {"month": month}
+    back["error" if "error" in got else "note"] = got.get("error", "Leave removed.")
+    return RedirectResponse(f"/settings/leaves/{kind}?" + urlencode(back), status_code=303)
 
 
 @app.post("/logout")
@@ -1684,6 +1831,33 @@ def _previous_window(period: dict):
     return None if "error" in prev else prev
 
 
+def _analysis_basis(chosen: dict, prev: dict | None, bonds) -> dict:
+    """How many days each bond could actually trade in the window.
+
+    The per-day rate used to divide by the calendar, so three dry days read as
+    three days of bad trading. It now divides by the days shops could open -
+    the window, less the days the leave calendar says nobody did. A bond only
+    loses a day when nobody in it could open, so one shop shut for a festival
+    does not quietly move a whole bond's rate.
+    """
+    start, end = chosen["start"], chosen["end"]
+    shut = leaves.shop_closed_days(start, end)
+    basis = {
+        "span": leaves.span_days(start, end),
+        "open": leaves.open_days(start, end),
+        "closed": sorted(d.isoformat() for d in shut),
+        "days_by": {b: leaves.open_days(start, end, b) for b in bonds},
+    }
+    if prev:
+        p_start, p_end = prev["period"]["start"], prev["period"]["end"]
+        basis["prev_open"] = leaves.open_days(p_start, p_end)
+        basis["prev_days_by"] = {b: leaves.open_days(p_start, p_end, b) for b in bonds}
+    else:
+        basis["prev_open"] = basis["open"]
+        basis["prev_days_by"] = {}
+    return basis
+
+
 def _analysis_rows(win: dict, cluster: int, bond: str):
     """The rows the screen shows, the PDF prints and the workbook exports."""
     mod = _analysis_module()
@@ -1691,8 +1865,10 @@ def _analysis_rows(win: dict, cluster: int, bond: str):
     prev = _previous_window(chosen)
     now = _bond_totals(win)
     before = _bond_totals(prev) if prev else {}
-    raw = mod.build_rows(now, before, chosen["days"],
-                         prev["period"]["days"] if prev else chosen["days"], cluster, bond)
+    basis = _analysis_basis(chosen, prev, sorted(set(now) | set(before)))
+    raw = mod.build_rows(now, before, basis["open"], basis["prev_open"],
+                         cluster, bond,
+                         basis["days_by"], basis["prev_days_by"])
     rows = [{
         "kind": r["kind"], "label": r["label"], "cells": r["cells"],
         "net_pct": mod.pct(r["net_pct"]), "sell": mod.pct(r["sell"]),
@@ -1700,7 +1876,7 @@ def _analysis_rows(win: dict, cluster: int, bond: str):
         "cm": r["cm"], "lm": r["lm"],
         "up": r["trend"] >= 0, "trend": mod.whole(abs(r["trend"])),
     } for r in raw]
-    return rows, (prev["period"] if prev else None), sorted(now)
+    return rows, (prev["period"] if prev else None), sorted(now), basis
 
 
 @app.get("/reports/shop-analysis", response_class=HTMLResponse)
@@ -1711,14 +1887,15 @@ def shop_analysis_page(request: Request, date_from: str = "", date_to: str = "",
     win = _window(date_from, date_to, period)
     chosen = None if "error" in win else win["period"]
 
-    rows, prev, bonds = [], None, []
+    rows, prev, bonds, basis = [], None, [], None
     if chosen:
-        rows, prev, bonds = _analysis_rows(win, cluster, bond)
+        rows, prev, bonds, basis = _analysis_rows(win, cluster, bond)
     return templates.TemplateResponse(
         request, "report_shop_analysis.html",
         {"user": user, "page": "shop_analysis", "started_at": STARTED_AT,
          "problems": getattr(app.state, "problems", []),
          "periods": periods, "chosen": chosen, "prev": prev, "rows": rows,
+         "basis": basis,
          "bonds": bonds, "cluster": cluster, "bond": bond.upper(),
          "calendar": _calendar_days(),
          "source": win.get("source", ""), "chain": win.get("chain", []),
@@ -1736,7 +1913,7 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
     if "error" in win:
         raise HTTPException(404, win["error"])
     chosen = win["period"]
-    rows, _prev, _bonds = _analysis_rows(win, cluster, bond)
+    rows, _prev, _bonds, _basis = _analysis_rows(win, cluster, bond)
     if not rows:
         raise HTTPException(404, "Nothing matches that filter.")
 
@@ -1796,13 +1973,21 @@ def shop_analysis_pdf(request: Request, date_from: str = "", date_to: str = "",
     # screen just showed instead of re-deriving them from a different read.
     totals = outdir / "_totals.json"
     totals.write_text(json.dumps(_bond_totals(win)))
+    now_totals = _bond_totals(win)
+    basis = _analysis_basis(chosen, prev, sorted(now_totals))
+    days_by = outdir / "_days_by.json"
+    days_by.write_text(json.dumps(basis["days_by"]))
     argv = ["python3", str(APP_REPORTS / "build_shop_analysis_pdf.py"),
             "--totals", str(totals), "--outdir", str(outdir),
-            "--period", chosen["short"], "--days", str(chosen["days"])]
+            "--period", chosen["short"], "--days", str(basis["open"]),
+            "--days-by", str(days_by)]
     if prev:
         before = outdir / "_prev.json"
         before.write_text(json.dumps(_bond_totals(prev)))
-        argv += ["--prev-totals", str(before), "--prev-days", str(prev["period"]["days"])]
+        prev_by = outdir / "_prev_days_by.json"
+        prev_by.write_text(json.dumps(basis["prev_days_by"]))
+        argv += ["--prev-totals", str(before), "--prev-days", str(basis["prev_open"]),
+                 "--prev-days-by", str(prev_by)]
     if cluster:
         argv += ["--cluster", str(cluster)]
     if bond:

@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }}{% endblock %}
+{% block heading %}{{ heading }}{% endblock %}
+
+{% block head %}
+<style>
+  .wrap { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:20px 22px; margin-bottom:16px; }
+  .wrap h3 { margin:0 0 4px; font-size:15px; }
+  .wrap p.sub { margin:0 0 16px; font-size:13px; color:var(--muted); line-height:1.55; }
+  .two { display:grid; gap:16px; grid-template-columns:minmax(300px,360px) 1fr;
+         align-items:start; }
+  @media (max-width:900px){ .two { grid-template-columns:1fr; } }
+
+  /* the month */
+  .mhead { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .mhead .mn { font-size:14.5px; font-weight:700; }
+  .mhead .nav { margin-left:auto; display:flex; gap:6px; }
+  .mhead a.step { display:grid; place-items:center; width:28px; height:28px;
+                  border:1px solid var(--line); border-radius:8px; color:var(--ink);
+                  text-decoration:none; font-size:13px; }
+  .mhead a.step:hover { background:var(--hover); }
+
+  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+  .grid .dow { text-align:center; font-size:10px; letter-spacing:.5px; font-weight:700;
+               text-transform:uppercase; color:var(--muted); padding-bottom:3px; }
+  .grid .pad { height:38px; }
+  .day { height:38px; border:1px solid var(--line); border-radius:9px; background:var(--card);
+         font:inherit; font-size:13px; font-weight:600; color:var(--ink); cursor:pointer;
+         position:relative; }
+  .day:hover { background:var(--hover); border-color:var(--blue); }
+  .day.today { box-shadow:inset 0 0 0 1px var(--blue); }
+  /* Already recorded: gold for everybody, a dot for a named few. */
+  .day.all { background:var(--gold); border-color:var(--gold); color:#20160A; }
+  .day.some::after { content:''; position:absolute; left:50%; bottom:5px; width:4px;
+                     height:4px; border-radius:50%; background:var(--blue);
+                     transform:translateX(-50%); }
+  .day.sel { background:var(--navy); border-color:var(--navy); color:#fff; }
+  .day.sel.all { background:var(--navy); }
+  .key { display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; font-size:11.5px;
+         color:var(--muted); }
+  .key i { display:inline-block; width:10px; height:10px; border-radius:3px;
+           margin-right:5px; vertical-align:-1px; }
+  .key .k1 i { background:var(--gold); }
+  .key .k2 i { background:var(--blue); border-radius:50%; }
+  .key .k3 i { background:var(--navy); }
+
+  /* the form */
+  label.f { display:block; font-size:10px; letter-spacing:.7px; text-transform:uppercase;
+            color:var(--muted); font-weight:700; margin:16px 0 6px; }
+  label.f:first-of-type { margin-top:0; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px;
+         overflow:hidden; }
+  .seg button { border:0; background:var(--card); color:var(--muted); font:inherit;
+                font-size:12.5px; font-weight:650; padding:7px 14px; cursor:pointer; }
+  .seg button.on { background:var(--navy); color:#fff; }
+  input[type=text] { width:100%; padding:9px 11px; border-radius:9px;
+                     border:1px solid var(--line); background:var(--card); color:var(--ink);
+                     font:inherit; font-size:13.5px; box-sizing:border-box; }
+  input:focus { outline:2px solid #C7D2FE; outline-offset:-1px; border-color:var(--blue); }
+
+  .picker { border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .picker .find { border:0; border-bottom:1px solid var(--line); border-radius:0; }
+  .picker .list { max-height:230px; overflow:auto; padding:6px; }
+  .picker .grp { font-size:10px; letter-spacing:.6px; text-transform:uppercase;
+                 font-weight:700; color:var(--muted); padding:9px 8px 4px;
+                 display:flex; align-items:center; gap:8px; }
+  .picker .grp button { border:0; background:none; color:var(--blue); font:inherit;
+                        font-size:10.5px; font-weight:700; cursor:pointer;
+                        text-transform:uppercase; letter-spacing:.5px; }
+  .picker .opt { display:flex; align-items:center; gap:9px; padding:6px 8px;
+                 border-radius:7px; font-size:13px; cursor:pointer; }
+  .picker .opt:hover { background:var(--hover); }
+  .picker .opt input { margin:0; }
+  .picker .none { padding:14px 10px; text-align:center; color:var(--muted); font-size:12.5px; }
+  .chosen { margin-top:8px; font-size:12px; color:var(--muted); }
+  .chosen b { color:var(--ink); font-weight:650; }
+
+  /* what is recorded */
+  .rows { margin-top:2px; }
+  .lrow { display:flex; align-items:center; gap:12px; padding:11px 0;
+          border-bottom:1px solid var(--line); font-size:13.5px; }
+  .lrow:last-child { border-bottom:0; }
+  .lrow .d { font-weight:700; width:104px; flex:none; }
+  .lrow .who { font-weight:600; }
+  .lrow .tag { font-size:10px; letter-spacing:.5px; text-transform:uppercase;
+               font-weight:700; border-radius:20px; padding:2px 9px; flex:none; }
+  .lrow .tag.all { background:var(--gold); color:#7A5200; }
+  .lrow .tag.some { background:#E0E7FF; color:#3730A3; }
+  .lrow .why { color:var(--muted); font-size:12.5px; min-width:0;
+               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lrow .sp { margin-left:auto; flex:none; }
+  .empty { color:var(--muted); font-size:13px; padding:18px 2px; text-align:center; }
+
+  .note { background:#ECFDF5; border:1px solid #A7F3D0; color:#065F46;
+          border-radius:10px; padding:11px 14px; font-size:13.5px; margin-bottom:16px; }
+  .bad { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B;
+         border-radius:10px; padding:11px 14px; font-size:13.5px; margin-bottom:16px; }
+  .feeds { font-size:12.5px; color:var(--muted); margin-top:14px; padding-top:13px;
+           border-top:1px solid var(--line); line-height:1.55; }
+  .feeds b { color:var(--ink); font-weight:650; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if note %}<div class="note">{{ note }}</div>{% endif %}
+{% if error %}<div class="bad">{{ error }}</div>{% endif %}
+
+<form method="post" action="/settings/leaves/{{ kind }}/add" id="lf">
+<input type="hidden" name="days" id="fDays">
+<input type="hidden" name="month" value="{{ ym }}">
+
+<div class="two">
+  <div class="wrap">
+    <div class="mhead">
+      <span class="mn">{{ month_label }}</span>
+      <span class="nav">
+        <a class="step" href="?month={{ prev_ym }}" title="Previous month">&#9664;</a>
+        <a class="step" href="?month={{ next_ym }}" title="Next month">&#9654;</a>
+      </span>
+    </div>
+    <div class="grid">
+      {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+        <div class="dow">{{ d }}</div>
+      {% endfor %}
+      {% for _ in range(lead) %}<div class="pad"></div>{% endfor %}
+      {% for day in days %}
+        <button type="button" class="day{{ ' all' if day.all }}{{ ' some' if day.some }}{{ ' today' if day.today }}"
+                data-iso="{{ day.iso }}"
+                title="{{ day.title }}">{{ day.dom }}</button>
+      {% endfor %}
+    </div>
+    <div class="key">
+      <span class="k1"><i></i>Everyone shut</span>
+      <span class="k2"><i></i>Some named</span>
+      <span class="k3"><i></i>Picked now</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <h3>Mark a day closed</h3>
+    <p class="sub">{{ blurb }}</p>
+
+    <label class="f">Applies to</label>
+    <div class="seg" id="segScope">
+      <button type="button" data-s="all" class="on" onclick="setScope('all')">All {{ noun_pl }}</button>
+      <button type="button" data-s="some" onclick="setScope('some')">Named {{ noun_pl }}</button>
+    </div>
+
+    <div id="who" hidden>
+      <label class="f">Which {{ noun_pl }}</label>
+      <div class="picker">
+        <input type="text" class="find" id="find" placeholder="Type to filter…"
+               oninput="filterList()" autocomplete="off">
+        <div class="list" id="list">
+          {% for group, items in groups %}
+            {% if group %}
+              <div class="grp" data-grp="{{ group }}">
+                <span>{{ group }}</span>
+                <button type="button" onclick="pickGroup('{{ group|e }}', true)">All</button>
+                <button type="button" onclick="pickGroup('{{ group|e }}', false)">None</button>
+              </div>
+            {% endif %}
+            {% for it in items %}
+              <label class="opt" data-name="{{ it|lower }}" data-grp="{{ group }}">
+                <input type="checkbox" name="names" value="{{ it }}" onchange="sayChosen()">
+                <span>{{ it }}</span>
+              </label>
+            {% endfor %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="chosen" id="chosen">Nothing selected yet.</div>
+    </div>
+
+    <label class="f" for="reason">Reason</label>
+    <input type="text" id="reason" name="reason" maxlength="200"
+           placeholder="Dry day, hartal, local festival — whatever it was"
+           autocomplete="off">
+
+    <div class="chosen" id="picked" style="margin-top:16px">No days picked.</div>
+    <div style="margin-top:12px">
+      <button class="act primary" type="submit">Save leave</button>
+    </div>
+
+    <div class="feeds">{{ feeds|safe }}</div>
+  </div>
+</div>
+</form>
+
+<div class="wrap">
+  <h3>Recorded in {{ month_label }}</h3>
+  <p class="sub">Everything on the calendar to the left, in date order.</p>
+  <div class="rows">
+    {% for row in recorded %}
+      <div class="lrow">
+        <span class="d">{{ row.nice }}</span>
+        <span class="tag {{ row.scope }}">{{ 'Everyone' if row.scope == 'all' else row.names|length ~ ' named' }}</span>
+        <span class="who">{{ row.who }}</span>
+        <span class="why">{{ row.reason or '—' }}</span>
+        <span class="sp">
+          <form method="post" action="/settings/leaves/{{ kind }}/remove"
+                onsubmit="return confirm('Remove the {{ row.nice }} leave?')">
+            <input type="hidden" name="id" value="{{ row.id }}">
+            <input type="hidden" name="month" value="{{ ym }}">
+            <button class="act danger" type="submit">Remove</button>
+          </form>
+        </span>
+      </div>
+    {% else %}
+      <div class="empty">Nothing recorded for {{ month_label }}.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const picked = new Set();
+
+document.querySelectorAll('.day').forEach(b => b.addEventListener('click', () => {
+  const iso = b.dataset.iso;
+  if (picked.has(iso)){ picked.delete(iso); b.classList.remove('sel'); }
+  else { picked.add(iso); b.classList.add('sel'); }
+  sayPicked();
+}));
+
+function sayPicked(){
+  fDays.value = [...picked].sort().join(',');
+  const n = picked.size;
+  picked_el().innerHTML = n
+    ? `<b>${n}</b> day${n === 1 ? '' : 's'} picked: ${[...picked].sort()
+        .map(d => d.slice(8) + '/' + d.slice(5,7)).join(', ')}`
+    : 'No days picked.';
+}
+function picked_el(){ return document.getElementById('picked'); }
+
+function setScope(s){
+  document.querySelectorAll('#segScope button').forEach(b =>
+    b.classList.toggle('on', b.dataset.s === s));
+  who.hidden = (s === 'all');
+  if (s === 'all'){
+    document.querySelectorAll('#list input').forEach(i => i.checked = false);
+    sayChosen();
+  }
+}
+
+function filterList(){
+  const q = find.value.trim().toLowerCase();
+  document.querySelectorAll('#list .opt').forEach(o => {
+    o.style.display = !q || o.dataset.name.includes(q) ? '' : 'none';
+  });
+  // A group heading with nothing under it is noise.
+  document.querySelectorAll('#list .grp').forEach(g => {
+    const any = [...document.querySelectorAll(`#list .opt[data-grp="${CSS.escape(g.dataset.grp)}"]`)]
+                  .some(o => o.style.display !== 'none');
+    g.style.display = any ? '' : 'none';
+  });
+}
+
+function pickGroup(group, on){
+  document.querySelectorAll(`#list .opt[data-grp="${CSS.escape(group)}"] input`)
+    .forEach(i => { i.checked = on; });
+  sayChosen();
+}
+
+function sayChosen(){
+  const on = [...document.querySelectorAll('#list input:checked')];
+  chosen.innerHTML = on.length
+    ? `<b>${on.length}</b> selected: ${on.slice(0,6).map(i => i.value).join(', ')}`
+      + (on.length > 6 ? ` and ${on.length - 6} more` : '')
+    : 'Nothing selected yet.';
+}
+
+// A leave with no day is nothing at all, so say so here rather than letting
+// the server answer with an error page.
+lf.addEventListener('submit', e => {
+  if (!picked.size){
+    e.preventDefault();
+    picked_el().innerHTML = '<b style="color:var(--bad)">Pick at least one day on the calendar.</b>';
+  }
+});
+
+sayPicked();
+</script>
+{% endblock %}

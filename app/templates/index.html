@@ -229,6 +229,27 @@
   .rtag.other_month { background:#FFEDD5; color:#9A3412; }
   .rtag.duplicate { background:#E0E7FF; color:#3730A3; }
   .rtag.failed { background:#FEE2E2; color:#991B1B; }
+  .rtag.filed { background:#D1FAE5; color:#065F46; }
+  .rtag.absent { background:#FFEDD5; color:#9A3412; }
+  .rtag.stray { background:#F3E8FF; color:#6B21A8; }
+  .rfilt { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:10px; }
+  .rchip { border:1px solid var(--line); background:var(--card); color:var(--muted);
+           border-radius:20px; padding:5px 11px; font:inherit; font-size:12px;
+           font-weight:650; cursor:pointer; display:inline-flex; align-items:center;
+           gap:7px; }
+  .rchip b { color:var(--ink); font-weight:750; }
+  .rchip:hover { background:var(--hover); }
+  .rchip.on { background:var(--navy); border-color:var(--navy); color:#fff; }
+  .rchip.on b { color:var(--gold); }
+  .rfind { width:100%; box-sizing:border-box; padding:8px 11px; border-radius:9px;
+           border:1px solid var(--line); background:var(--card); color:var(--ink);
+           font:inherit; font-size:13px; margin-bottom:8px; }
+  .rscroll { max-height:280px; overflow:auto; border:1px solid var(--line);
+             border-radius:10px; padding:5px; }
+  .rgrp { font-size:10px; letter-spacing:.6px; text-transform:uppercase; font-weight:700;
+          color:var(--muted); padding:10px 9px 5px; position:sticky; top:-5px;
+          background:var(--card); }
+  .rnone { padding:18px; text-align:center; color:var(--muted); font-size:12.5px; }
 </style>
 {% endblock %}
 
@@ -275,12 +296,19 @@
 <p class="lead">Set warehouse and shop leaves. These would feed the working-days count in summary reports.</p>
 <div class="cards">
   {% for c in leave_cards %}
-  <div class="uc off">
+  <div class="uc {{ 'ready' if c.href else 'off' }}">
     <div class="top">
       <span class="ic">{{ icon(c.icon) }}</span>
-      <div><h4>{{ c.title }}</h4></div>
+      <div><h4>{{ c.title }}</h4>
+        {% if c.blurb %}<div class="meta">{{ c.blurb }}</div>{% endif %}</div>
     </div>
-    <div class="row"><span class="soon-tag">Not built yet</span></div>
+    <div class="row">
+      {% if c.href %}
+        <a class="btn primary" href="{{ c.href }}">Manage</a>
+      {% else %}
+        <span class="soon-tag">Not built yet</span>
+      {% endif %}
+    </div>
   </div>
   {% endfor %}
 </div>
@@ -692,6 +720,7 @@ function tile(n, k, look){
 }
 
 function showReceipt(r){
+  RC = r;
   const filed = r.ok + r.blank;
   const bad = r.failed + r.other_month + r.duplicate;
   rTitle.textContent = `${r.label} instruction — what landed`;
@@ -703,6 +732,8 @@ function showReceipt(r){
   h += '<div class="tiles">'
      + tile(r.ok, 'With an instruction', 'good')
      + tile(r.blank, 'Blank — nothing to buy', 'warn')
+     + tile(r.absent, 'In mapping, no file', 'warn')
+     + tile(r.stray, 'Not in bond mapping', 'warn')
      + tile(r.duplicate, 'Duplicate shop', 'warn')
      + tile(r.other_month, 'Another month', 'warn')
      + tile(r.failed, 'Unreadable', 'hot')
@@ -711,22 +742,35 @@ function showReceipt(r){
   h += `<div class="rnote">Filed under <b>${esc(r.label)}</b>: `
      + `<b>${r.shops}</b> shop${r.shops === 1 ? '' : 's'}`
      + (r.warehouses ? ` across <b>${r.warehouses}</b> warehouses` : '') + '. '
-     + (r.blank ? `A blank sheet is a real answer — KSBC gave that shop nothing this month — `
-                + `so those ${r.blank} are kept and counted as zero.` : '')
+     + (r.mapped ? `Bond mapping holds <b>${r.mapped}</b>. ` : '')
+     + (r.blank ? `A blank sheet is a real answer — KSBC gave that shop nothing this `
+                + `month — so those ${r.blank} are kept and counted as zero.` : '')
      + '</div>';
 
-  if (r.missing_n){
-    const names = (r.missing || []).map(esc).join(', ');
-    h += `<div class="rnote"><b>${r.missing_n}</b> shop`
-       + `${r.missing_n === 1 ? '' : 's'} in master data had no file in this batch`
-       + (names ? `: ${names}${r.missing_n > (r.missing || []).length ? ' …' : ''}` : '')
-       + '.</div>';
+  if (r.stray){
+    h += `<div class="rnote"><b>${r.stray}</b> shop`
+       + `${r.stray === 1 ? ' is' : 's are'} not in bond mapping — KSBC still exports `
+       + `for shops that have closed. Filed and usable, but they land under `
+       + `<b>(unmapped)</b> in the report until you add them to Bond Mapping.</div>`;
   }
 
-  const probs = r.problems || [];
-  if (probs.length){
+  // Every shop in the mapping, and what became of it. 291 rows is a list you
+  // filter, not a list you scroll - so it opens on the ones that need looking at.
+  h += `<div class="rlist"><h5>Every shop in bond mapping</h5>
+        <div class="rfilt" id="rFilt">
+          ${chip('all', 'All', r.roster.length)}
+          ${chip('filed', 'With an instruction', rosterN(r, 'filed'))}
+          ${chip('blank', 'Blank', rosterN(r, 'blank'))}
+          ${chip('absent', 'No file', rosterN(r, 'absent'))}
+          ${chip('stray', 'Not in mapping', rosterN(r, 'stray'))}
+        </div>
+        <input type="text" class="rfind" id="rFind" placeholder="Find a shop or bond…"
+               autocomplete="off" oninput="drawRoster()">
+        <div class="rscroll" id="rRoster"></div></div>`;
+
+  if ((r.problems || []).length){
     h += '<div class="rlist"><h5>Every file that is not a plain instruction</h5>'
-       + probs.map(x =>
+       + r.problems.map(x =>
            `<div class="rrow"><span class="rtag ${x.state}">${x.state.replace('_',' ')}</span>`
          + `<span class="who">${esc(x.shop || x.name || '')}</span>`
          + `<span class="why">${esc(x.why || RC_WORDS[x.state] || '')}</span></div>`).join('')
@@ -734,7 +778,55 @@ function showReceipt(r){
   }
 
   rBody.innerHTML = h;
+  RSTATE = r.absent ? 'absent' : 'all';
+  drawRoster();
   rVeil.classList.add('on');
+}
+
+let RC = null, RSTATE = 'all';
+
+// The chips count rows in this list, not files - a shop that is not in the
+// mapping is one row here however its own sheet came out.
+function rosterN(r, state){
+  return (r.roster || []).filter(s => rosterHas(s, state)).length;
+}
+
+function rosterHas(s, k){
+  return k === 'all' ? true : k === 'stray' ? !!s.stray : s.state === k;
+}
+
+function chip(key, label, n){
+  return `<button type="button" class="rchip" data-k="${key}" onclick="setRoster('${key}')">`
+       + `${label}<b>${n}</b></button>`;
+}
+
+function setRoster(k){ RSTATE = k; drawRoster(); }
+
+const ROSTER_WORD = {filed:'instruction', blank:'blank', absent:'no file'};
+
+function drawRoster(){
+  if (!RC) return;
+  document.querySelectorAll('#rFilt .rchip').forEach(b =>
+    b.classList.toggle('on', b.dataset.k === RSTATE));
+  const q = (document.getElementById('rFind')?.value || '').trim().toLowerCase();
+  const rows = (RC.roster || []).filter(s =>
+    rosterHas(s, RSTATE)
+    && (!q || (s.name + ' ' + s.bond).toLowerCase().includes(q)));
+
+  if (!rows.length){
+    rRoster.innerHTML = '<div class="rnone">Nothing matches that.</div>';
+    return;
+  }
+  let out = '', bond = null;
+  for (const s of rows){
+    const b = s.bond || '(not in bond mapping)';
+    if (b !== bond){ bond = b; out += `<div class="rgrp">${esc(bond)}</div>`; }
+    out += `<div class="rrow"><span class="rtag ${s.state}">${ROSTER_WORD[s.state]}</span>`
+         + `<span class="who">${esc(s.name)}</span>`
+         + (s.stray ? '<span class="rtag stray">not in mapping</span>' : '')
+         + `<span class="why">${esc(s.warehouse || '')}</span></div>`;
+  }
+  rRoster.innerHTML = out;
 }
 
 function closeReceipt(){ rVeil.classList.remove('on'); }

@@ -175,6 +175,11 @@ def _blank_of(d: dict) -> bool:
     return not d["rows"]
 
 
+def _tidy_shop(name: str) -> str:
+    """Master writes '10001-PONNANI'; a filed shop reads '10001 - PONNANI'."""
+    return re.sub(r"^\s*(\d+)\s*-\s*", r"\1 - ", name or "").strip()
+
+
 def _shop_of(d: dict) -> str:
     code, name = d.get("shop_code") or "", d.get("shop_name") or ""
     return f"{code} - {name}".strip(" -") or (d.get("file") or "")
@@ -263,27 +268,62 @@ def store(paths: list[Path], expect: str = "") -> dict:
         problems.append({"name": d["file"], "state": "blank", "shop": _shop_of(d),
                          "why": "no instruction lines - nothing to buy"})
 
-    missing: list[str] = []
+    # Every shop in bond mapping, and what became of it. Four states, and the
+    # fourth is the one that used to be invisible: KSBC keeps exporting for
+    # shops that have closed, and those files land here with nothing in master
+    # to hang them on. They are filed - a closed shop with an instruction is
+    # worth seeing - but they are named as strays rather than counted as though
+    # the mapping knew about them.
     try:
-        for code, info in pi_master().items():
-            if code not in by_shop:
-                missing.append(str(info.get("name") or code))
+        master = pi_master()
     except Exception:
-        missing = []
+        master = {}
+
+    roster: list[dict] = []
+    for code, (_p, d) in by_shop.items():
+        info = master.get(code)
+        roster.append({
+            "code": code, "name": _shop_of(d),
+            "bond": str((info or {}).get("bond") or ""),
+            "warehouse": str(d.get("warehouse") or ""),
+            # Two separate facts: what its sheet said, and whether the mapping
+            # knows the shop at all. A closed shop KSBC still exports for can
+            # be either, and counting it as one hid the other.
+            "state": "blank" if _blank_of(d) else "filed",
+            "stray": info is None,
+        })
+    for code, info in master.items():
+        if code in by_shop:
+            continue
+        roster.append({
+            "code": code, "name": _tidy_shop(str(info.get("name") or code)),
+            "bond": str(info.get("bond") or ""),
+            "warehouse": str(info.get("warehouse") or ""),
+            "state": "absent", "stray": False,
+        })
+    roster.sort(key=lambda r: (r["bond"] or "~", r["name"]))
+
+    def count(state: str) -> int:
+        return sum(1 for r in roster if r["state"] == state)
+
+    strays = sum(1 for r in roster if r.get("stray"))
 
     _CACHE.pop(key, None)
     return {
         "month": key, "label": month_label(key),
         "files": len(paths),
         "shops": len(by_shop),
+        "mapped": len(master),
         "ok": len(by_shop) - len(blanks),
         "blank": len(blanks),
+        "stray": strays,
+        "absent": count("absent"),
         "duplicate": sum(1 for x in problems if x["state"] == "duplicate"),
         "other_month": sum(1 for x in problems if x["state"] == "other_month"),
         "failed": sum(1 for x in problems if x["state"] == "failed"),
         "warehouses": len({(d.get("warehouse") or "").strip()
                            for _p, d in by_shop.values() if d.get("warehouse")}),
-        "missing": sorted(missing)[:40], "missing_n": len(missing),
+        "roster": roster,
         "problems": problems[:400],
     }
 

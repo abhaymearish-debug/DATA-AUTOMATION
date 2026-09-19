@@ -123,12 +123,23 @@ def bond_totals(path: Path) -> dict[str, list[float]]:
 
 
 def build_rows(now: dict, prev: dict, days: int, prev_days: int,
-               only_cluster: int = 0, only_bond: str = ""):
+               only_cluster: int = 0, only_bond: str = "",
+               days_by: dict | None = None, prev_days_by: dict | None = None):
     """Bond rows interleaved with their cluster subtotals, then the grand total.
 
     A cluster or bond filter narrows what is shown AND what is totalled, so the
     TOTAL line always ties out to the rows above it rather than to the book.
+
+    `days_by` lets a bond divide by its own trading days - a hartal that shut
+    one bond for two days should not flatter or punish the twelve that traded
+    through it. Anything not named in it falls back to `days`, which is what
+    the cluster and grand rows use.
     """
+    days_by = days_by or {}
+    prev_days_by = prev_days_by or {}
+
+    def span(label):
+        return days_by.get(label, days), prev_days_by.get(label, prev_days)
     clusters = reports_api.bond_clusters()
     want = (only_bond or "").strip().upper()
     rows, grand, grand_prev = [], [0.0] * 4, 0.0
@@ -143,7 +154,7 @@ def build_rows(now: dict, prev: dict, days: int, prev_days: int,
         for bond in sorted(names):
             v = now[bond]
             p = prev.get(bond, [0.0] * 4)[2]
-            rows.append(make_row(bond, v, p, days, prev_days, "bond"))
+            rows.append(make_row(bond, v, p, *span(bond), "bond"))
             for k in range(4):
                 sub[k] += v[k]
             sub_prev += p
@@ -160,7 +171,7 @@ def build_rows(now: dict, prev: dict, days: int, prev_days: int,
         if only_cluster or (want and bond != want):
             continue
         v = now[bond]
-        rows.append(make_row(bond, v, prev.get(bond, [0.0] * 4)[2], days, prev_days, "bond"))
+        rows.append(make_row(bond, v, prev.get(bond, [0.0] * 4)[2], *span(bond), "bond"))
         for k in range(4):
             grand[k] += v[k]
         grand_prev += prev.get(bond, [0.0] * 4)[2]
@@ -362,6 +373,9 @@ def main() -> int:
     ap.add_argument("--cluster", type=int, default=0)
     ap.add_argument("--bond", default="")
     ap.add_argument("--prev-days", type=int, default=0)
+    # Trading days per bond, when the leave calendar says they differ.
+    ap.add_argument("--days-by", default="")
+    ap.add_argument("--prev-days-by", default="")
     ap.add_argument("--verify", action="store_true")
     a = ap.parse_args()
 
@@ -388,7 +402,14 @@ def main() -> int:
     else:
         prev = {}
 
-    rows = build_rows(now, prev, days, prev_days, a.cluster, a.bond)
+    def _span_map(path):
+        if not path or not Path(path).is_file():
+            return {}
+        return {str(k).upper(): int(v)
+                for k, v in json.loads(Path(path).read_text()).items() if int(v) > 0}
+
+    rows = build_rows(now, prev, days, prev_days, a.cluster, a.bond,
+                      _span_map(a.days_by), _span_map(a.prev_days_by))
     if not rows or len(rows) == 1:
         print("ERROR: nothing matches that filter.")
         return 4
