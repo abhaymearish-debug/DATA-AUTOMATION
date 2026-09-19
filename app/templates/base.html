@@ -424,6 +424,11 @@
   .srcpop { display:none; position:absolute; left:0; bottom:calc(100% + 10px); z-index:40;
             width:362px; max-width:calc(100vw - 44px); padding:15px 17px 14px;
             max-height:min(66vh, 440px); overflow:auto; text-align:left;
+            /* Scrolling to the end of the list used to hand the rest of the
+               scroll to the page. The page moved, the chip slid out from under
+               the pointer, hover was lost and the panel shut itself while you
+               were reading it. The scroll stops here now. */
+            overscroll-behavior:contain;
             background:var(--card); border:1px solid var(--line); border-radius:16px;
             box-shadow:0 1px 2px rgba(16,24,40,.06), 0 22px 48px -14px rgba(16,24,40,.28); }
   .srcline:hover .srcpop, .srcline.on .srcpop { display:block;
@@ -474,7 +479,12 @@
                   letter-spacing:.7px; text-transform:uppercase; color:var(--muted);
                   background:color-mix(in srgb, var(--chip) 62%, transparent);
                   border-radius:6px; padding:3px 7px; }
-  .srcitem .f { margin-top:3px; font-size:10.5px; line-height:1.4; color:var(--muted);
+  /* The upload card it came off, which is the question the chip is really
+     being asked. It reads above the file name because the card is what you
+     know by name; the file is only how it happens to be spelled on disk. */
+  .srcitem .s { margin-top:3px; font-size:11px; line-height:1.35; font-weight:650;
+                color:var(--ink); letter-spacing:-.05px; }
+  .srcitem .f { margin-top:2px; font-size:10.5px; line-height:1.4; color:var(--muted);
                 letter-spacing:.1px; overflow:hidden; text-overflow:ellipsis;
                 white-space:nowrap; }
 
@@ -631,14 +641,18 @@ function tog(btn) {
    full height on the way. */
 (function(){
   function fit(){
-    document.querySelectorAll('.tablewrap').forEach(wrap => {
+    document.querySelectorAll('.wrap, .tablewrap').forEach(wrap => {
       const box = wrap.getBoundingClientRect();
       if (!box.height) return;                       // hidden: nothing to size
       // Measured from the table's own bottom edge, so the footnote's margin
       // is counted whatever it is on this page.
-      const foot = wrap.parentElement
-                 && wrap.parentElement.querySelector('.status');
-      const below = foot ? foot.getBoundingClientRect().bottom - box.bottom : 0;
+      // Everything under the table, whatever it is: a Source chip, a
+      // footnote, or both. Measuring only .status missed the chip entirely on
+      // the reports that carry no footnote, and left a band of nothing there.
+      const par = wrap.parentElement;
+      const last = par ? par.lastElementChild : null;
+      const below = (last && last !== wrap)
+                  ? last.getBoundingClientRect().bottom - box.bottom : 0;
       const room = innerHeight - box.top - Math.max(0, below) - 8;
       if (room > 220) wrap.style.maxHeight = Math.round(room) + 'px';
     });
@@ -772,10 +786,16 @@ window.ksdSource = function (block, host) {
       const lead = span ? ksdSpan(c.from, c.to) : (c.title || name);
       const under = dated ? name : '';
       const tag = c.kind ? `<span class="tag">${esc(TAG[c.kind] || c.kind)}</span>` : '';
+      // Which card on Raw Data Upload this came off. "Daily" on its own never
+      // said whether it meant shop sales or secondary, which is the first
+      // thing you want to know when you are checking a figure.
+      const from = c.stream
+        ? `<div class="s">${esc(c.stream)}</div>` : '';
       // Only a date span is short enough to keep on one line. A name or a
       // said-in-words title wraps instead of being cut off mid-sentence.
       return `<div class="srcitem${span ? '' : ' nw'}">
           <div class="w"><b title="${esc(lead)}">${esc(lead)}</b>${tag}</div>
+          ${from}
           ${under ? `<div class="f" title="${esc(under)}">${esc(under)}</div>` : ''}
         </div>`;
     }).join('');
@@ -800,6 +820,14 @@ window.ksdSource = function (block, host) {
 
   const chip = line.querySelector('.srcchip');
   const pop = line.querySelector('.srcpop');
+  // Scrolling the list is using it, so it pins itself open. On hover alone it
+  // would still shut the moment the page moved a pixel under the pointer -
+  // and a window this long is exactly the one you scroll.
+  pop.addEventListener('scroll', () => {
+    if (line.classList.contains('on')) return;
+    line.classList.add('on');
+    chip.setAttribute('aria-expanded', 'true');
+  }, {passive: true});
   // Near the right edge the panel hangs the other way, so it never runs off.
   const place = () => line.classList.toggle('rt',
     line.getBoundingClientRect().left + pop.offsetWidth

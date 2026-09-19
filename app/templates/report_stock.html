@@ -101,7 +101,7 @@
      table now: a navy row opens a warehouse, its stock sits underneath, and
      the three figures stay on one axis the whole way down. */
   .tablewrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
-               overflow:auto; max-height:calc(100vh - 210px);
+               overflow:auto; max-height:max(160px, calc(100vh - var(--stick) - 190px));
                box-shadow:0 1px 2px rgba(16,24,40,.05); }
   thead th { position:sticky; top:0; z-index:5; background:var(--navy); color:var(--gold);
              font-size:10px; letter-spacing:.7px; text-transform:uppercase; font-weight:700;

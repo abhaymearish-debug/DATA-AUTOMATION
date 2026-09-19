@@ -40,7 +40,11 @@
      column names on them. --stick is the filter strip above it. */
   .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
           overflow:auto;
-          max-height:max(120px, calc(100vh - var(--stick) - 250px)); }
+          /* A first-paint value; ksdFit measures the real room and takes
+             over, because what sits under the table - a Source chip, a
+             footnote of one line or three - is not the same on every
+             report or in every state. */
+          max-height:max(160px, calc(100vh - var(--stick) - 190px)); }
   /* Fixed layout, so a header and the figures under it sit on one axis. Auto
      layout was stretching CM / LM / TREND and pulling the numbers off it. */
   table { border-collapse:separate; border-spacing:0; width:100%; font-size:13px;
