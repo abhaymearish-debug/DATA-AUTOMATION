@@ -43,8 +43,8 @@
              font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
                          padding-left:14px; font-weight:600; }
-  tbody td.gut { padding:0; background:var(--navy);
-                 border-left:1px solid var(--gold); border-right:1px solid var(--gold); }
+  tbody td.gut { padding:0; border-left:1px solid var(--gold);
+                 border-right:1px solid var(--gold); }
 
   tr.bond td { background:var(--card); }
   tr.bond.alt td { background:var(--row); }
@@ -52,6 +52,13 @@
   tr.cluster td { background:var(--navy); color:var(--gold); font-weight:700; }
   tr.total td, tr.average td { background:#2B3440; color:#fff; font-weight:700; }
   tr.average td { background:#3C4653; }
+
+  /* The channel between blocks runs navy the whole way down, gold-ruled both
+     sides, exactly as the PDF prints it. Every row rule below set its own
+     background and painted straight over it, which left the channel as two
+     gold lines with the row colour between them. It wins outright now rather
+     than by being written last, so a new row style cannot rub it out again. */
+  thead th.gut, tbody td.gut { background:var(--navy) !important; }
 
   .d { display:inline-flex; align-items:center; gap:4px; font-weight:700; }
   .d .ar { font-size:9px; line-height:1; }

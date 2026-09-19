@@ -279,10 +279,6 @@
       <input id="q" class="search" type="search" placeholder="Search brand, pack or warehouse" autocomplete="off">
       <kbd>/</kbd>
     </div>
-    <div class="sp">
-      <button class="link" id="foldBtn" onclick="foldAll()">Collapse all</button>
-      <button class="btn" onclick="load()">Refresh</button>
-    </div>
   </div>
 </div>
 
@@ -422,7 +418,6 @@ function render(){
   list.innerHTML = (html && html + grand) ||
     `<tr><td class="item" colspan="4"><div class="empty">Nothing matches that.</div></td></tr>`;
   foot.textContent = '';
-  foldBtn.textContent = shut.size >= shown && shown > 0 ? 'Expand all' : 'Collapse all';
 }
 
 /* ---------------- rows ----------------
@@ -473,11 +468,6 @@ function brandGroups(rows){
 
 /* ---------------- interactions ---------------- */
 function fold(name){ shut.has(name) ? shut.delete(name) : shut.add(name); render(); }
-function foldAll(){
-  if (shut.size) shut.clear();
-  else DATA && DATA.warehouses.forEach(w => shut.add(w.name));
-  render();
-}
 
 let t = null;
 const q_ = document.getElementById('q');

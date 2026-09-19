@@ -272,10 +272,6 @@
       <span class="ic">⌕</span>
       <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
     </div>
-    <div class="sp">
-      <button class="link" id="foldBtn" onclick="foldAll()">Expand all</button>
-      <button class="act" onclick="load()">Refresh</button>
-    </div>
   </div>
 </div>
 
@@ -546,7 +542,6 @@ function render(){
             ? `From <b>${esc(chain[0].name.replace(/\.xlsx$/i, ''))}</b>.`
             : 'From one daily upload.')
         : '');
-  foldBtn.textContent = openBonds.size ? 'Collapse all' : 'Expand all';
 }
 
 function detailRows(code){
@@ -587,12 +582,6 @@ function toggle(bond){
   openBonds.has(bond) ? openBonds.delete(bond) : openBonds.add(bond);
   render();
 }
-function foldAll(){
-  if (openBonds.size) openBonds.clear();
-  else DATA.bonds.forEach(g => openBonds.add(g.bond));
-  render();
-}
-
 let timer = null;
 q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 130); });
 load();

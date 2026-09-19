@@ -123,7 +123,6 @@
       </div>
     </div>
     <div class="sp">
-      <button class="btn" onclick="resetAll()">Reset</button>
       <button class="btn xl" onclick="dl('xlsx')">Download Excel</button>
       <button class="btn pdf" onclick="dl('pdf')">Download PDF</button>
     </div>
@@ -164,13 +163,6 @@ function params(){
   if (view !== 'bond') p.set('view', view);
   return p;
 }
-function resetAll(){
-  fCluster.value = '';
-  FROM = SPAN.min; TO = SPAN.max;
-  Cal.init(FROM, TO, onPick);
-  load();
-}
-
 let SPAN = {min:'', max:''};
 
 async function load(){
