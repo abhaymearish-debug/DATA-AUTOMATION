@@ -344,10 +344,16 @@
      Delete sits apart and stays quiet until you go near it. */
   .hrun .acts { display:flex; flex-wrap:wrap; align-items:center; gap:7px;
                 margin-top:12px; padding-top:11px; border-top:1px solid var(--line); }
-  .hrun .acts .act { border-radius:9px; padding:6.5px 12px; font-size:12px;
+  .hrun .acts .act { display:inline-flex; align-items:center; gap:6px;
+                     border-radius:9px; padding:6.5px 12px; font-size:12px;
                      font-weight:650; text-decoration:none;
                      transition:background-color .14s ease, border-color .14s ease,
                                 color .14s ease; }
+  .hrun .acts .act svg, .hrun .past .act svg {
+                     width:13px; height:13px; flex:none; fill:none;
+                     stroke:currentColor; stroke-width:1.9;
+                     stroke-linecap:round; stroke-linejoin:round; }
+  .hrun .past .act { display:inline-flex; align-items:center; gap:5px; }
   .hrun .acts .act:first-child { background:var(--row); border-color:var(--line);
                                  color:var(--ink); font-weight:700; }
   .hrun .acts .act:first-child:hover { background:var(--hover);
@@ -1104,6 +1110,11 @@ function artifactLinks(job, longLabels){
   }).join('');
 }
 
+// An arrow into a tray: this one leaves the app and lands on your machine.
+const DL = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+  + '<path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/>'
+  + '<path d="M4 20.5h16"/></svg>';
+
 const RUN_LOOK = {
   promoted:  { cls:'ok',  word:'Processed' },
   failed:    { cls:'bad', word:'Failed' },
@@ -1442,8 +1453,11 @@ function drawHistory(){
     const withRaw = runs.find(r => r.raw_kept && (r.uploaded_names || []).length);
     if (withRaw){
       const k = withRaw.uploaded_names.length;
-      actions += `<a class="act" href="/jobs/${withRaw.id}/raw">`
-               + `${k > 1 ? `Raw files (${k})` : 'Raw file'}</a>`;
+      // "Raw file" named the thing without saying what pressing it does, and
+      // it sits between two buttons that act on the app rather than on your
+      // machine. It says download, and carries the arrow to match.
+      actions += `<a class="act" href="/jobs/${withRaw.id}/raw">${DL}`
+               + `${k > 1 ? `Download raw files (${k})` : 'Download raw file'}</a>`;
     }
     // The instruction's receipt - what filed, what came back blank, what the
     // mapping expected and never saw. The upload keeps one; a month filed
@@ -1460,7 +1474,7 @@ function drawHistory(){
           const l = RUN_LOOK[r.status] || { word:r.status };
           return `<div class="past"><span>${escapeHtml(clock(r.created_at))}</span>
             <span class="pill s-${r.status}">${escapeHtml(l.word)}</span>
-            ${r.raw_kept ? `<a class="act" href="/jobs/${r.id}/raw">Raw</a>` : ''}
+            ${r.raw_kept ? `<a class="act" href="/jobs/${r.id}/raw">${DL}Download</a>` : ''}
             ${r.error ? `<span style="color:var(--bad)">${escapeHtml(r.error)}</span>` : ''}
           </div>`;
         }).join('')}
