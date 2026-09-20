@@ -20,7 +20,7 @@ from pathlib import Path
 
 import openpyxl
 
-from . import config
+from . import config, leaves
 
 BPC = {"1000 ML": 9, "750 ML": 12, "500 ML": 18, "375 ML": 24, "180 ML": 48}
 
@@ -2472,10 +2472,16 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
     its own span rather than by the current one twice.
     """
     p_start, p_end = prev if prev else _same_window_last_month(start, end)
-    # Both ends count: a 1-16 August window is 16 days. These two spans are
-    # the divisors for every per-day average on the report.
+    # Both ends count: a 1-16 August window is 16 days.
     span = (end - start).days + 1
     p_span = ((p_end - p_start).days + 1) if p_start else 1
+    # A day the shops were shut is not a day of bad trading, and dividing
+    # across it said it was. The divisor is now the days the shops could
+    # actually open - the window, less whatever Manage Leaves records for it.
+    shut_now = sorted(leaves.closed_days("shop", start, end))
+    shut_was = sorted(leaves.closed_days("shop", p_start, p_end)) if p_start else []
+    open_now = max(1, span - len(shut_now))
+    open_was = max(1, p_span - len(shut_was)) if p_start else 1
 
     shop_now = _shop_sales_by_bond(start, end)
     shop_was = _shop_sales_by_bond(p_start, p_end) if p_start else {}
@@ -2526,12 +2532,31 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
     # Both dispatch columns divide by the days a dispatch actually went out -
     # the office's August column reads 421 and 98 against 4,632 and 1,079,
     # which is 11 days for each, not one count per column.
-    divisors = [(span, p_span), (disp_days_now or 1, disp_days_was or 1),
-                (disp_days_now or 1, disp_days_was or 1), (span, p_span)]
+    divisors = [(open_now, open_was), (disp_days_now or 1, disp_days_was or 1),
+                (disp_days_now or 1, disp_days_was or 1), (open_now, open_was)]
+
+    def _said(total, shut, open_):
+        if not shut:
+            return str(total)
+        return f"{open_} ({total} less {len(shut)} the shops were shut)"
+
+    note = ("Per-day figures divide by the days the trade was open: shop and "
+            "total by " + _said(span, shut_now, open_now))
+    if p_start:
+        note += " against " + _said(p_span, shut_was, open_was)
+    note += f"; dispatch by the days a dispatch went out, {disp_days_now or 1}"
+    if p_start and disp_days_was:
+        note += f" against {disp_days_was}"
+    note += "."
+
     rows.append({
         "label": "AVERAGE DAILY SALE", "kind": "average",
         "blocks": [[grand[i][0] / divisors[i][0], grand[i][1] / divisors[i][1]]
                    for i in range(4)],
+        # What each pair of columns was divided by, so the row can say so on
+        # the screen rather than leaving somebody to work it out.
+        "divisors": [list(d) for d in divisors],
+        "note": note,
     })
 
     return {
@@ -2539,6 +2564,9 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
         "period": period_for(start, end),
         "previous": period_for(p_start, p_end) if p_start else None,
         "days": {"span": span, "prev_span": p_span,
+                 "open": open_now, "prev_open": open_was,
+                 "shut": [d.isoformat() for d in shut_now],
+                 "prev_shut": [d.isoformat() for d in shut_was],
                  "dispatch": [disp_days_now, disp_days_was]},
         "source_block": _liq_source(start, end, p_start, p_end),
     }

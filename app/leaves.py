@@ -93,8 +93,14 @@ def closed_days(kind: str, start: date, end: date) -> set:
 
 
 def span_days(start: date, end: date) -> int:
-    """The window's length, as the reports have always counted it."""
-    return max(1, (end - start).days)
+    """The window's length, counting both ends.
+
+    This counted the gaps between the days rather than the days: 1-16 August
+    came back as 15. Every per-day rate built on it was therefore divided by
+    one day too few and read a little high, and it disagreed with the
+    Liquidation Summary, which has always counted 1-16 as 16.
+    """
+    return max(1, (end - start).days + 1)
 
 
 def open_days(start: date, end: date) -> int:
