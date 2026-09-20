@@ -132,8 +132,7 @@
   @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.25 } }
   .uc .meta.busy { color:var(--blue); font-weight:600; }
   .uc .meta.bad { color:var(--bad); font-weight:600; }
-  .uc .meta .when { margin-left:auto; flex:none; font-size:11px; color:var(--muted);
-                    opacity:.72; font-variant-numeric:tabular-nums; }
+/* The upload tiles no longer print the date beside the relative time. */
 
   /* The card is the upload, and now it says so with a button rather than a
      word in colour. History keeps its name, quietly, beside it - and the row
@@ -1242,8 +1241,10 @@ function paintCards(jobs){
     // before you have read the words.
     const n = daysAgo(ok);
     const tone = n <= 1 ? '' : n < 7 ? ' old' : ' no';
-    el.innerHTML = `<span class="dot${tone}"></span>Last upload <b>${ago(ok)}</b>` +
-                   (n < 14 ? `<span class="when">${onDate(ok)}</span>` : '');
+    // "yesterday" is the fact; "19 Sep" beside it was the same fact in a
+    // second notation, sitting where the eye lands at the end of the line.
+    // The exact date is on the tile in History, where there is room for it.
+    el.innerHTML = `<span class="dot${tone}"></span>Last upload <b>${ago(ok)}</b>`;
   });
 }
 

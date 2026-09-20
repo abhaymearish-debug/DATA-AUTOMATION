@@ -45,17 +45,24 @@
      asked for is actually in, and after that, how many gaps are left. The
      five streams underneath say where they are. */
   .head { display:flex; align-items:center; gap:20px; flex-wrap:wrap;
-          padding:16px 20px 15px; }
+          padding:18px 22px 16px; }
   /* The month is a heading, not a control in a box. The arrows stand either
      side of it and keep quiet until you go near them. */
   .mnav { display:inline-flex; align-items:center; gap:4px; flex:none; }
-  .mnav button { border:0; background:none; border-radius:50%; width:30px; height:30px;
+  .mnav button { border:0; background:none; border-radius:9px; width:30px; height:30px;
                  cursor:pointer; color:var(--muted); font-size:16px; line-height:1; padding:0;
-                 transition:background .15s ease, color .15s ease, transform .15s ease; }
-  .mnav button:hover { background:var(--hover); color:var(--ink); }
+                 box-shadow:inset 0 0 0 1px transparent;
+                 transition:background .16s ease, color .16s ease,
+                            box-shadow .16s ease, transform .16s ease; }
+  .mnav button:hover { background:var(--hover); color:var(--ink);
+                       box-shadow:inset 0 0 0 1px var(--line); }
   .mnav button:active { transform:scale(.92); }
-  .mnav .m { font-size:19px; font-weight:780; letter-spacing:-.55px;
-             min-width:168px; text-align:center; color:var(--ink); }
+  .mnav button:focus-visible { outline:none; color:var(--ink);
+      box-shadow:inset 0 0 0 1px var(--blue),
+                 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent); }
+  .mnav .m { font-size:19.5px; font-weight:790; letter-spacing:-.62px;
+             min-width:172px; text-align:center; color:var(--ink);
+             font-variant-numeric:tabular-nums; }
 
   /* No headline figure. A percentage of the month is a number you can look at
      and not act on; what is worth saying here is how many gaps are left, and
@@ -68,20 +75,27 @@
      them worth reading. The number is a figure here, the word is its unit,
      and the mark beside it is the empty bar the tiles are full of. */
   .sum .pills { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
-  .sum .pill { display:inline-flex; align-items:center; gap:10px;
-               border-radius:13px; padding:7px 15px 7px 12px;
-               font-size:12.5px; font-weight:650; letter-spacing:-.1px;
+  .sum .pill { display:inline-flex; align-items:baseline; gap:7px;
+               border-radius:999px; padding:8px 16px 8px 15px;
+               font-size:12.5px; font-weight:620; letter-spacing:.01em;
                white-space:nowrap; color:var(--muted); background:var(--row);
                box-shadow:inset 0 0 0 1px var(--line); }
-  .sum .pill b { font-size:15.5px; font-weight:800; letter-spacing:-.45px;
-                 color:var(--ink); font-variant-numeric:tabular-nums; }
-  .sum .pill i { width:10px; height:13px; border-radius:3.5px; flex:none; }
-  .sum .pill.gap { color:color-mix(in srgb, var(--bad) 58%, var(--ink));
+  .sum .pill b { font-size:16px; font-weight:820; letter-spacing:-.5px;
+                 color:var(--ink); font-variant-numeric:tabular-nums;
+                 font-feature-settings:"tnum" 1; }
+  /* The count leads and the unit follows it in lower case, the way a figure
+     is read aloud. A fully rounded chip so it reads as a tally rather than as
+     a button somebody forgot to wire up. */
+  .sum .pill.gap { color:color-mix(in srgb, var(--bad) 62%, var(--ink));
       background:linear-gradient(180deg,
-                 color-mix(in srgb, var(--bad) 12%, var(--card)),
-                 color-mix(in srgb, var(--bad) 6%, var(--card)));
-      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 26%, transparent),
-                 0 1px 2px color-mix(in srgb, var(--bad) 12%, transparent); }
+                 color-mix(in srgb, var(--bad) 13%, var(--card)),
+                 color-mix(in srgb, var(--bad) 7%, var(--card)));
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 24%, transparent),
+                 inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent),
+                 0 1px 2px color-mix(in srgb, var(--bad) 14%, transparent); }
+  :root[data-theme="dark"] .sum .pill.gap {
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent),
+                 inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent); }
   .sum .pill.gap b { color:var(--bad); }
   /* Nothing outstanding is a sentence, not a count, so it drops the figure. */
   .sum .pill.all { color:var(--ok); font-weight:700;
@@ -104,27 +118,81 @@
      and the two streams that are behind are obvious before you have read a
      single figure. It is still the legend - same colours, same order as the
      bars below - it just earns its row now. */
-  .key { display:grid; grid-template-columns:repeat(auto-fit, minmax(152px, 1fr));
-         gap:12px 26px; padding:13px 20px 15px; border-top:1px solid var(--line);
+  /* Five, side by side, on one line - the strip is a scorecard and a
+     scorecard that wraps stops being one. It only breaks into two rows when
+     the window genuinely cannot hold five legible columns. */
+  .key { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr));
+         gap:14px 24px; padding:15px 22px 17px; border-top:1px solid var(--line);
          background:linear-gradient(180deg,
-                    color-mix(in srgb, var(--blue) 3.5%, var(--card)), var(--card)); }
-  .kk { display:grid; grid-template-columns:1fr auto; align-items:center;
-        gap:5px 8px; min-width:0; }
+                    color-mix(in srgb, var(--blue) 4%, var(--card)), var(--card)); }
+  .kk { display:grid; grid-template-columns:1fr auto; align-items:baseline;
+        gap:7px 10px; min-width:0; }
   .kk .nm { display:flex; align-items:center; gap:7px; min-width:0;
-            font-size:11.5px; font-weight:700; color:var(--ink); letter-spacing:-.15px;
-            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .kk .nm i { flex:none; width:9px; height:11px; border-radius:3px; background:var(--c); }
-  .kk .sc { font-size:12px; font-weight:800; color:var(--ink); white-space:nowrap;
-            font-variant-numeric:tabular-nums; letter-spacing:-.2px; }
-  .kk .sc s { text-decoration:none; color:var(--muted); font-weight:700; opacity:.7; }
-  .kk .bar { grid-column:1 / -1; height:5px; border-radius:3px; overflow:hidden;
-             background:color-mix(in srgb, var(--c) 14%, var(--row)); }
-  .kk .bar u { display:block; height:100%; text-decoration:none; border-radius:3px;
-               background:var(--c);
-               transition:width .55s cubic-bezier(.2,.8,.3,1); }
-  /* A stream with everything in says so, in the colour of being done. */
+            font-size:11.5px; font-weight:680; color:var(--muted);
+            /* The name gives way before the figure does: a clipped label is
+               still readable, a clipped number is not. */
+            letter-spacing:.02em; white-space:nowrap; overflow:hidden;
+            text-overflow:ellipsis; transition:color .18s ease; }
+  /* The swatch is the one thing tying this line to its bars in the grid
+     below, so it keeps the stream's colour and gains a ring of it - a flat
+     chip of colour reads as a bullet, a ringed one reads as a key. */
+  .kk .nm i { flex:none; width:9px; height:11px; border-radius:3px;
+              background:var(--c); box-shadow:0 0 0 2.5px
+              color-mix(in srgb, var(--c) 16%, transparent);
+              transition:box-shadow .18s ease; }
+  .kk:hover .nm { color:var(--ink); }
+  .kk:hover .nm i { box-shadow:0 0 0 3.5px
+                    color-mix(in srgb, var(--c) 22%, transparent); }
+  /* The figure is the point of the line, so it is the biggest thing on it;
+     the total it is out of sits behind a slash at text weight. */
+  .kk .sc { font-size:13.5px; font-weight:820; color:var(--ink); white-space:nowrap;
+            font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1;
+            letter-spacing:-.35px; }
+  .kk .sc s { text-decoration:none; color:var(--muted); font-weight:640;
+              font-size:12px; letter-spacing:-.1px; opacity:.75; }
+
+  /* A rail rather than a flat strip: an inset track, a fill that carries a
+     touch of its own light along the top, and a soft cast of its colour
+     underneath so it sits ON the track instead of inside it. */
+  .kk .bar { grid-column:1 / -1; height:6px; border-radius:99px; overflow:hidden;
+             background:color-mix(in srgb, var(--c) 11%, var(--row));
+             box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--c) 12%, transparent); }
+  .kk .bar u { display:block; height:100%; text-decoration:none; border-radius:99px;
+               background:linear-gradient(180deg,
+                          color-mix(in srgb, #fff 22%, var(--c)),
+                          var(--c) 62%,
+                          color-mix(in srgb, #000 8%, var(--c)));
+               box-shadow:0 1px 3px color-mix(in srgb, var(--c) 45%, transparent),
+                          inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent);
+               transition:width .62s cubic-bezier(.2,.8,.3,1); }
+  :root[data-theme="dark"] .kk .bar u {
+               background:linear-gradient(180deg,
+                          color-mix(in srgb, #fff 14%, var(--c)), var(--c) 70%);
+               box-shadow:0 0 10px -2px color-mix(in srgb, var(--c) 55%, transparent),
+                          inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent); }
+
+  /* A stream with everything in says so, in the colour of being done - and
+     the rail loses its colour of record for that one, because a full bar in
+     five different colours is five facts and a full bar in green is one. */
   .kk.done .sc { color:var(--ok); }
-  .kk.done .sc s { color:var(--ok); opacity:.65; }
+  .kk.done .sc s { color:var(--ok); opacity:.6; }
+  .kk.done .bar { background:color-mix(in srgb, var(--ok) 12%, var(--row));
+                  box-shadow:inset 0 0 0 1px
+                             color-mix(in srgb, var(--ok) 16%, transparent); }
+  .kk.done .bar u { background:linear-gradient(180deg,
+                          color-mix(in srgb, #fff 22%, var(--ok)),
+                          var(--ok) 62%,
+                          color-mix(in srgb, #000 8%, var(--ok)));
+                    box-shadow:0 1px 3px color-mix(in srgb, var(--ok) 45%, transparent),
+                          inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent); }
+  :root[data-theme="dark"] .kk.done .bar u {
+                    background:linear-gradient(180deg,
+                          color-mix(in srgb, #fff 14%, var(--ok)), var(--ok) 70%);
+                    box-shadow:0 0 10px -2px color-mix(in srgb, var(--ok) 55%, transparent); }
+
+  @media (max-width: 1080px) {
+    .key { grid-template-columns:repeat(auto-fit, minmax(158px, 1fr)); gap:14px 20px; }
+  }
 
   /* ---------- the month ---------- */
   .cal { position:relative; padding:13px 16px 16px; border-top:1px solid var(--line); }
