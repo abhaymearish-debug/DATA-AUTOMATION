@@ -21,6 +21,11 @@
      that strip and the figures it was choosing. Two cards for one subject.
      The button goes with it: the sidebar has that page, and a day tile now
      hands you the upload for the day you are actually pointing at. */
+  /* Every other page ends with a long run-out so the last row clears the
+     fold. This one is meant to end exactly at the fold, and sixty pixels of
+     nothing under the last week is sixty pixels the tiles could have had. */
+  .content { padding-bottom:20px; }
+
   .mnav { display:inline-flex; align-items:center; gap:2px; flex:none;
           background:var(--row); border:1px solid var(--line); border-radius:11px;
           padding:3px; }
@@ -34,33 +39,31 @@
 
   /* ---------- the month, in one card ----------
 
-     This was a headline beside five rows of name-bar-number, each row a
-     different length, the bars all starting at a different x because the
-     names are not the same width. It read as a form, not as a summary.
+     Five stat cards with a strip each, sorted worst-first. Two problems.
+     The strips read as barcode at that size, and the sort meant the order
+     of the cards never matched the order of anything else on the screen -
+     so a colour could not be learnt in one place and used in another.
 
-     A hero and five cards now. The hero answers the only question the month
-     has - how many of its days can the reports speak for - and each card
-     answers it for one stream, in the same shape, side by side, so the one
-     you are behind on is the short bar rather than the small number you had
-     to go looking for.
+     One matrix instead: the five streams down, the month across. It names
+     each stream once, on the left, in a fixed order that never re-sorts -
+     which makes it the legend for the tiles below as well as the detail
+     view in its own right. Read across a row for one stream's month; read
+     down a column for one day. No repetition anywhere.
   ------------------------------------------------------------------ */
-  .board { background:var(--card); border:1px solid var(--line); border-radius:16px;
+  .board { background:var(--card); border:1px solid var(--line); border-radius:18px;
            padding:0; margin-bottom:14px; overflow:hidden;
-           box-shadow:0 1px 2px rgba(16,24,40,.05); }
+           box-shadow:0 1px 2px rgba(16,24,40,.05),
+                      0 12px 28px -22px rgba(16,24,40,.35); }
 
   .hero { display:flex; align-items:center; gap:18px; flex-wrap:wrap;
-          padding:14px 18px 14px;
-          background:linear-gradient(180deg,
-                     color-mix(in srgb, var(--blue) 4%, var(--card)), var(--card)); }
+          padding:14px 20px 13px; }
   .hero .sum { flex:1 1 auto; display:flex; align-items:baseline; gap:11px;
                flex-wrap:wrap; min-width:0; }
-  .hero .v { font-size:32px; font-weight:800; letter-spacing:-1.4px; line-height:1;
+  .hero .v { font-size:34px; font-weight:800; letter-spacing:-1.6px; line-height:1;
              color:var(--ink); font-variant-numeric:tabular-nums; }
   .hero .v i { font-style:normal; font-size:17px; font-weight:700; color:var(--muted);
                letter-spacing:-.4px; }
-  .hero .k { font-size:13px; font-weight:650; color:var(--ink); letter-spacing:-.15px; }
-  /* The three states of a day, as three quiet pills - a legend that happens
-     to carry the counts. */
+  .hero .k { font-size:13px; font-weight:650; color:var(--muted); letter-spacing:-.15px; }
   .hero .pills { margin-left:auto; display:flex; gap:7px; flex-wrap:wrap; }
   .hero .pill { display:inline-flex; align-items:center; gap:6px;
                 border:1px solid var(--line); border-radius:999px;
@@ -75,44 +78,37 @@
                     box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--bad) 55%,
                                transparent); }
 
-  /* One card per stream, all the same shape, worst first. */
-  .streams { display:grid; grid-template-columns:repeat(5, 1fr);
-             border-top:1px solid var(--line); }
-  .scard { padding:13px 16px 15px; min-width:0;
-           border-left:1px solid var(--line); }
-  .scard:first-child { border-left:0; }
-  .scard .nm { display:flex; align-items:center; gap:7px; min-width:0;
-               font-size:11.5px; font-weight:700; color:var(--ink);
-               letter-spacing:-.1px; white-space:nowrap;
-               overflow:hidden; text-overflow:ellipsis; }
-  .scard .nm i { width:7.5px; height:7.5px; border-radius:50%; flex:none;
-                 box-shadow:0 0 0 2.5px color-mix(in srgb, var(--d) 15%, transparent);
-                 background:var(--d); }
-  .scard .v { margin-top:9px; font-size:19px; font-weight:780; letter-spacing:-.7px;
-              color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }
-  .scard .v i { font-style:normal; font-size:12px; font-weight:650; color:var(--muted);
-                letter-spacing:-.1px; }
-  /* The month, a segment per day, rather than one bar filled to a percentage.
-     "18 of 19" tells you how many; this tells you WHICH - a stream that fell
-     over on the 3rd and came back on the 7th reads as a gap in the strip,
-     and one that has never started reads as an empty run at the front. */
-  .scard .bar { margin-top:10px; display:flex; gap:1.5px; height:12px;
-                align-items:stretch; }
-  .scard .bar b { flex:1 1 0; min-width:0; border-radius:2px;
-                  background:var(--d); transition:opacity .2s ease; }
-  .scard .bar b.off { background:color-mix(in srgb, var(--bad) 26%, var(--row)); }
-  .scard .bar b.wait { background:color-mix(in srgb, var(--line) 70%, transparent); }
-  .scard:hover .bar b { opacity:.95; }
-  /* Files and days are the same number on every stream but the cumulative,
-     where two pulls answer a whole month - so it is only said where it
-     differs from the days above it. */
-  .scard .fc { margin-top:7px; min-height:13px; font-size:10.5px; font-weight:650;
-               color:var(--muted); opacity:.85; font-variant-numeric:tabular-nums; }
-  @media (max-width:1100px){ .streams { grid-template-columns:repeat(3, 1fr); }
-    .scard:nth-child(4) { border-left:0; } }
-  @media (max-width:760px){ .streams { grid-template-columns:repeat(2, 1fr); }
-    .scard { border-left:0; box-shadow:inset 0 1px 0 var(--line); }
-    .hero .pills { margin-left:0; width:100%; } }
+  /* ---------- the matrix ---------- */
+  .mx { border-top:1px solid var(--line); padding:12px 20px 14px;
+        background:linear-gradient(180deg,
+                   color-mix(in srgb, var(--blue) 3%, var(--card)), var(--card)); }
+  .mxr { display:grid; grid-template-columns:148px 1fr 58px; align-items:center;
+         gap:12px; }
+  .mxr + .mxr { margin-top:4px; }
+  .mxr.head { margin-bottom:5px; }
+  .mxr .nm { display:flex; align-items:center; gap:8px; min-width:0;
+             font-size:11.5px; font-weight:700; color:var(--ink); letter-spacing:-.1px;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mxr .nm i { width:7.5px; height:7.5px; border-radius:50%; flex:none; background:var(--d);
+               box-shadow:0 0 0 2.5px color-mix(in srgb, var(--d) 16%, transparent); }
+  .mxr .ct { text-align:right; font-size:11.5px; font-weight:750; color:var(--muted);
+             font-variant-numeric:tabular-nums; }
+  .mxr .ct b { color:var(--ink); font-weight:800; }
+
+  .days { display:grid; gap:3px; min-width:0; }
+  .days > * { min-width:0; }
+  .days .c { height:16px; border-radius:4px; background:var(--d);
+             transition:transform .14s cubic-bezier(.2,.7,.3,1), opacity .14s ease; }
+  .days .c.off { background:color-mix(in srgb, var(--bad) 13%, var(--row)); }
+  .days .c.wait { background:none;
+                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 80%,
+                             transparent); }
+  .days .c:hover { transform:scaleY(1.28); }
+  /* The day numbers, thinned out - every fifth, and today. */
+  .days .d { font-size:9px; font-weight:750; color:var(--muted); text-align:center;
+             letter-spacing:-.2px; font-variant-numeric:tabular-nums; height:12px;
+             opacity:.75; }
+  .days .d.now { color:var(--gold); opacity:1; font-weight:850; }
 
   /* ---------- what a day still wants ----------
      Hovering a tile used to produce the browser's own tooltip: five lines of
@@ -127,123 +123,143 @@
                        0 2px 6px rgba(16,24,40,.06);
             overflow:hidden; }
   .daypop.on { display:block; animation:ksd-pop .14s cubic-bezier(.2,.7,.3,1) both; }
-  .daypop .hd { padding:10px 13px 8px; font-size:9.5px; font-weight:800;
-                letter-spacing:.9px; text-transform:uppercase; color:var(--muted);
-                border-bottom:1px solid var(--line); }
+  .daypop .hd { position:relative; padding:10px 34px 8px 13px; font-size:9.5px;
+                font-weight:800; letter-spacing:.9px; text-transform:uppercase;
+                color:var(--muted); border-bottom:1px solid var(--line); }
+  .daypop .x { position:absolute; top:8px; right:8px; width:22px; height:22px;
+               border:0; background:none; border-radius:7px; cursor:pointer; padding:0;
+               color:var(--muted); font-size:15px; line-height:1;
+               transition:background-color .14s ease, color .14s ease; }
+  .daypop .x:hover { background:var(--hover); color:var(--ink); }
   .daypop .hd b { display:block; font-size:13px; font-weight:750; letter-spacing:-.2px;
                   text-transform:none; color:var(--ink); margin-top:2px; }
-  .daypop .bd { padding:5px; max-height:260px; overflow:auto; }
-  .daypop .up { display:flex; align-items:center; gap:9px; width:100%;
+  .daypop .bd { padding:5px; max-height:330px; overflow:auto; }
+  /* One row per stream - the ones still wanted are buttons, the rest are
+     statements. A day is five facts, and a panel that shows only the two
+     that are missing makes you count the other three yourself. */
+  .daypop .up, .daypop .st {
+                display:flex; align-items:center; gap:9px; width:100%;
                 border:0; background:none; font:inherit; text-align:left;
-                padding:8px 9px; border-radius:9px; cursor:pointer;
-                color:var(--ink); font-size:12.5px; font-weight:650;
-                transition:background-color .14s ease; }
+                padding:7px 9px; border-radius:9px;
+                color:var(--ink); font-size:12.5px; font-weight:650; }
+  .daypop .up { cursor:pointer; transition:background-color .14s ease; }
   .daypop .up:hover { background:var(--hover); }
-  .daypop .up b { flex:1 1 auto; min-width:0; font-weight:650; white-space:nowrap;
-                  overflow:hidden; text-overflow:ellipsis; }
-  .daypop .up i { width:7px; height:7px; border-radius:50%; flex:none;
-                  background:none;
+  .daypop .up b, .daypop .st b { flex:1 1 auto; min-width:0; font-weight:650;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .daypop b u { display:block; text-decoration:none; font-size:10px; font-weight:600;
+                color:var(--muted); letter-spacing:-.1px; margin-top:1px; }
+  .daypop .up i, .daypop .st i { width:7px; height:7px; border-radius:50%; flex:none;
+                  background:var(--c); }
+  .daypop .up i { background:none;
                   box-shadow:inset 0 0 0 1.7px color-mix(in srgb, var(--bad) 60%,
                              transparent); }
   .daypop .up span { margin-left:auto; flex:none; font-size:10.5px; font-weight:750;
-                     color:var(--blue); opacity:0; transition:opacity .14s ease; }
+                     color:var(--blue); opacity:.75; transition:opacity .14s ease; }
   .daypop .up:hover span { opacity:1; }
-  .daypop .ok { padding:11px 13px 13px; font-size:12.5px; color:var(--muted); }
-  .daypop .ok b { color:var(--ok); }
+  .daypop .st.done span { margin-left:auto; flex:none; color:var(--ok);
+                          font-size:12px; font-weight:800; }
+  .daypop .st.wait { color:var(--muted); }
+  .daypop .st.wait i { background:none;
+                       box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--line) 90%,
+                                  transparent); }
+  .daypop .st.wait span { margin-left:auto; flex:none; font-size:10px; font-weight:700;
+                          color:var(--muted); letter-spacing:.2px; }
 
   /* ---------- the grid ----------
 
-     A day tile answers one question: is there anything still to upload for
-     this day, and what. So it shows what is MISSING and nothing else.
+     The tile carries no words. Naming the missing streams on each one meant
+     writing "Shop cumulative / Stock" fifteen times down a month - the same
+     two words over and over, which is noise wearing the costume of
+     information, and it buried the one day that was actually finished.
 
-     Five dots on every tile, one per stream, was the honest version and it
-     made every day look alike - thirty tiles of the same five marks, and you
-     had to know which of five positions meant which stream before any of it
-     meant anything. A complete day was indistinguishable from a broken one
-     at a glance, which is the only glance this screen gets.
-
-     Inverted: a day with everything in is a tick on a green wash and no
-     words at all. A day short of something names what it is short of, in
-     that stream's colour. A day with nothing in says so. Your eye lands on
-     the tiles that want something, because they are the only ones with
-     anything written on them.
+     A date, and five marks in a fixed order underneath it. The matrix above
+     names that order once and never re-sorts, so position is identity: the
+     third mark is Shop daily on the 2nd and on the 29th. The tile itself
+     carries the verdict - a green edge when the day is done, a red one when
+     nothing came in, plain when it is part way. Click for the names.
   ------------------------------------------------------------------ */
-  .cal { background:var(--card); border:1px solid var(--line); border-radius:16px;
-         padding:15px 15px 16px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
-  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
-  .dow { text-align:center; font-size:9px; font-weight:800; letter-spacing:1.1px;
-         text-transform:uppercase; color:var(--muted); padding-bottom:8px; opacity:.7; }
+  .cal { background:var(--card); border:1px solid var(--line); border-radius:18px;
+         padding:14px; box-shadow:0 1px 2px rgba(16,24,40,.05),
+                                  0 12px 28px -22px rgba(16,24,40,.35); }
+  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:var(--gap, 9px); }
+  .dow { text-align:center; font-size:9px; font-weight:800; letter-spacing:1.2px;
+         text-transform:uppercase; color:var(--muted); padding-bottom:7px; opacity:.6; }
 
-  /* min-width:0 or a nowrap label sets a floor the column cannot go under,
-     and seven of those push the grid off the side of a laptop. */
-  .cell { min-height:104px; min-width:0; border:1px solid var(--line);
-          border-radius:13px; padding:9px 10px 10px; background:var(--card);
-          display:flex; flex-direction:column; position:relative; overflow:hidden;
-          transition:box-shadow .18s ease, border-color .18s ease,
-                     transform .18s cubic-bezier(.2,.7,.3,1); }
-  .cell:not(.pad):hover { border-color:color-mix(in srgb, var(--blue) 36%, var(--line));
-          box-shadow:0 8px 22px -8px rgba(16,24,40,.22);
+  .cell { min-height:var(--tile, 78px); min-width:0; border:1px solid var(--line);
+          border-radius:14px; padding:11px 12px 12px; background:var(--card);
+          display:flex; flex-direction:column; cursor:pointer; position:relative;
+          transition:box-shadow .2s ease, border-color .2s ease,
+                     transform .2s cubic-bezier(.2,.7,.3,1); }
+  .cell:not(.pad):hover { border-color:color-mix(in srgb, var(--blue) 40%, var(--line));
+          box-shadow:0 10px 26px -10px rgba(16,24,40,.26);
           transform:translateY(-2px); z-index:2; }
-  .cell.pad { border:0; background:none; min-height:0; }
+  .cell.on { border-color:var(--blue);
+             box-shadow:0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent),
+                        0 10px 26px -10px rgba(16,24,40,.26); z-index:3; }
+  .cell.pad { border:0; background:none; min-height:0; cursor:default; }
 
-  /* The day number, and to its right the one mark that says how the day did. */
   .cell .n { display:flex; align-items:center; gap:6px;
-             font-size:14.5px; font-weight:750; color:var(--ink);
-             letter-spacing:-.3px; font-variant-numeric:tabular-nums; }
+             font-size:clamp(16px, calc(var(--tile, 78px) * .19), 21px);
+             font-weight:700; color:var(--ink);
+             letter-spacing:-.4px; font-variant-numeric:tabular-nums; }
   .cell .n em { font-style:normal; font-size:8px; font-weight:800; letter-spacing:.8px;
                 text-transform:uppercase; color:var(--gold); }
-  .cell .n .mk { margin-left:auto; flex:none; display:grid; place-items:center;
-                 min-width:19px; height:19px; padding:0 5px; border-radius:999px;
-                 font-size:10.5px; font-weight:800; letter-spacing:0;
-                 font-variant-numeric:tabular-nums; }
-  .cell .n .mk.ok { color:var(--ok);
-                    background:color-mix(in srgb, var(--ok) 13%, transparent); }
-  .cell .n .mk.no { color:var(--gold-ink, #92400E);
-                    background:color-mix(in srgb, var(--gold) 20%, transparent); }
+  .cell .n .tick { margin-left:auto; color:var(--ok); font-size:12px; }
 
-  /* What the day is still short of. Never more than three names - past that
-     it is quicker to say how many. */
-  .cell .gaps { margin-top:7px; display:grid; gap:3px; align-content:start; }
-  .cell .g { display:flex; align-items:center; gap:6px; min-width:0;
-             font-size:10.5px; font-weight:650; letter-spacing:-.05px;
-             line-height:1.3; color:var(--muted);
-             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .cell .g i { width:6px; height:6px; border-radius:50%; flex:none; background:var(--c);
-               box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 18%, transparent); }
-  .cell .g.more { color:var(--muted); opacity:.8; padding-left:12px; }
+  /* Five marks, always five, always in the matrix's order. */
+  .meter { margin-top:auto; display:flex; gap:4px; }
+  .meter b { flex:1; height:clamp(6px, calc(var(--tile, 78px) * .075), 8px);
+             border-radius:4px; background:var(--c); }
+  .meter b.off { background:color-mix(in srgb, var(--bad) 16%, var(--row)); }
+  .meter b.wait { background:none;
+                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 85%,
+                             transparent); }
 
-  /* Everything in. A wash and a tick, and nothing to read. */
-  .cell.full { border-color:color-mix(in srgb, var(--ok) 30%, var(--line));
+  /* The verdict, carried by the tile rather than written on it. */
+  .cell.full { border-color:color-mix(in srgb, var(--ok) 34%, var(--line));
                background:linear-gradient(180deg,
-                          color-mix(in srgb, var(--ok) 7%, var(--card)),
-                          color-mix(in srgb, var(--ok) 2%, var(--card))); }
-  .cell.full .n { color:color-mix(in srgb, var(--ok) 55%, var(--ink)); }
-
-  /* Nothing in at all - said in one line rather than as five absences. */
-  .cell.none { border-color:color-mix(in srgb, var(--bad) 22%, var(--line));
+                          color-mix(in srgb, var(--ok) 7%, var(--card)), var(--card)); }
+  .cell.none { border-color:color-mix(in srgb, var(--bad) 24%, var(--line));
                background:linear-gradient(180deg,
-                          color-mix(in srgb, var(--bad) 5%, var(--card)),
-                          var(--card)); }
-  .cell.none .say { margin-top:auto; font-size:10.5px; font-weight:700;
-                    color:color-mix(in srgb, var(--bad) 70%, var(--muted)); }
-
-  /* Not due yet: quiet, and not a gap you could close today. */
-  .cell.future { border-style:dashed; background:none; }
-  .cell.future .n { color:var(--muted); font-weight:700; }
-  .cell.future .say { margin-top:auto; font-size:10px; font-weight:650;
-                      color:var(--muted); opacity:.65; }
-
+                          color-mix(in srgb, var(--bad) 5%, var(--card)), var(--card)); }
+  .cell.future { border-style:dashed; background:none; cursor:default; }
+  .cell.future .n { color:var(--muted); font-weight:650; }
+  .cell.future:hover { transform:none; box-shadow:none;
+                       border-color:var(--line); }
   .cell.today { border-color:var(--gold);
                 box-shadow:0 0 0 3px color-mix(in srgb, var(--gold) 20%, transparent); }
   .cell.today .n { color:var(--gold); }
+
+  /* A five-per-cent wash of red reads on white and vanishes on navy. The
+     missing state is the whole point of the screen, so dark gets its own
+     weights rather than the same numbers over a different background. */
+  :root[data-theme="dark"] .cell.none {
+      border-color:color-mix(in srgb, var(--bad) 38%, var(--line));
+      background:linear-gradient(180deg,
+                 color-mix(in srgb, var(--bad) 12%, var(--card)), var(--card)); }
+  :root[data-theme="dark"] .cell.full {
+      border-color:color-mix(in srgb, var(--ok) 40%, var(--line)); }
+  :root[data-theme="dark"] .meter b.off {
+      background:color-mix(in srgb, var(--bad) 30%, var(--row)); }
+  :root[data-theme="dark"] .days .c.off {
+      background:color-mix(in srgb, var(--bad) 26%, var(--row)); }
 
   /* On a phone seven columns have about fifty pixels each, which is room for
      a number and four slots and nothing else. The note goes; the tooltip and
      the card above still say which stream is missing. */
   @media (max-width:760px){
-    .board { gap:14px; padding:14px; }
-    .rule { display:none; }
-    .lede2 { flex:1 1 100%; }
+    .hero { padding:12px 13px 11px; gap:11px; }
+    .hero .v { font-size:27px; }
+    .hero .pills { margin-left:0; flex:1 1 100%; }
+    .mx { padding:11px 13px 13px; }
+    .mxr { grid-template-columns:104px 1fr 36px; gap:7px; }
+    .mxr .nm { font-size:9px; gap:5px; letter-spacing:-.25px; }
+    .mxr .nm i { width:6px; height:6px; box-shadow:none; }
+    .mxr .ct { font-size:10px; }
+    .days { gap:1.5px; }
+    .days .c { height:12px; border-radius:2.5px; }
+    .days .d { display:none; }
+    .daypop { width:calc(100vw - 32px); max-width:306px; }
     .cal { padding:10px; }
     .grid { gap:5px; }
     /* Seven columns of about fifty pixels: room for the number and five
@@ -251,10 +267,8 @@
     .cell { min-height:58px; padding:6px 5px 7px; border-radius:9px; }
     .cell .n { font-size:11.5px; gap:3px; }
     .cell .n em, .cell .n .tick { display:none; }
-    .sts { grid-auto-flow:column; gap:3px; margin-top:auto;
-           justify-content:start; align-items:center; }
-    .sts .st { font-size:0; gap:0; }
-    .sts .st i { width:5.5px; height:5.5px; }
+    .meter { gap:2.5px; }
+    .meter b { height:5px; border-radius:2.5px; }
     .dow { font-size:8.5px; letter-spacing:.4px; }
   }
 
@@ -271,7 +285,7 @@
     </div>
     <div class="sum" id="lede"></div>
   </div>
-  <div class="streams" id="streams"></div>
+  <div class="mx" id="streams"></div>
 </div>
 
 <div class="cal" id="cal"><div class="grid" id="grid"></div></div>
@@ -308,6 +322,7 @@ function step(n){
 }
 
 function draw(){
+  shutDay();
   const [y,m] = month.split('-').map(Number);
   const S = CAL.streams;
   mLabel.innerHTML = `${MONTHS[m-1]} ${y}`;
@@ -346,54 +361,21 @@ function draw(){
                        : (have.length ? (missing.length ? '' : 'full') : 'none'),
                  key === today ? 'today' : ''].filter(Boolean).join(' ');
 
-    // The whole day's state, spelled out, for anyone who hovers.
-    // The pull taken on this day, named by the window it covers - "from the
-    // 1 - 12 Aug pull" says both that you took it and how far back it reaches.
-    const pull = (CAL.periods || []).find(p => p.to === key);
-    // "1 - 16 Aug 2026", not "1 Aug 2026 to 16 Aug 2026" - the month and the
-    // year are the same at both ends, and saying them twice in a tooltip
-    // that is already five lines long is five words nobody reads.
-    const span = p => {
-      const A = new Date(p.from + 'T00:00'), B = new Date(p.to + 'T00:00');
-      const mon = d => d.toLocaleDateString('en-GB', {month:'short'});
-      return A.getMonth() === B.getMonth() && A.getFullYear() === B.getFullYear()
-        ? `${A.getDate()}\u2013${B.getDate()} ${mon(B)} ${B.getFullYear()}`
-        : `${A.getDate()} ${mon(A)} \u2013 ${B.getDate()} ${mon(B)} ${B.getFullYear()}`;
-    };
-    const tip = nothingDue ? key : S.map(s => have.includes(s.key)
-          ? `\u2713 ${s.label}` +
-            (s.key === 'shop_cumulative' && pull ? ` \u2014 from the ${span(pull)} pull` : '')
-        : dueBy(key, s) > today ? `\u00b7 ${s.label} \u2014 not due yet`
-        : `\u2014 ${s.label}`).join('\n');
+    // Five marks in the matrix's order. No words: the matrix above names
+    // them once, and clicking the tile names them again for that day.
+    // No title either - a native tooltip that says the same thing a second
+    // later, in a different place, is a race the panel always loses.
+    const meter = S.map(s => {
+      const got = have.includes(s.key);
+      const wait = !got && dueBy(key, s) > today;
+      return `<b class="${got ? '' : wait ? 'wait' : 'off'}"
+                 style="--c:${esc(s.colour)}"></b>`;
+    }).join('');
 
-    // All five, named, every day. Which ones are missing is the question
-    // this screen exists to answer, and it should not need a hover or a
-    // legend to answer it.
-    // What the day is short of, named. Three at most: past that the count
-    // says it faster than the list does, and five names is the wall of text
-    // this tile was redesigned to get rid of.
-    let body = '';
-    let mark = '';
-    if (nothingDue){
-      body = `<div class="say">Not due yet</div>`;
-    } else if (!have.length){
-      body = `<div class="say">Nothing uploaded</div>`;
-      mark = `<span class="mk no">${due.length}</span>`;
-    } else if (missing.length){
-      const show = missing.slice(0, 3);
-      body = `<div class="gaps">${show.map(s =>
-          `<span class="g" style="--c:${esc(s.colour)}"
-                 title="${esc(s.label)}"><i></i>${esc(s.tiny || s.short)}</span>`).join('')}${
-        missing.length > show.length
-          ? `<span class="g more">+${missing.length - show.length} more</span>` : ''}</div>`;
-      mark = `<span class="mk no">${missing.length}</span>`;
-    } else {
-      mark = `<span class="mk ok">\u2713</span>`;
-    }
-
-    html += `<div class="${cls}" data-day="${key}" title="${esc(tip)}">
-        <div class="n">${d}${key === today ? '<em>today</em>' : ''}${mark}</div>
-        ${body}
+    html += `<div class="${cls}" data-day="${key}">
+        <div class="n">${d}${key === today ? '<em>today</em>' : ''}${
+          done ? '<span class="tick">\u2713</span>' : ''}</div>
+        <div class="meter">${meter}</div>
       </div>`;
   }
   grid.innerHTML = html;
@@ -413,40 +395,73 @@ function draw(){
   // due for today as well, the other four are not, so they do not share a
   // denominator.
   // How many files are behind a row, which is not how many days it answers.
-  // Every stream but one is a file a day, so the two numbers agree and the
-  // file count says nothing new. A cumulative pull covers every day back to
-  // the 1st, so two files answer all thirty-one days of August - and the row
-  // read "31/31" beside a Shop Daily row of "4/31" that meant four uploads.
-  // Same bar, two different questions. The file count is what tells them
-  // apart, so it is only printed where it differs from the days.
+  // Every stream but the cumulative is a file a day, so the two agree and
+  // the count says nothing new. Two pulls answer a whole month, so there it
+  // is worth saying, and only there.
   const monthFrom = iso(y, m, 1), monthTo = iso(y, m, last);
   const filesOf = key => key !== 'shop_cumulative' ? (tally[key] || 0)
     : (CAL.periods || []).filter(p => monthFrom <= p.to && p.to <= monthTo).length;
 
-  streams.innerHTML = S.map(s => ({s, n: tally[s.key] || 0, of: dueDays[s.key] || 0,
-                                   f: filesOf(s.key)}))
-    .sort((a, b) => (a.of ? a.n / a.of : 1) - (b.of ? b.n / b.of : 1))
-    .map(({s, n, of, f}) => {
+  // The matrix. Fixed order, never re-sorted - it is the legend for the
+  // marks on every tile below, and a colour you learn here has to still mean
+  // the same thing, in the same place, down there.
+  const cols = `grid-template-columns:repeat(${last}, minmax(0, 1fr))`;
+  const ruler = [];
+  for (let dd = 1; dd <= last; dd++){
+    const isNow = iso(y, m, dd) === today;
+    const show = isNow || dd === 1 || dd % 5 === 0;
+    ruler.push(`<div class="d${isNow ? ' now' : ''}">${show ? dd : ''}</div>`);
+  }
+
+  streams.innerHTML =
+    `<div class="mxr head"><span></span>
+       <div class="days" style="${cols}">${ruler.join('')}</div><span></span></div>` +
+    S.map(s => {
+      const n = tally[s.key] || 0, of = dueDays[s.key] || 0, f = filesOf(s.key);
       const said = f === 1 ? '1 file' : `${f} files`;
-      // Only where files and days differ - and never "0 files", which is the
-      // same nothing the count above it has already reported.
-      const show = f !== n && f > 0;
-      // One segment per day of this month, in order.
-      const strip = [];
+      const cells = [];
       for (let dd = 1; dd <= last; dd++){
         const k = iso(y, m, dd);
-        if (dueBy(k, s) > today) strip.push('<b class="wait"></b>');
-        else strip.push((CAL.days[k] || []).includes(s.key)
-          ? '<b></b>' : '<b class="off"></b>');
+        const wait = dueBy(k, s) > today;
+        const got = (CAL.days[k] || []).includes(s.key);
+        cells.push(`<div class="c${got ? '' : wait ? ' wait' : ' off'}"
+                         title="${esc(s.short)} \u00b7 ${esc(saidDay(k))}${
+                           wait ? ' \u2014 not due yet' : got ? '' : ' \u2014 missing'}"></div>`);
       }
-      return `<div class="scard" style="--d:${esc(s.colour)}"
+      return `<div class="mxr" style="--d:${esc(s.colour)}"
                    title="${esc(s.label)}: ${n} of ${of} days due, from ${said}">
           <div class="nm"><i></i>${esc(s.tiny || s.short)}</div>
-          <div class="v">${n}<i> / ${of}</i></div>
-          <div class="bar">${strip.join('')}</div>
-          <div class="fc">${show ? esc(said) : '&nbsp;'}</div>
+          <div class="days" style="${cols}">${cells.join('')}</div>
+          <div class="ct"><b>${n}</b>/${of}</div>
         </div>`;
     }).join('');
+
+  fit(Math.ceil((first + last) / 7));
+}
+
+/* A month is five rows or six, and a screen is whatever the screen is. A
+   fixed tile height has to be short enough for the worst case, which leaves
+   a band of empty page on every other one. Measure instead: give the rows
+   what is left below the card, share it out, and stop when a tile would be
+   too cramped to read or too tall to be a day. */
+const MIN_TILE = 56, MAX_TILE = 100, MIN_GAP = 9, MAX_GAP = 22;
+function fit(rows){
+  // Measure, don't model. Shrink the tiles to the floor, ask the page how
+  // much room it did not use, and hand that back - first to the tiles, and
+  // once they are as tall as a day should be, to the space between them. A
+  // tile with nothing but a date at the top and a bar at the bottom looks
+  // emptier the taller it gets, so it stops, and the month breathes instead.
+  grid.style.setProperty('--tile', MIN_TILE + 'px');
+  grid.style.setProperty('--gap', MIN_GAP + 'px');
+  let slack = window.innerHeight
+            - (cal.getBoundingClientRect().bottom + window.scrollY) - 20;
+  const h = Math.max(MIN_TILE,
+            Math.min(MAX_TILE, MIN_TILE + Math.floor(slack / rows)));
+  grid.style.setProperty('--tile', h + 'px');
+  slack -= (h - MIN_TILE) * rows;
+  const g = Math.max(MIN_GAP,
+            Math.min(MAX_GAP, MIN_GAP + Math.floor(slack / rows)));
+  grid.style.setProperty('--gap', g + 'px');
 }
 /* ---------- the day panel ----------
    What this day still wants, and the way to give it to it. Each row opens
@@ -457,19 +472,26 @@ const pop = document.createElement('div');
 pop.className = 'daypop';
 cal.appendChild(pop);
 
-let popFor = null, popTimer = null;
+let popFor = null;
 const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun',
                   'Jul','Aug','Sep','Oct','Nov','Dec'];
 const saidDay = key => {
   const [y, m, d] = key.split('-').map(Number);
   return `${d} ${MONTHS_S[m - 1]} ${y}`;
 };
+// "1 - 16 Aug 2026", not "1 Aug 2026 to 16 Aug 2026" - the month and the year
+// are the same at both ends, and saying them twice is two words nobody reads.
+const spanOf = p => {
+  const A = new Date(p.from + 'T00:00'), B = new Date(p.to + 'T00:00');
+  const mon = d => MONTHS_S[d.getMonth()];
+  return A.getMonth() === B.getMonth() && A.getFullYear() === B.getFullYear()
+    ? `${A.getDate()}\u2013${B.getDate()} ${mon(B)}`
+    : `${A.getDate()} ${mon(A)} \u2013 ${B.getDate()} ${mon(B)}`;
+};
 
 function openDay(cell){
   const key = cell.dataset.day;
   if (!key) return;
-  clearTimeout(popTimer);
-  if (popFor === key && pop.classList.contains('on')) return;
   popFor = key;
 
   const S = CAL.streams;
@@ -477,15 +499,31 @@ function openDay(cell){
   const due = S.filter(s => dueBy(key, s) <= today);
   if (!due.length){ shutDay(); return; }
   const missing = due.filter(s => !have.includes(s.key));
+  // The pull taken on this day, named by the window it covers - "1 - 12 Aug"
+  // says both that you took it and how far back it reaches.
+  const pull = (CAL.periods || []).find(p => p.to === key);
+
+  const rows = S.map(s => {
+    const dot = `<i style="--c:${esc(s.colour)}"></i>`;
+    if (have.includes(s.key)){
+      const note = s.key === 'shop_cumulative' && pull
+        ? `<u>${esc(spanOf(pull))} pull</u>` : '';
+      return `<div class="st done">${dot}<b>${esc(s.label)}${note}</b>` +
+             `<span>\u2713</span></div>`;
+    }
+    if (dueBy(key, s) > today)
+      return `<div class="st wait">${dot}<b>${esc(s.label)}</b>` +
+             `<span>not due</span></div>`;
+    return `<button type="button" class="up" data-stream="${esc(s.card || s.key)}">` +
+           `${dot}<b>${esc(s.label)}</b><span>Upload</span></button>`;
+  }).join('');
 
   pop.innerHTML =
-    `<div class="hd">Raw data<b>${esc(saidDay(key))}</b></div>` +
-    (missing.length
-      ? `<div class="bd">${missing.map(s =>
-          `<button type="button" class="up" data-stream="${esc(s.card || s.key)}">` +
-          `<i style="--c:${esc(s.colour)}"></i><b>${esc(s.label)}</b>` +
-          `<span>Upload</span></button>`).join('')}</div>`
-      : `<div class="ok"><b>\u2713</b> Everything uploaded.</div>`);
+    `<div class="hd">${missing.length
+        ? (missing.length === 1 ? '1 still wanted' : missing.length + ' still wanted')
+        : 'All in'}<b>${esc(saidDay(key))}</b>` +
+       `<button type="button" class="x" aria-label="Close">\u00d7</button></div>` +
+    `<div class="bd">${rows}</div>`;
 
   // Placed against the grid, and flipped when it would run off the right.
   const box = cell.getBoundingClientRect();
@@ -503,28 +541,47 @@ function openDay(cell){
   if (over > 0) pop.style.top = Math.round(box.top - host.top - over) + 'px';
 }
 
-function shutDay(){ pop.classList.remove('on'); popFor = null; }
-const laterDay = () => { clearTimeout(popTimer); popTimer = setTimeout(shutDay, 240); };
+function shutDay(){
+  pop.classList.remove('on');
+  popFor = null;
+  grid.querySelectorAll('.cell.on').forEach(c => c.classList.remove('on'));
+}
 
-grid.addEventListener('mouseover', e => {
-  const cell = e.target.closest('.cell');
-  if (!cell || cell.classList.contains('pad')) return;
-  openDay(cell);
-});
-grid.addEventListener('mouseleave', laterDay);
-pop.addEventListener('mouseenter', () => clearTimeout(popTimer));
-pop.addEventListener('mouseleave', laterDay);
+/* Click, not hover. A panel that appears because the pointer crossed a tile
+   on its way somewhere else is a panel you did not ask for, and one you have
+   to escape from before you can read the tile behind it. Pressing a day is a
+   decision; the ring on the tile says which day is being answered, and
+   pressing it again puts it away. */
 grid.addEventListener('click', e => {
   const cell = e.target.closest('.cell');
-  if (cell && !cell.classList.contains('pad')) openDay(cell);
+  if (!cell || cell.classList.contains('pad') || cell.classList.contains('future')){
+    shutDay(); return;
+  }
+  const open = popFor === cell.dataset.day && pop.classList.contains('on');
+  shutDay();
+  if (open) return;
+  cell.classList.add('on');
+  openDay(cell);
 });
 pop.addEventListener('click', e => {
+  if (e.target.closest('.x')){ shutDay(); return; }
   const btn = e.target.closest('.up');
   if (!btn || !popFor) return;
   location.href = '/?upload=' + encodeURIComponent(btn.dataset.stream) +
                   '&date=' + encodeURIComponent(popFor);
 });
+document.addEventListener('click', e => {
+  if (!pop.classList.contains('on')) return;
+  if (e.target.closest('#grid') || e.target.closest('.daypop')) return;
+  shutDay();
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') shutDay(); });
+let fitTimer = null;
+window.addEventListener('resize', () => {
+  shutDay();
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(draw, 90);
+});
 
 draw();
 </script>
