@@ -389,7 +389,10 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
     c.rect(0, y - ST_HEAD_H, A4_W, ST_HEAD_H, stroke=0, fill=1)
     c.setFillColor(GOLD)
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(9.9, y - 19.0, ST_HEADINGS[0])
+    # Every column centred, the first one included - it used to sit hard
+    # against the left edge while the four beside it were centred, which read
+    # as a label that had been left where it landed.
+    c.drawCentredString(ST_COLS[0] / 2, y - 19.0, ST_HEADINGS[0])
     for i in range(1, len(ST_COLS)):
         c.drawCentredString(_col_x(i) + ST_COLS[i] / 2, y - 19.0, ST_HEADINGS[i])
     y -= ST_HEAD_H
@@ -406,7 +409,7 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
         while (pdfmetrics.stringWidth(name, "Helvetica", 11) > ST_COLS[0] - 20
                and len(name) > 3):
             name = name[:-1]
-        c.drawString(9.9, base, name)
+        c.drawCentredString(ST_COLS[0] / 2, base, name)
         c.drawCentredString(_col_x(1) + ST_COLS[1] / 2, base, str(r["pack"]))
         for j, key in enumerate(("physical", "allotable", "pending"), start=2):
             v = r.get(key, 0) or 0
@@ -423,7 +426,7 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
         c.rect(0, y - ST_ROW_H, A4_W, ST_ROW_H, stroke=0, fill=1)
         c.setFillColor(GOLD)
         c.setFont("Helvetica-Bold", 11)
-        c.drawString(9.9, y - 19.2, "TOTAL")
+        c.drawCentredString(ST_COLS[0] / 2, y - 19.2, "TOTAL")
         for j, key in enumerate(("physical", "allotable", "pending"), start=2):
             c.drawCentredString(_col_x(j) + ST_COLS[j] / 2, y - 19.2,
                                 _fmt(totals.get(key, 0), True))
