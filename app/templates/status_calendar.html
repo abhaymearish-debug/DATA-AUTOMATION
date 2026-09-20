@@ -175,24 +175,16 @@
                box-shadow:0 0 10px -2px color-mix(in srgb, var(--c) 55%, transparent),
                           inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent); }
 
-  /* A stream with everything in says so, in the colour of being done - and
-     the rail loses its colour of record for that one, because a full bar in
-     five different colours is five facts and a full bar in green is one. */
+  /* A stream with everything in says so in its FIGURE, and nowhere else.
+     The rail keeps its stream's colour whatever the score, because this strip
+     is the legend for the tiles below: that colour is how you know which of
+     the five blocks on a day belongs to which stream. Turning a finished rail
+     green cost the strip exactly that - with Shop daily and Secondary daily
+     both at 31/31, the two rails were the same green and the legend no longer
+     told them apart, and the whole strip changed character from one month to
+     the next depending on how many streams happened to be complete. */
   .kk.done .sc { color:var(--ok); }
   .kk.done .sc s { color:var(--ok); opacity:.6; }
-  .kk.done .bar { background:color-mix(in srgb, var(--ok) 12%, var(--row));
-                  box-shadow:inset 0 0 0 1px
-                             color-mix(in srgb, var(--ok) 16%, transparent); }
-  .kk.done .bar u { background:linear-gradient(180deg,
-                          color-mix(in srgb, #fff 22%, var(--ok)),
-                          var(--ok) 62%,
-                          color-mix(in srgb, #000 8%, var(--ok)));
-                    box-shadow:0 1px 3px color-mix(in srgb, var(--ok) 45%, transparent),
-                          inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent); }
-  :root[data-theme="dark"] .kk.done .bar u {
-                    background:linear-gradient(180deg,
-                          color-mix(in srgb, #fff 14%, var(--ok)), var(--ok) 70%);
-                    box-shadow:0 0 10px -2px color-mix(in srgb, var(--ok) 55%, transparent); }
 
   @media (max-width: 1080px) {
     .key { grid-template-columns:repeat(auto-fit, minmax(158px, 1fr)); gap:14px 20px; }
