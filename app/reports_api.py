@@ -333,13 +333,22 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
     # it is named by those days rather than by its own full window, so it
     # still never repeats a span shown above it.
     had = set().union(*[spread(i) for i in raws]) if raws else set()
+    # The window the report was actually asked for. A day the workbook holds
+    # but the report does not show is not a source for that report: with
+    # 2 - 18 Sep on screen, a workbook that also holds the 1st was naming the
+    # 1st underneath figures that exclude it.
+    asked = ({lo + timedelta(days=i) for i in range((hi - lo).days + 1)}
+             if lo and hi and lo <= hi else None)
     kept_book = []
     for it in book_items:
         if not raws:
             it["files"] = 1
             kept_book.append(it)
             continue
-        extra = sorted((spread(it) - had) & secondary_covered_days())
+        days = (spread(it) - had) & secondary_covered_days()
+        if asked is not None:
+            days &= asked
+        extra = sorted(days)
         if not extra:
             continue
         it["files"] = 0
