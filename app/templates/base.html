@@ -426,18 +426,6 @@
                     transition:stroke .2s ease, transform .2s cubic-bezier(.2,.7,.3,1); }
   .searchwrap:focus-within .ic { stroke:var(--blue); transform:scale(1.04); }
 
-  /* The key that focuses it, drawn as a key. It steps aside the moment the
-     box is in use - the hint has done its job by then. */
-  .searchwrap kbd { position:absolute; right:9px; top:50%; transform:translateY(-50%);
-                    font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
-                    color:var(--muted); letter-spacing:.2px;
-                    border:1px solid var(--line); border-bottom-width:2px;
-                    border-radius:5px; padding:3.5px 6px;
-                    background:linear-gradient(180deg,
-                               color-mix(in srgb, var(--card) 96%, #fff), var(--row));
-                    pointer-events:none; transition:opacity .16s ease; }
-  .searchwrap:focus-within kbd, .searchwrap.has kbd { opacity:0; }
-
   /* Clear. Only there when there is something to clear. */
   .searchwrap .clr { position:absolute; right:7px; top:50%; margin-top:-11px;
                      width:22px; height:22px; display:grid; place-items:center;
@@ -1098,9 +1086,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     // The old markup had the glass as a character in a span. Retire it.
     wrap.querySelectorAll('span.ic').forEach(el => el.remove());
-    if (!wrap.querySelector('kbd')) {
-      wrap.insertAdjacentHTML('beforeend', '<kbd>/</kbd>');
-    }
+    // No key hint drawn. "/" still focuses the box - see below - but a badge
+    // in the corner of a search field is a thing you have to stop and work
+    // out, and the shortcut is worth less than the second it costs to ask.
+    wrap.querySelectorAll('kbd').forEach(el => el.remove());
     if (!wrap.querySelector('.clr')) {
       wrap.insertAdjacentHTML('beforeend',
         '<button type="button" class="clr" tabindex="-1" aria-label="Clear search">' +

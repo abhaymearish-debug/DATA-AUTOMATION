@@ -152,9 +152,9 @@
   tbody tr:hover td { background:var(--hover); }
   td.item { font-weight:650; color:var(--ink); white-space:nowrap;
             overflow:hidden; text-overflow:ellipsis; }
-  td.item .code { display:inline-block; margin-right:9px; padding:2px 7px; border-radius:20px;
-                  background:var(--chip); color:var(--chip-ink); font-size:11px;
-                  font-weight:700; letter-spacing:.3px; }
+  /* No code chip. The shop's own number already opens its name -
+     "4001-ANDHAKARANAZHI" - so the pill beside it was the same shop said
+     twice, in a number (104001) that exists only inside this app. */
   tr.shop { cursor:pointer; }
   tr.shop.on > td { background:var(--hover); font-weight:700; }
   td.item .tw { display:inline-block; width:11px; font-size:9px; color:var(--muted); }
@@ -651,7 +651,7 @@ function bondCards(list, term){
       const shopOpen = openShops.has(s.code);
       html += `<tr class="shop${shopOpen ? ' on' : ''}" onclick="toggleShop('${esc(s.code)}')">` +
               `<td class="item"><span class="tw">${shopOpen ? '▾' : '▸'}</span>` +
-              `<span class="code">${esc(s.code)}</span>${esc(s.name)}</td>` +
+              `${esc(s.name)}</td>` +
               s.values.map(v => `<td class="${v ? '' : 'z'}">${num(v)}</td>`).join('') + '</tr>';
       if (shopOpen) html += detailRows(s.code);
     }
