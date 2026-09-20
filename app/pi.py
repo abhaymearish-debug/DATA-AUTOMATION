@@ -270,8 +270,24 @@ def store(paths: list[Path], expect: str = "") -> dict:
                          "shop": _shop_of(d), "why": f"same shop as {win[0].name}"})
 
     folder = month_dir(key)
-    if folder.exists():
-        shutil.rmtree(folder)
+    # Merged by shop, not replaced wholesale - the same reason as item issue.
+    # 295 shops do not always arrive in one batch, and rmtree meant a second
+    # upload for the month threw away every shop the first one filed.
+    incoming = {code for code in by_shop}
+    sources = {Path(p).resolve() for p, _d in by_shop.values()}
+    if folder.is_dir():
+        for old_file in sorted(folder.glob("*.xls*")):
+            try:
+                was = parse_file(old_file)
+            except Exception:
+                continue
+            # Never the file we are about to copy in: an upload staged from
+            # the store itself would delete its own source.
+            if was.get("shop_code") in incoming and old_file.resolve() not in sources:
+                try:
+                    old_file.unlink()
+                except OSError:
+                    pass
     folder.mkdir(parents=True, exist_ok=True)
     for p, _d in by_shop.values():
         shutil.copy2(p, folder / p.name)

@@ -449,8 +449,19 @@ CLUSTER_OF_WAREHOUSE = {w: c for c, whs in WAREHOUSE_CLUSTERS.items() for w in w
 
 
 def cluster_of_warehouse(name: str):
-    """Cluster for a warehouse under any spelling Bevco uses for it."""
-    return CLUSTER_OF_WAREHOUSE.get(canon_warehouse(name))
+    """Cluster for a warehouse under any spelling Bevco uses for it.
+
+    Fifteen names are both a bond and a warehouse. The bond split is live -
+    Settings can change it - while the warehouse map is a constant in this
+    file, so moving a bond between clusters used to leave the warehouse of the
+    same name where it was, and one report's two views would then disagree
+    about which cluster that name sits in, with nothing saying so. They agree
+    today; for a shared name the live split now decides, so they cannot drift
+    apart. A warehouse that is not also a bond keeps the fixed map.
+    """
+    key = canon_warehouse(name)
+    live = cluster_of_bond().get(key)
+    return live if live is not None else CLUSTER_OF_WAREHOUSE.get(key)
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, object]] = {}

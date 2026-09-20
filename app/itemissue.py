@@ -212,14 +212,36 @@ def store(paths: list[Path], expect: tuple | None = None) -> dict:
     # the period the rest of the batch - or the person - answered for.
     items = list(items) + undated
     folder = root() / key
-    if folder.exists():
-        shutil.rmtree(folder)
+    # Merged by warehouse, not replaced wholesale. KSBC exports this one
+    # warehouse at a time, so a period is often built up over several uploads
+    # - and rmtree meant the second batch silently destroyed the first, with
+    # the job reporting success either way. A warehouse in this batch replaces
+    # its own earlier file; a warehouse not in it keeps what it had.
+    incoming = {(d.get("warehouse") or "").strip().upper() for _p, d in items}
+    sources = {Path(p).resolve() for p, _d in items}
+    kept = 0
+    if folder.is_dir():
+        for old_file in sorted(folder.glob("*.xls*")):
+            try:
+                was = parse_file(old_file)
+            except Exception:
+                continue
+            # Never the file we are about to copy in: an upload staged from
+            # the store itself would delete its own source.
+            if (was.get("warehouse") or "").strip().upper() in incoming and old_file.resolve() not in sources:
+                try:
+                    old_file.unlink()
+                except OSError:
+                    pass
+            else:
+                kept += 1
     folder.mkdir(parents=True, exist_ok=True)
     for p, _parsed in items:
         shutil.copy2(p, folder / Path(p).name)
 
     _CACHE.pop(key, None)
     return {"period": key, "label": period_label(key), "files": len(items),
+            "kept": kept,
             "warehouses": len({d["warehouse"] for _p, d in items}),
             "undated": len(undated), "skipped": skipped}
 
