@@ -92,11 +92,17 @@
               color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }
   .scard .v i { font-style:normal; font-size:12px; font-weight:650; color:var(--muted);
                 letter-spacing:-.1px; }
-  .scard .bar { margin-top:9px; height:5px; border-radius:3px;
-                background:color-mix(in srgb, var(--row) 80%, transparent);
-                overflow:hidden; }
-  .scard .bar b { display:block; height:100%; border-radius:3px; background:var(--d);
-                  transition:width .4s cubic-bezier(.2,.7,.3,1); }
+  /* The month, a segment per day, rather than one bar filled to a percentage.
+     "18 of 19" tells you how many; this tells you WHICH - a stream that fell
+     over on the 3rd and came back on the 7th reads as a gap in the strip,
+     and one that has never started reads as an empty run at the front. */
+  .scard .bar { margin-top:10px; display:flex; gap:1.5px; height:12px;
+                align-items:stretch; }
+  .scard .bar b { flex:1 1 0; min-width:0; border-radius:2px;
+                  background:var(--d); transition:opacity .2s ease; }
+  .scard .bar b.off { background:color-mix(in srgb, var(--bad) 26%, var(--row)); }
+  .scard .bar b.wait { background:color-mix(in srgb, var(--line) 70%, transparent); }
+  .scard:hover .bar b { opacity:.95; }
   /* Files and days are the same number on every stream but the cumulative,
      where two pulls answer a whole month - so it is only said where it
      differs from the days above it. */
@@ -145,62 +151,91 @@
   .daypop .ok { padding:11px 13px 13px; font-size:12.5px; color:var(--muted); }
   .daypop .ok b { color:var(--ok); }
 
-  /* ---------- the grid ---------- */
-  .cal { background:var(--card); border:1px solid var(--line); border-radius:14px;
-         padding:14px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  /* ---------- the grid ----------
+
+     A day tile answers one question: is there anything still to upload for
+     this day, and what. So it shows what is MISSING and nothing else.
+
+     Five dots on every tile, one per stream, was the honest version and it
+     made every day look alike - thirty tiles of the same five marks, and you
+     had to know which of five positions meant which stream before any of it
+     meant anything. A complete day was indistinguishable from a broken one
+     at a glance, which is the only glance this screen gets.
+
+     Inverted: a day with everything in is a tick on a green wash and no
+     words at all. A day short of something names what it is short of, in
+     that stream's colour. A day with nothing in says so. Your eye lands on
+     the tiles that want something, because they are the only ones with
+     anything written on them.
+  ------------------------------------------------------------------ */
+  .cal { background:var(--card); border:1px solid var(--line); border-radius:16px;
+         padding:15px 15px 16px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
   .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
-  .dow { text-align:center; font-size:9px; font-weight:800; letter-spacing:1px;
-         text-transform:uppercase; color:var(--muted); padding-bottom:6px; opacity:.85; }
-  /* min-width:0 or the nowrap note below sets a floor the column cannot go
-     under, and seven of those push the whole grid off the side of a laptop. */
-  .cell { min-height:92px; min-width:0; border:1px solid var(--line); border-radius:12px;
-          padding:10px 12px 12px; display:flex; flex-direction:column;
-          background:var(--card); cursor:default;
-          transition:box-shadow .16s ease, border-color .16s ease,
-                     transform .16s cubic-bezier(.2,.7,.3,1); }
-  .cell:not(.pad):hover { border-color:color-mix(in srgb, var(--blue) 34%, var(--line));
-          box-shadow:0 6px 18px -6px rgba(16,24,40,.18);
-          transform:translateY(-1px); z-index:2; }
+  .dow { text-align:center; font-size:9px; font-weight:800; letter-spacing:1.1px;
+         text-transform:uppercase; color:var(--muted); padding-bottom:8px; opacity:.7; }
+
+  /* min-width:0 or a nowrap label sets a floor the column cannot go under,
+     and seven of those push the grid off the side of a laptop. */
+  .cell { min-height:104px; min-width:0; border:1px solid var(--line);
+          border-radius:13px; padding:9px 10px 10px; background:var(--card);
+          display:flex; flex-direction:column; position:relative; overflow:hidden;
+          transition:box-shadow .18s ease, border-color .18s ease,
+                     transform .18s cubic-bezier(.2,.7,.3,1); }
+  .cell:not(.pad):hover { border-color:color-mix(in srgb, var(--blue) 36%, var(--line));
+          box-shadow:0 8px 22px -8px rgba(16,24,40,.22);
+          transform:translateY(-2px); z-index:2; }
   .cell.pad { border:0; background:none; min-height:0; }
-  /* Nothing at all: hatched, so an empty day reads as empty rather than as
-     a day whose four streams all happen to be off. */
-  .cell.none { background:repeating-linear-gradient(135deg,
-               transparent 0 7px, var(--row) 7px 14px); }
-  .cell.full { border-color:color-mix(in srgb, var(--ok) 38%, var(--line));
-               background:color-mix(in srgb, var(--ok) 5%, var(--card)); }
-  .cell.future { opacity:.4; }
-  .cell.today { border-color:var(--gold); box-shadow:0 0 0 2px
-                color-mix(in srgb, var(--gold) 28%, transparent); }
-  .cell .n { font-size:14px; font-weight:750; color:var(--ink); display:flex;
-             align-items:center; gap:6px; letter-spacing:-.2px; }
-  .cell.today .n { color:var(--gold); }
-  .cell .n em { font-style:normal; font-size:8.5px; font-weight:800; letter-spacing:.7px;
+
+  /* The day number, and to its right the one mark that says how the day did. */
+  .cell .n { display:flex; align-items:center; gap:6px;
+             font-size:14.5px; font-weight:750; color:var(--ink);
+             letter-spacing:-.3px; font-variant-numeric:tabular-nums; }
+  .cell .n em { font-style:normal; font-size:8px; font-weight:800; letter-spacing:.8px;
                 text-transform:uppercase; color:var(--gold); }
-  .cell .n .tick { margin-left:auto; color:var(--ok); font-size:11px; }
+  .cell .n .mk { margin-left:auto; flex:none; display:grid; place-items:center;
+                 min-width:19px; height:19px; padding:0 5px; border-radius:999px;
+                 font-size:10.5px; font-weight:800; letter-spacing:0;
+                 font-variant-numeric:tabular-nums; }
+  .cell .n .mk.ok { color:var(--ok);
+                    background:color-mix(in srgb, var(--ok) 13%, transparent); }
+  .cell .n .mk.no { color:var(--gold-ink, #92400E);
+                    background:color-mix(in srgb, var(--gold) 20%, transparent); }
 
-  /* Five dots, one per stream, always in the same order.
+  /* What the day is still short of. Never more than three names - past that
+     it is quicker to say how many. */
+  .cell .gaps { margin-top:7px; display:grid; gap:3px; align-content:start; }
+  .cell .g { display:flex; align-items:center; gap:6px; min-width:0;
+             font-size:10.5px; font-weight:650; letter-spacing:-.05px;
+             line-height:1.3; color:var(--muted);
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cell .g i { width:6px; height:6px; border-radius:50%; flex:none; background:var(--c);
+               box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 18%, transparent); }
+  .cell .g.more { color:var(--muted); opacity:.8; padding-left:12px; }
 
-     Naming all five on every tile was honest and unreadable - thirty tiles
-     each repeating the same five phrases is a page of words you stop seeing.
-     The dots carry it: filled in the stream's own colour when the raw is in,
-     a hollow red ring when it is missing, a faint grey ring when the raw
-     cannot exist yet. Which of the five it is comes from where it sits and
-     what colour it is, and the panel on hover spells it out in full.
+  /* Everything in. A wash and a tick, and nothing to read. */
+  .cell.full { border-color:color-mix(in srgb, var(--ok) 30%, var(--line));
+               background:linear-gradient(180deg,
+                          color-mix(in srgb, var(--ok) 7%, var(--card)),
+                          color-mix(in srgb, var(--ok) 2%, var(--card))); }
+  .cell.full .n { color:color-mix(in srgb, var(--ok) 55%, var(--ink)); }
 
-     Big enough to read a colour off at arm's length, and ringed so a missing
-     one reads as an absence rather than as a paler version of itself. */
-  .sts { display:flex; gap:7px; margin-top:auto; padding-top:10px; }
-  .sts .st { width:9px; height:9px; border-radius:50%; flex:none;
-             background:var(--c);
-             box-shadow:0 0 0 2.5px color-mix(in srgb, var(--c) 14%, transparent);
-             transition:transform .16s cubic-bezier(.2,.7,.3,1); }
-  .sts .st.off { background:none;
-                 box-shadow:inset 0 0 0 1.7px color-mix(in srgb, var(--bad) 55%,
-                            transparent); }
-  .sts .st.wait { background:none;
-                  box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--line) 90%,
-                             transparent); }
-  .cell:hover .sts .st { transform:scale(1.12); }
+  /* Nothing in at all - said in one line rather than as five absences. */
+  .cell.none { border-color:color-mix(in srgb, var(--bad) 22%, var(--line));
+               background:linear-gradient(180deg,
+                          color-mix(in srgb, var(--bad) 5%, var(--card)),
+                          var(--card)); }
+  .cell.none .say { margin-top:auto; font-size:10.5px; font-weight:700;
+                    color:color-mix(in srgb, var(--bad) 70%, var(--muted)); }
+
+  /* Not due yet: quiet, and not a gap you could close today. */
+  .cell.future { border-style:dashed; background:none; }
+  .cell.future .n { color:var(--muted); font-weight:700; }
+  .cell.future .say { margin-top:auto; font-size:10px; font-weight:650;
+                      color:var(--muted); opacity:.65; }
+
+  .cell.today { border-color:var(--gold);
+                box-shadow:0 0 0 3px color-mix(in srgb, var(--gold) 20%, transparent); }
+  .cell.today .n { color:var(--gold); }
 
   /* On a phone seven columns have about fifty pixels each, which is room for
      a number and four slots and nothing else. The note goes; the tooltip and
@@ -334,18 +369,31 @@ function draw(){
     // All five, named, every day. Which ones are missing is the question
     // this screen exists to answer, and it should not need a hover or a
     // legend to answer it.
-    const sts = S.map(s => {
-      const got = have.includes(s.key);
-      const wait = !got && dueBy(key, s) > today;
-      const cls = got ? 'on' : wait ? 'wait' : 'off';
-      return `<i class="st ${cls}" style="--c:${esc(s.colour)}"
-                 title="${esc(s.label)}"></i>`;
-    }).join('');
+    // What the day is short of, named. Three at most: past that the count
+    // says it faster than the list does, and five names is the wall of text
+    // this tile was redesigned to get rid of.
+    let body = '';
+    let mark = '';
+    if (nothingDue){
+      body = `<div class="say">Not due yet</div>`;
+    } else if (!have.length){
+      body = `<div class="say">Nothing uploaded</div>`;
+      mark = `<span class="mk no">${due.length}</span>`;
+    } else if (missing.length){
+      const show = missing.slice(0, 3);
+      body = `<div class="gaps">${show.map(s =>
+          `<span class="g" style="--c:${esc(s.colour)}"
+                 title="${esc(s.label)}"><i></i>${esc(s.tiny || s.short)}</span>`).join('')}${
+        missing.length > show.length
+          ? `<span class="g more">+${missing.length - show.length} more</span>` : ''}</div>`;
+      mark = `<span class="mk no">${missing.length}</span>`;
+    } else {
+      mark = `<span class="mk ok">\u2713</span>`;
+    }
 
     html += `<div class="${cls}" data-day="${key}" title="${esc(tip)}">
-        <div class="n">${d}${key === today ? '<em>today</em>' : ''}${
-          done ? '<span class="tick">\u2713</span>' : ''}</div>
-        <div class="sts">${sts}</div>
+        <div class="n">${d}${key === today ? '<em>today</em>' : ''}${mark}</div>
+        ${body}
       </div>`;
   }
   grid.innerHTML = html;
@@ -379,14 +427,23 @@ function draw(){
                                    f: filesOf(s.key)}))
     .sort((a, b) => (a.of ? a.n / a.of : 1) - (b.of ? b.n / b.of : 1))
     .map(({s, n, of, f}) => {
-      const pct = of ? Math.round(n / of * 100) : 0;
       const said = f === 1 ? '1 file' : `${f} files`;
-      const show = f !== n;
+      // Only where files and days differ - and never "0 files", which is the
+      // same nothing the count above it has already reported.
+      const show = f !== n && f > 0;
+      // One segment per day of this month, in order.
+      const strip = [];
+      for (let dd = 1; dd <= last; dd++){
+        const k = iso(y, m, dd);
+        if (dueBy(k, s) > today) strip.push('<b class="wait"></b>');
+        else strip.push((CAL.days[k] || []).includes(s.key)
+          ? '<b></b>' : '<b class="off"></b>');
+      }
       return `<div class="scard" style="--d:${esc(s.colour)}"
                    title="${esc(s.label)}: ${n} of ${of} days due, from ${said}">
           <div class="nm"><i></i>${esc(s.tiny || s.short)}</div>
           <div class="v">${n}<i> / ${of}</i></div>
-          <div class="bar"><b style="width:${pct}%"></b></div>
+          <div class="bar">${strip.join('')}</div>
           <div class="fc">${show ? esc(said) : '&nbsp;'}</div>
         </div>`;
     }).join('');
