@@ -552,8 +552,13 @@ function render(){
     .map(g => {
       if (!term) return g;
       if (g.bond.toLowerCase().includes(term)) return g;
-      const shops = g.shops.filter(s => s.name.toLowerCase().includes(term)
-                                     || s.code.toLowerCase().includes(term));
+      // The shop's own number is inside its name - "2030-PATHANAPURAM" - so
+      // searching matches what you can actually read on the row. The code
+      // beside it is this app's internal key: 2030 is stored as 102030, and
+      // matching on it meant typing "102" returned a shop with no "102"
+      // anywhere on its line. A search whose hits you cannot see is worse
+      // than one that misses.
+      const shops = g.shops.filter(s => s.name.toLowerCase().includes(term));
       return shops.length ? {...g, shops} : null;
     })
     .filter(Boolean);

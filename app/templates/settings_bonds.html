@@ -204,7 +204,10 @@ function visible(){
     if (fBond.value && bondOf(s) !== fBond.value) return false;
     if (fStatus.value && (s.status || '') !== fStatus.value) return false;
     if (!q) return true;
-    return [s.code, s.name, s.warehouse, s.staff].join(' ').toLowerCase().includes(q);
+    // Not s.code: that is the internal key, and the shop's own number is
+    // already in its name. Searching it pulled up shops whose row shows no
+    // sign of what you typed.
+    return [s.name, s.warehouse, s.staff].join(' ').toLowerCase().includes(q);
   });
 }
 const bondOf = s => edits.has(s.code) ? edits.get(s.code) : s.bond;
