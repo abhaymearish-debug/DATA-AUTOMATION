@@ -889,6 +889,17 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
     else:
         opens = {"from": None, "to": None}
 
+    # Asked for no window, answer for the one this page opens on.
+    #
+    # It used to answer for everything on disk and hand the opening window
+    # back as a suggestion, which the screen then printed in the period box
+    # without re-asking. So a first load showed "2 - 18 Sep" over figures
+    # that included the whole of August, and a Source naming forty files
+    # from both months. Touching the date picker fixed it, which is the
+    # worst kind of bug: right the moment you go looking.
+    if dates and not date_from and not date_to:
+        date_from, date_to = lo, hi
+
     sel = []
     for l in lines:
         if date_from and l["date"] and l["date"] < date_from:
@@ -997,6 +1008,13 @@ def brandwise_shops(view: str = "bond", key: str = "", date_from=None, date_to=N
     want = (key or "").strip().upper()
     of = (lambda l: (l["warehouse"] or "").upper()) if view == "warehouse" \
         else (lambda l: (l["bond"] or "(unmapped)").upper())
+
+    # The same default the table above it takes, so a drill-down can never
+    # answer for a wider window than the row it opened out of.
+    if not date_from and not date_to:
+        days = [l["date"] for l in lines if l["date"]]
+        if days:
+            date_from, date_to = _latest_month(days)
 
     sel = [l for l in lines
            if of(l) == want
