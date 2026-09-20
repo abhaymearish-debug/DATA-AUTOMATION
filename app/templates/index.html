@@ -1144,6 +1144,10 @@ function artifactLinks(job, longLabels){
 const DL = '<svg viewBox="0 0 24 24" aria-hidden="true">'
   + '<path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/>'
   + '<path d="M4 20.5h16"/></svg>';
+// And the same arrow the other way up, for the one that goes back in.
+const UP = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+  + '<path d="M12 20.5v-11"/><path d="m7.5 13.5 4.5-4.5 4.5 4.5"/>'
+  + '<path d="M4 3.5h16"/></svg>';
 
 const RUN_LOOK = {
   promoted:  { cls:'ok',  word:'Processed', quiet:true },
@@ -1489,8 +1493,13 @@ function drawHistory(){
     // This screen is about the raws, not the reports. The built workbook and
     // its PDFs belong to the report pages; here you re-run a date or fetch the
     // file it was built from. The log only earns its place when something broke.
-    let actions = `<button class="act" onclick="reupload('${day}','${dayTo}')">`
-                + `${lead.status === 'promoted' ? 'Re-upload' : 'Try again'}</button>`;
+    // One word each. "Re-upload" and "Download raw file" named the file and
+    // the fact that it had been here before; what they do is upload and
+    // download, and the tile they sit on has already said which day and which
+    // file. A run that failed still says "Try again", because there the point
+    // is the second attempt rather than the file.
+    let actions = `<button class="act" onclick="reupload('${day}','${dayTo}')">${UP}`
+                + `${lead.status === 'promoted' ? 'Upload' : 'Try again'}</button>`;
     // Only offer the download when this run actually kept a copy. Runs from
     // before the app archived raws have nothing behind the link.
     const withRaw = runs.find(r => r.raw_kept && (r.uploaded_names || []).length);
@@ -1500,7 +1509,7 @@ function drawHistory(){
       // it sits between two buttons that act on the app rather than on your
       // machine. It says download, and carries the arrow to match.
       actions += `<a class="act" href="/jobs/${withRaw.id}/raw">${DL}`
-               + `${k > 1 ? `Download raw files (${k})` : 'Download raw file'}</a>`;
+               + `${k > 1 ? `Download (${k})` : 'Download'}</a>`;
     }
     // The instruction's receipt - what filed, what came back blank, what the
     // mapping expected and never saw. The upload keeps one; a month filed
