@@ -737,6 +737,15 @@ async def build(
             job.covers = (typed.isoformat() if typed else
                           _warehouse_covers(job.uploaded_names or
                                             [p.name for p in placed]) or "")
+            if not job.covers:
+                # An empty covers date falls back to the upload day everywhere
+                # downstream, so a renamed export filed itself under today and
+                # collided with the day's real upload - two different report
+                # dates sharing one, and a delete that takes both. Which day
+                # the stock is for is not a detail this can guess.
+                raise UploadRejected(
+                    "No report date could be read from those filenames. Pick the "
+                    "date the stock is for in the dialog and upload again.")
 
         elif stream_key == "shop_sales_daily":
             # Standalone day: name it canonically and store it. No month

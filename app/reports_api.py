@@ -309,7 +309,12 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
         b = day(src.get("to")) if isinstance(src, dict) else None
         # A file with no days of its own is kept: better to over-name one file
         # than to drop the only source a report has.
-        if a and b and lo and hi and (b < lo or a > hi):
+        # An open-ended window is still a window. This required BOTH ends to
+        # be given, so supplying only one turned the overlap test off entirely
+        # and every dispatch file on disk was named as a source - the exact
+        # thing this function exists to stop. A missing end means "no bound on
+        # that side", not "no filtering".
+        if a and b and (lo or hi) and ((hi and a > hi) or (lo and b < lo)):
             continue
         if book is not None and name == book.name:
             # Leads with its days like everything else; what it IS goes on the
@@ -2191,11 +2196,18 @@ def _group_shops(shops: list, period: dict, cluster: int | None, bond: str,
                                 "clusters": set()}
         if by_warehouse:
             g["clusters"].add(of_cluster.get(b, 0))
+        # Totalled from the SAME figures the rows print. The rows are rounded
+        # for display and the total used to be summed from the unrounded
+        # values, so a bond showing 341.31 across its shops carried a total of
+        # 341.32 - and anyone adding the column by hand found the report
+        # disagreeing with itself. The truer sum is the unrounded one, but a
+        # figure nobody can reconcile is worth less than a cent of accuracy.
+        values = [round(v, 2) for v in shop["v"]]
         g["shops"].append({"code": shop["code"], "name": shop["name"],
                            "warehouse": shop.get("warehouse", ""),
-                           "values": [round(v, 2) for v in shop["v"]]})
+                           "values": values})
         for k in range(4):
-            g["totals"][k] += shop["v"][k]
+            g["totals"][k] += values[k]
 
     groups, grand = [], [0.0, 0.0, 0.0, 0.0]
     for key in sorted(grouped):

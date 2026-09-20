@@ -474,7 +474,12 @@ function noData(d){
     '<div class="bd"><div class="nodata">' +
       '<div class="ic">' + CAL_ICON + '</div>' +
       '<h3>Raw data needs to be uploaded</h3>' + body +
-      '<div class="acts"><a class="act primary" href="/">Upload raw data</a></div>' +
+      '<div class="acts">' +
+        (sug && sug.from && sug.to
+          ? `<button class="act" onclick="useSuggested()">Show ${esc(sug.short || (sug.from + ' to ' + sug.to))}</button>`
+          : '') +
+        '<a class="act primary" href="/">Upload raw data</a>' +
+      '</div>' +
     '</div></div>';
   srcLine.hidden = true;
   lede.hidden = true;
