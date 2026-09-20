@@ -233,56 +233,130 @@
   .modal.wide { max-width:660px; }
   .modal .body.scroll { max-height:60vh; overflow:auto; }
 
+  /* ---------- history ----------
+     A list of uploads is a record, and a record should read like one: the
+     date it covers, the state it ended in, what went in, who put it there,
+     and what you can do about it now. It was all present and all the same
+     weight - three buttons of equal loudness, a filter bar of raw browser
+     date fields, and a status block in a hard pastel that only existed in
+     light mode. */
   .hbar { display:flex; align-items:center; gap:9px; padding-bottom:13px; margin-bottom:13px;
           border-bottom:1px solid var(--line); }
-  .hbar label { font-size:11px; letter-spacing:.6px; text-transform:uppercase;
+  .hbar label { font-size:10.5px; letter-spacing:.7px; text-transform:uppercase;
                 color:var(--muted); font-weight:700; }
-  .hbar input[type=date] { width:auto; padding:7px 10px; }
-  .hbar select { width:auto; padding:7px 10px; }
+  .hbar input[type=date], .hbar select {
+      width:auto; padding:7.5px 11px; border-radius:9px; font-size:12.5px;
+      font-weight:650; color:var(--ink); background:var(--card);
+      border:1px solid var(--line); font-variant-numeric:tabular-nums;
+      transition:border-color .14s ease, box-shadow .14s ease; }
+  .hbar input[type=date]:hover, .hbar select:hover { border-color:var(--zero); }
+  .hbar input[type=date]:focus, .hbar select:focus { outline:none;
+      border-color:var(--blue);
+      box-shadow:0 0 0 3px color-mix(in srgb, var(--blue) 15%, transparent); }
   .hbar label { white-space:nowrap; }
   .hbar .to { font-size:12px; color:var(--muted); }
-  .hbar .count { margin-left:auto; font-size:12px; color:var(--muted);
+  .hbar .act { border-radius:9px; padding:7px 12px; font-weight:650; }
+  .hbar .count { margin-left:auto; font-size:11.5px; font-weight:650; color:var(--muted);
+                 background:var(--row); border-radius:999px; padding:5px 11px;
+                 box-shadow:inset 0 0 0 1px var(--line); white-space:nowrap;
                  white-space:nowrap; }
 
-  .hrun .cov { font-size:14.5px; font-weight:700; letter-spacing:.2px; }
-  .hrun .sub { font-size:12px; color:var(--muted); margin-top:3px; }
-  .hrun .more { margin-top:9px; border-top:1px dashed var(--line); padding-top:8px; }
-  .hrun .more summary { font-size:12px; color:var(--muted); cursor:pointer; list-style:none; }
+  .hrun .cov { font-size:15px; font-weight:780; letter-spacing:-.35px;
+               font-variant-numeric:tabular-nums; }
+  .hrun .more { margin-top:10px; padding-top:9px; border-top:1px dashed var(--line); }
+  .hrun .more summary { display:inline-flex; align-items:center; gap:5px;
+                        font-size:11.5px; font-weight:650; color:var(--muted);
+                        cursor:pointer; list-style:none; padding:4px 9px;
+                        margin-left:-9px; border-radius:8px;
+                        transition:background-color .14s ease, color .14s ease; }
+  .hrun .more summary:hover { background:var(--hover); color:var(--ink); }
   .hrun .more summary::-webkit-details-marker { display:none; }
-  .hrun .more summary::before { content:'▸ '; }
-  .hrun .more[open] summary::before { content:'▾ '; }
+  .hrun .more summary::before { content:'\25B8'; font-size:10px;
+                                transition:transform .16s ease; display:inline-block; }
+  .hrun .more[open] summary::before { transform:rotate(90deg); }
   .hrun .past { display:flex; align-items:center; gap:9px; font-size:12px;
                 color:var(--muted); padding:6px 0 0; flex-wrap:wrap; }
   .hrun .past .pill { font-size:10.5px; padding:1px 7px; }
 
   /* history: one card per covered date. A table forced the timestamp and the action
      buttons to wrap into three lines each; a card gives every part its own row. */
-  .runs { display:flex; flex-direction:column; gap:10px; }
-  .hrun { position:relative; border:1px solid var(--line); border-radius:11px;
-          padding:13px 15px 12px 17px; overflow:hidden; background:var(--card); }
-  .hrun::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--zero); }
-  .hrun.ok::before  { background:var(--ok); }
-  .hrun.bad::before { background:var(--bad); }
-  .hrun.run::before { background:var(--blue); }
-  .hrun.off { background:var(--row); }
+  .runs { display:flex; flex-direction:column; gap:11px; }
+  .hrun { --tone:var(--zero);
+          position:relative; border:1px solid var(--line); border-radius:14px;
+          padding:14px 16px 13px 19px; overflow:hidden; background:var(--card);
+          box-shadow:0 1px 2px rgba(16,24,40,.04);
+          transition:box-shadow .18s ease, border-color .18s ease; }
+  .hrun:hover { border-color:color-mix(in srgb, var(--tone) 30%, var(--line));
+                box-shadow:0 8px 22px -12px rgba(16,24,40,.26); }
+  /* The rail is the state, read down the left edge of the whole list. */
+  .hrun::before { content:''; position:absolute; inset:0 auto 0 0; width:4px;
+                  background:linear-gradient(180deg, var(--tone),
+                             color-mix(in srgb, var(--tone) 72%, transparent)); }
+  .hrun.ok  { --tone:var(--ok); }
+  .hrun.bad { --tone:var(--bad); }
+  .hrun.run { --tone:var(--blue); }
+  .hrun.off { background:var(--row); --tone:var(--zero); }
 
   .hrun .hd { display:flex; align-items:center; gap:10px; }
   .hrun .when { font-size:13.5px; font-weight:650; }
   .hrun .who { font-size:12px; color:var(--muted); }
   .hrun .hd .pill { margin-left:auto; }
-  .hrun .files { font-size:12.5px; color:var(--muted); margin-top:5px; line-height:1.45;
-                 word-break:break-word; }
-  .hrun .files b { color:var(--ink); font-weight:600; }
-  .hrun .err { font-size:12.5px; color:var(--bad); margin-top:6px; }
-  .hrun .acts { display:flex; flex-wrap:wrap; gap:6px; margin-top:11px; }
+  /* What went in: the count carries as a chip, the name trails after it. */
+  .hrun .files { display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+                 font-size:12.5px; color:var(--muted); margin-top:9px;
+                 line-height:1.45; word-break:break-word; }
+  .hrun .files b { display:inline-flex; align-items:center; gap:6px; flex:none;
+                   color:var(--ink); font-weight:700; font-size:11.5px;
+                   letter-spacing:-.1px; padding:3.5px 10px 3.5px 8px;
+                   border-radius:999px; background:var(--row);
+                   box-shadow:inset 0 0 0 1px var(--line); }
+  .hrun .files b svg { width:12px; height:12px; flex:none; fill:none;
+                       stroke:currentColor; stroke-width:1.8;
+                       stroke-linecap:round; stroke-linejoin:round;
+                       color:var(--muted); }
+  .hrun .files .nm { min-width:0; overflow:hidden; text-overflow:ellipsis;
+                     white-space:nowrap; }
+  .hrun .err { font-size:12.5px; color:var(--bad); margin-top:7px;
+               background:color-mix(in srgb, var(--bad) 7%, transparent);
+               border-radius:9px; padding:8px 10px;
+               box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 18%,
+                          transparent); }
+  .hrun .sub { font-size:11.5px; color:var(--muted); margin-top:7px; }
+
+  /* Re-upload is the thing you came for; the raws are there if you want them;
+     Delete sits apart and stays quiet until you go near it. */
+  .hrun .acts { display:flex; flex-wrap:wrap; align-items:center; gap:7px;
+                margin-top:12px; padding-top:11px; border-top:1px solid var(--line); }
+  .hrun .acts .act { border-radius:9px; padding:6.5px 12px; font-size:12px;
+                     font-weight:650; text-decoration:none;
+                     transition:background-color .14s ease, border-color .14s ease,
+                                color .14s ease; }
+  .hrun .acts .act:first-child { background:var(--row); border-color:var(--line);
+                                 color:var(--ink); font-weight:700; }
+  .hrun .acts .act:first-child:hover { background:var(--hover);
+                                       border-color:var(--zero); }
+  .hrun .acts .act.danger { margin-left:auto; border-color:transparent;
+                            background:none; color:var(--muted); }
+  .hrun .acts .act.danger:hover { color:var(--bad); background:none;
+                                  border-color:color-mix(in srgb, var(--bad) 40%,
+                                               transparent); }
   .hrun.off .acts, .hrun.off .files { opacity:.75; }
 
-  .pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:600; }
-  .s-running { background:#DBEAFE; color:#1D4ED8; }
-  .s-awaiting_approval { background:#FEF3C7; color:#92400E; }
-  .s-promoted { background:#D1FAE5; color:#065F46; }
-  .s-failed { background:#FEE2E2; color:#991B1B; }
-  .s-discarded,.s-queued { background:var(--hover); color:#4B5563; }
+  /* The status, mixed from the house tokens so it is legible in both themes
+     instead of a hard pastel that only ever suited the light one. */
+  .pill { --tone:var(--zero);
+          display:inline-flex; align-items:center; gap:6px; padding:3.5px 11px 3.5px 9px;
+          border-radius:999px; font-size:11.5px; font-weight:700; letter-spacing:-.1px;
+          color:color-mix(in srgb, var(--tone) 82%, var(--ink));
+          background:color-mix(in srgb, var(--tone) 11%, transparent);
+          box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent); }
+  .pill::before { content:''; width:6px; height:6px; border-radius:50%; flex:none;
+                  background:var(--tone); }
+  .s-running, .s-queued { --tone:var(--blue); }
+  .s-awaiting_approval { --tone:var(--warn); }
+  .s-promoted { --tone:var(--ok); }
+  .s-failed { --tone:var(--bad); }
+  .s-discarded { --tone:var(--zero); }
   .rangeSay { font-size:12.5px; color:var(--muted); margin-top:9px; }
 
   .act { display:inline-block; border:1px solid var(--line); background:var(--card); color:var(--ink);
@@ -291,7 +365,12 @@
   .act.primary { background:var(--gold); border-color:var(--gold); color:#20160A; font-weight:700; }
   .act.danger { border-color:#FCA5A5; color:#991B1B; }
   .act.danger:hover { background:#FEF2F2; }
-  .empty { color:var(--muted); font-size:13.5px; padding:20px 2px; text-align:center; }
+  .empty { color:var(--muted); font-size:13.5px; padding:38px 2px 40px;
+           text-align:center; line-height:1.5; }
+  .empty b { color:var(--ink); font-weight:700; }
+  .empty svg { display:block; width:30px; height:30px; margin:0 auto 11px;
+               fill:none; stroke:currentColor; stroke-width:1.5;
+               stroke-linecap:round; stroke-linejoin:round; opacity:.45; }
 
   /* Which month a batch is for. The files say so themselves, but a folder of
      295 of them is dropped in without opening one, so the month is stated
@@ -1290,9 +1369,12 @@ function drawHistory(){
     const span = from && to ? `${say(from)} – ${say(to)}`
                : from ? `on or after ${say(from)}`
                : to ? `on or before ${say(to)}` : '';
+    const box = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+      + '<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z"/>'
+      + '<path d="m3 8.5 9 4.5 9-4.5M12 13v7"/></svg>';
     hBody.innerHTML = span
-      ? `<p class="empty">Nothing uploaded <b>${escapeHtml(span)}</b>.</p>`
-      : '<p class="empty">Nothing uploaded for this type yet.</p>';
+      ? `<p class="empty">${box}Nothing uploaded <b>${escapeHtml(span)}</b>.</p>`
+      : `<p class="empty">${box}Nothing uploaded for this type yet.</p>`;
     return;
   }
 
@@ -1305,9 +1387,18 @@ function drawHistory(){
     const look = RUN_LOOK[lead.status] || { cls:'', word:lead.status.replace('_',' ') };
 
     const names = lead.uploaded_names || [];
+    const sheet = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+      + '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>'
+      + '<path d="M14 3v5h5"/></svg>';
+    // The count is the fact; the names are the detail. One reads as a chip,
+    // the other trails after it and truncates when it has to.
     const files = names.length > 3
-      ? `<b>${names.length} files</b> — ${escapeHtml(names[0])} and ${names.length - 1} more`
-      : (names.length ? `<b>${escapeHtml(names.join(', '))}</b>` : 'no files recorded');
+      ? `<b>${sheet}${names.length} files</b>`
+        + `<span class="nm">${escapeHtml(names[0])} and ${names.length - 1} more</span>`
+      : (names.length
+          ? `<b>${sheet}${names.length} file${names.length === 1 ? '' : 's'}</b>`
+            + `<span class="nm">${escapeHtml(names.join(', '))}</span>`
+          : `<span class="nm">no files recorded</span>`);
 
     // What the file actually holds. A KSBC secondary pull is cumulative, so a
     // raw dated the 16th can carry every dispatch since the 1st - and a report
