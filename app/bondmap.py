@@ -54,10 +54,44 @@ def load_clusters() -> dict[str, list[str]]:
 
 
 def save_clusters(mapping: dict[str, list[str]]) -> None:
+    """Replace the cluster split, having checked it is one.
+
+    This is written from a request body and decides how every report groups
+    its rows, so a malformed or empty body used to be able to blank the split
+    with nothing to restore it from. Three checks and a backup: the bonds have
+    to be bonds this install knows, no bond may sit in two clusters, and the
+    result may not be empty. The previous file is kept beside the new one.
+    """
+    if not isinstance(mapping, dict):
+        raise ValueError("The cluster mapping must be an object of 1/2/3 to bond lists.")
+
+    clean = {k: sorted({str(b).strip().upper() for b in (mapping.get(k) or [])
+                        if str(b).strip()})
+             for k in ("1", "2", "3")}
+
+    if not any(clean.values()):
+        raise ValueError("That would leave every cluster empty.")
+
+    seen: dict[str, str] = {}
+    for k, bonds in clean.items():
+        for b in bonds:
+            if b in seen:
+                raise ValueError(f"{b} is in cluster {seen[b]} and cluster {k}.")
+            seen[b] = k
+
+    known = {b.strip().upper() for bonds in DEFAULT_CLUSTERS.values() for b in bonds}
+    known |= {b.strip().upper() for bonds in load_clusters().values() for b in bonds}
+    strangers = sorted(set(seen) - known)
+    if strangers:
+        raise ValueError("Not a bond on this install: " + ", ".join(strangers))
+
     path = clusters_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    clean = {k: sorted({str(b).strip().upper() for b in mapping.get(k, []) if str(b).strip()})
-             for k in ("1", "2", "3")}
+    if path.is_file():
+        try:
+            path.with_suffix(path.suffix + ".bak").write_text(path.read_text())
+        except OSError:
+            pass
     path.write_text(json.dumps(clean, indent=2))
 
 

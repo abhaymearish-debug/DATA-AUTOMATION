@@ -19,8 +19,14 @@ services:
         value: /data/workspace
       - key: KSD_SESSION_SECRET
         generateValue: true  # Render makes one and keeps it; never in the repo
+      # The owner must be able to sign in. KSD_OWNER_EMAIL named an address
+      # that was not in this list, and because the owner cannot be removed
+      # from inside the app, nobody could ever have added or removed an
+      # account on a deploy from this file. The code now treats the owner as
+      # allowed whatever this list says; both are listed here so the intent
+      # is readable rather than implied.
       - key: KSD_ALLOWED_EMAILS
-        value: abhaymearish@gmail.com
+        value: abhaymearish@gmail.com,abhay@ksgroup.in
       - key: KSD_OWNER_EMAIL
         value: abhay@ksgroup.in   # the one account that can add or remove people
       - key: KSD_COOKIE_SECURE

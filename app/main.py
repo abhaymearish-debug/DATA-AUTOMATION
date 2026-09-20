@@ -251,7 +251,7 @@ def first_run_form(request: Request, error: str = ""):
     if auth.load_users():
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(
-        request, "first_run.html", {"error": error, "allowed": sorted(config.ALLOWED_EMAILS)})
+        request, "first_run.html", {"error": error, "allowed": []})
 
 
 @app.post("/first-run")
@@ -262,8 +262,7 @@ def first_run(request: Request, email: str = Form(...), password: str = Form(...
 
     def again(msg: str):
         return templates.TemplateResponse(
-            request, "first_run.html",
-            {"error": msg, "allowed": sorted(config.ALLOWED_EMAILS)}, status_code=400)
+            request, "first_run.html", {"error": msg, "allowed": []}, status_code=400)
 
     if password != confirm:
         return again("Those two passwords are not the same.")
@@ -502,7 +501,13 @@ def leaves_remove(request: Request, kind: str, id: str = Form(...),
 
 
 @app.post("/logout")
-def logout():
+def logout(request: Request):
+    # Deleting the cookie only stops THIS browser sending the token; the token
+    # itself stayed valid for the rest of its twelve hours. Signing out should
+    # end the session, not just hide it.
+    who = current_user(request)
+    if who:
+        auth.revoke_sessions(who)
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(auth.COOKIE_NAME)
     return response
@@ -3306,12 +3311,22 @@ def bond_mapping_data(request: Request):
 async def bond_mapping_save(request: Request):
     """Save shop -> bond edits, the cluster split, or both."""
     require_user(request)
-    body = await request.json()
+    # A body that is not JSON, or is JSON but not an object, used to surface as
+    # a 500 with no explanation. It is a bad request, and says so.
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "That request body is not JSON.")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected an object with 'clusters' and/or 'bonds'.")
 
     result: dict = {}
     clusters = body.get("clusters")
     if isinstance(clusters, dict):
-        bondmap.save_clusters(clusters)
+        try:
+            bondmap.save_clusters(clusters)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
         result["clusters_saved"] = True
 
     changes = body.get("bonds") or {}
@@ -3403,7 +3418,10 @@ def targets_read(request: Request, month: str = ""):
 @app.post("/api/targets")
 async def targets_write(request: Request):
     user = require_user(request)
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "That request body is not JSON.")
     month = str(body.get("month") or "")
     try:
         saved = targets_mod.save(month, body.get("bonds") or {}, by=user)
@@ -3663,7 +3681,10 @@ def item_issue_data(request: Request, period: str = "", prior: str = "",
 async def item_issue_industry(request: Request):
     """The industry figure is typed, because no export carries it."""
     user = require_user(request)
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "That request body is not JSON.")
     period = (body.get("period") or "").strip()
     if not period or not itemissue.period_of(period):
         raise HTTPException(400, "Which period is this industry figure for?")

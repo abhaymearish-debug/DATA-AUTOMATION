@@ -18,6 +18,7 @@ import os
 import secrets
 from pathlib import Path
 
+import time
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from . import config
@@ -91,14 +92,26 @@ def invite(email: str) -> None:
 
 def email_is_allowed(email: str) -> bool:
     email = email.strip().lower()
+    # The owner is the way back in. KSD_OWNER_EMAIL names the one account that
+    # can add and remove people, and it was possible to name an owner who is
+    # not in KSD_ALLOWED_EMAILS - as this repo's own render.yaml does. That
+    # owner can never sign in, and because the owner cannot be removed from
+    # inside the app, nobody can ever add or remove an account again. Naming
+    # someone the owner is granting them access; it now says so.
+    owner = (getattr(config, "OWNER_EMAIL", "") or "").strip().lower()
+    if owner and email == owner:
+        return True
     if email in load_invited():
         return True
     if config.ALLOWED_EMAILS:
         if email in config.ALLOWED_EMAILS:
             return True
-        # An explicit allowlist is a closed set; the domain rule does not widen it.
-        if not config.ALLOWED_EMAIL_DOMAINS:
-            return False
+        # An explicit allowlist is a closed set, and this is where that stopped
+        # being true: with domains ALSO configured the function fell through to
+        # the domain check and let anyone at that domain in, which is the
+        # opposite of what both comments here promise. Setting one list no
+        # longer silently widens into the other.
+        return False
     domain = email.rpartition("@")[2]
     return bool(domain) and domain in config.ALLOWED_EMAIL_DOMAINS
 
@@ -236,7 +249,37 @@ def _serializer() -> URLSafeTimedSerializer:
 
 
 def issue_session(email: str) -> str:
-    return _serializer().dumps({"email": email})
+    return _serializer().dumps({"email": email, "iat": int(time.time())})
+
+
+def _revocations() -> dict:
+    f = config.WORKSPACE_ROOT / ".sessions_revoked.json"
+    try:
+        return json.loads(f.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def revoke_sessions(email: str) -> None:
+    """Stop every token issued to this account before now from being accepted.
+
+    Signing out only deleted the cookie, so the token itself stayed valid for
+    the rest of its twelve hours - a copy taken off a shared machine kept
+    working long after the person thought they had left. The tokens are
+    stateless and cannot be individually withdrawn, so the cut-off is recorded
+    per account and anything issued before it is refused.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return
+    f = config.WORKSPACE_ROOT / ".sessions_revoked.json"
+    data = _revocations()
+    data[email] = int(time.time())
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(data))
+    except OSError:
+        pass
 
 
 def read_session(token: str | None) -> str | None:
@@ -247,9 +290,14 @@ def read_session(token: str | None) -> str | None:
     except (BadSignature, SignatureExpired):
         return None
     email = data.get("email")
+    if not email:
+        return None
+    cut = _revocations().get(str(email).strip().lower())
+    if cut and int(data.get("iat") or 0) <= cut:
+        return None
     # Re-check the allowlist on every request: revoking access should take
     # effect on the next page load, not whenever the cookie happens to expire.
-    return email if email and email_is_allowed(email) else None
+    return email if email_is_allowed(email) else None
 
 
 COOKIE_NAME = _COOKIE
