@@ -82,26 +82,35 @@ MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 # mode: "day"   -> one date
 #       "range" -> from/to, sent to the pipeline as a cumulative period
 #       "files" -> no date, the export carries its own
+#
+# colour: the tint the Status Calendar gives this stream. Carrying it onto the
+# card means the colour is learnt once and read in both places.
 UPLOAD_CARDS = [
     {"id": "wh_stock", "title": "Warehouse Physical Stock", "stream": "warehouse_stock",
-     "mode": "files", "icon": "warehouse", "ready": True},
+     "mode": "files", "icon": "warehouse", "ready": True, "colour": "#F59E0B",
+     "note": "One photograph of the day's stock"},
     {"id": "shop_daily", "title": "Shop Sales - Daily", "stream": "shop_sales_daily",
-     "mode": "day", "icon": "shop", "ready": True},
+     "mode": "day", "icon": "shop", "ready": True, "colour": "#0EA5E9",
+     "note": "One day's shop sales"},
     {"id": "shop_cum", "title": "Shop Sales - Cumulative", "stream": "shop_sales_cumulative",
-     "mode": "range", "icon": "calendar", "ready": True},
+     "mode": "range", "icon": "calendar", "ready": True, "colour": "#2563EB",
+     "note": "A pull covering a run of days"},
     {"id": "secondary", "title": "Secondary Sales - Daily", "stream": "secondary_sales",
-     "mode": "day", "icon": "truck", "ready": True},
+     "mode": "day", "icon": "truck", "ready": True, "colour": "#10B981",
+     "note": "One day's issues to shops"},
     {"id": "item_issue", "title": "Secondary Sales - Analysis", "stream": "item_issue",
-     "mode": "batch", "icon": "truck", "ready": True},
+     "mode": "batch", "icon": "truck", "ready": True, "colour": "#8B5CF6",
+     "note": "Item-wise issue workbooks"},
     {"id": "pi_variance", "title": "Purchase Instruction", "stream": "purchase_instruction",
-     "mode": "batch", "icon": "clipboard", "ready": True},
+     "mode": "batch", "icon": "clipboard", "ready": True, "colour": "#E11D48",
+     "note": "Indents against what arrived"},
 ]
 
 LEAVE_CARDS = [
-    {"title": "Warehouse Leaves", "icon": "calendar-off",
+    {"title": "Warehouse Leaves", "icon": "calendar-off", "colour": "#64748B",
      "href": "/settings/leaves/warehouse",
      "blurb": "Days a warehouse did not issue"},
-    {"title": "Shop Leaves", "icon": "calendar-off",
+    {"title": "Shop Leaves", "icon": "calendar-off", "colour": "#64748B",
      "href": "/settings/leaves/shop",
      "blurb": "Days shops were shut - dry days, hartals"},
 ]

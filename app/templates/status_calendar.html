@@ -99,7 +99,7 @@
   .days > * { min-width:0; }
   .days .c { height:16px; border-radius:4px; background:var(--d);
              transition:transform .14s cubic-bezier(.2,.7,.3,1), opacity .14s ease; }
-  .days .c.off { background:color-mix(in srgb, var(--bad) 13%, var(--row)); }
+  .days .c.off { background:color-mix(in srgb, var(--bad) 55%, var(--row)); }
   .days .c.wait { background:none;
                   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 80%,
                              transparent); }
@@ -205,12 +205,21 @@
   .cell .n em { font-style:normal; font-size:8px; font-weight:800; letter-spacing:.8px;
                 text-transform:uppercase; color:var(--gold); }
   .cell .n .tick { margin-left:auto; color:var(--ok); font-size:12px; }
+  /* The red bars say which are missing; this says how many, without
+     counting them. Same red, so the two read as one statement. */
+  .cell .n .gap { margin-left:auto; flex:none; font-size:10.5px; font-weight:800;
+                  line-height:1.4; letter-spacing:-.2px; padding:1px 6.5px;
+                  border-radius:999px; color:var(--bad);
+                  background:color-mix(in srgb, var(--bad) 13%, transparent);
+                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 26%,
+                             transparent);
+                  font-variant-numeric:tabular-nums; }
 
   /* Five marks, always five, always in the matrix's order. */
   .meter { margin-top:auto; display:flex; gap:4px; }
   .meter b { flex:1; height:clamp(6px, calc(var(--tile, 78px) * .075), 8px);
              border-radius:4px; background:var(--c); }
-  .meter b.off { background:color-mix(in srgb, var(--bad) 16%, var(--row)); }
+  .meter b.off { background:color-mix(in srgb, var(--bad) 78%, var(--row)); }
   .meter b.wait { background:none;
                   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 85%,
                              transparent); }
@@ -240,9 +249,9 @@
   :root[data-theme="dark"] .cell.full {
       border-color:color-mix(in srgb, var(--ok) 40%, var(--line)); }
   :root[data-theme="dark"] .meter b.off {
-      background:color-mix(in srgb, var(--bad) 30%, var(--row)); }
+      background:color-mix(in srgb, var(--bad) 70%, var(--row)); }
   :root[data-theme="dark"] .days .c.off {
-      background:color-mix(in srgb, var(--bad) 26%, var(--row)); }
+      background:color-mix(in srgb, var(--bad) 52%, var(--row)); }
 
   /* On a phone seven columns have about fifty pixels each, which is room for
      a number and four slots and nothing else. The note goes; the tooltip and
@@ -266,7 +275,9 @@
        dots, and not for their names. The tooltip still has them. */
     .cell { min-height:58px; padding:6px 5px 7px; border-radius:9px; }
     .cell .n { font-size:11.5px; gap:3px; }
-    .cell .n em, .cell .n .tick { display:none; }
+    .cell .n em { display:none; }
+    .cell .n .tick { font-size:10px; }
+    .cell .n .gap { font-size:8.5px; padding:0 4px; box-shadow:none; }
     .meter { gap:2.5px; }
     .meter b { height:5px; border-radius:2.5px; }
     .dow { font-size:8.5px; letter-spacing:.4px; }
@@ -374,7 +385,8 @@ function draw(){
 
     html += `<div class="${cls}" data-day="${key}">
         <div class="n">${d}${key === today ? '<em>today</em>' : ''}${
-          done ? '<span class="tick">\u2713</span>' : ''}</div>
+          done ? '<span class="tick">\u2713</span>'
+               : missing.length ? `<span class="gap">${missing.length}</span>` : ''}</div>
         <div class="meter">${meter}</div>
       </div>`;
   }
