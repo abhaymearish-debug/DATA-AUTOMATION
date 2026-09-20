@@ -358,8 +358,18 @@ def _col_x(i: int) -> float:
 
 
 def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
-                    totals: dict | None, page_no: int, pages: int) -> None:
-    """One warehouse page of the Warehouse Stock Report."""
+                    totals: dict | None, page_no: int, pages: int,
+                    part: int = 1, parts: int = 1) -> None:
+    """One warehouse page of the Warehouse Stock Report.
+
+    A warehouse longer than a page is broken across several, and the total
+    belongs on the last of them. Nothing said so: a full first page carried
+    eighteen rows, a blank foot where the total would go, and a band naming
+    the warehouse - then the next page opened with the same band and the
+    same name. It read as a warehouse whose total had been left out, which
+    is the one thing a stock sheet must not look like. `part` and `parts`
+    let the page say which piece of the warehouse it is.
+    """
     y = A4_H
 
     c.setFillColor(NAVY)
@@ -381,7 +391,8 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
     c.rect(0, y - ST_BAND_H, A4_W, ST_BAND_H, stroke=0, fill=1)
     c.setFillColor(NAVY)
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(A4_W / 2, y - 15.5, warehouse)
+    said = warehouse if parts < 2 else f"{warehouse}  ({part} of {parts})"
+    c.drawCentredString(A4_W / 2, y - 15.5, said)
     y -= ST_BAND_H
 
     head_top = y
@@ -475,6 +486,13 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
 
     c.setFillColor(colors.Color(0.45, 0.48, 0.55))
     c.setFont("Helvetica", 8)
+    # Said where the total would have been, so the blank foot of a split page
+    # is explained at the place the eye goes looking for the figure.
+    if totals is None:
+        c.setFont("Helvetica-Oblique", 9)
+        c.drawCentredString(A4_W / 2, bottom - 20.0,
+                            f"{warehouse} continues on the next page")
+        c.setFont("Helvetica", 8)
     c.drawRightString(A4_W - 9.9, 24.0, f"Page {page_no} of {pages}")
     c.showPage()
 
@@ -495,14 +513,14 @@ def build_stock_pdf(data: dict, out_path: Path, *, title_suffix: str = "") -> Pa
         chunks = [rows[i:i + ST_ROWS_PER_PAGE]
                   for i in range(0, len(rows), ST_ROWS_PER_PAGE)] or [[]]
         for k, chunk in enumerate(chunks):
-            plan.append((wh, chunk, k == len(chunks) - 1))
+            plan.append((wh, chunk, k == len(chunks) - 1, k + 1, len(chunks)))
 
     c = pdfcanvas.Canvas(str(out_path), pagesize=(A4_W, A4_H))
-    for i, (wh, chunk, is_last) in enumerate(plan, start=1):
+    for i, (wh, chunk, is_last, part, parts) in enumerate(plan, start=1):
         draw_stock_page(
             c, warehouse=wh["name"], as_of=as_of, rows=chunk,
             totals=wh["totals"] if is_last else None,
-            page_no=i, pages=len(plan),
+            page_no=i, pages=len(plan), part=part, parts=parts,
         )
     c.save()
     return out_path
