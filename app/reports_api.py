@@ -183,7 +183,11 @@ def src_leg(label: str, items: list, note: str = "", tone: str = "") -> dict:
 
 
 def src_days(days) -> str:
-    """A run of dates as you would say them: 1-16, 18."""
+    """A run of dates as you would say them: 1-16, 18.
+
+    Day numbers only, so the caller must supply a month. Use src_dates() for
+    anything that can span two months.
+    """
     nums, runs = sorted({d.day for d in days}), []
     for n in nums:
         if runs and n == runs[-1][1] + 1:
@@ -191,6 +195,28 @@ def src_days(days) -> str:
         else:
             runs.append([n, n])
     return ", ".join(str(a) if a == b else f"{a}\u2013{b}" for a, b in runs)
+
+
+def src_dates(days) -> str:
+    """Runs of dates, each carrying its own month: '30-31 Aug, 1-3 Sep 2026'.
+
+    src_days() throws the month away and leaves the caller to add one back.
+    For a window that crosses a boundary that is actively misleading: the
+    missing days were labelled with the window's START month, so a panel
+    listing 1-3 September as missing printed '1-3 Aug' - naming three days
+    that are fully uploaded while the three that are not go unmentioned.
+    """
+    by_month: dict = {}
+    for d in sorted(days):
+        by_month.setdefault((d.year, d.month), []).append(d)
+    parts, years = [], sorted({y for y, _ in by_month})
+    for (year, month), group in sorted(by_month.items()):
+        label = group[0].strftime("%b")
+        if len(years) > 1:
+            label = f"{label} {year}"
+        parts.append(f"{src_days(group)} {label}")
+    tail = f" {years[0]}" if len(years) == 1 else ""
+    return ", ".join(parts) + tail
 
 
 def src_gap(lo, hi, covered) -> dict | None:
@@ -208,7 +234,7 @@ def src_gap(lo, hi, covered) -> dict | None:
     if not missing or missing == want:
         return None
     return {"kind": "gap", "miss": True, "files": 0,
-            "title": f"{src_days(missing)} {lo.strftime('%b %Y')}",
+            "title": src_dates(missing),
             "name": ""}
 
 
@@ -343,7 +369,18 @@ def src_secondary(sources: list, lo=None, hi=None) -> dict:
     kept_book = []
     for it in book_items:
         if not raws:
+            # Same narrowing as the branch below. Without it, a window with no
+            # surviving raw credited the workbook with its whole month: asking
+            # for 2-5 September printed "1 - 30 Sep 2026" as the source, which
+            # is the very bug the `asked` clamp was added to fix - just one
+            # branch above where it was applied.
             it["files"] = 1
+            if asked is not None:
+                days = spread(it) & asked
+                if days:
+                    it["from"] = min(days).isoformat()
+                    it["to"] = max(days).isoformat()
+                    it.pop("title", None)
             kept_book.append(it)
             continue
         days = (spread(it) - had) & secondary_covered_days()
@@ -2720,7 +2757,13 @@ def _tva_legs(start: date, end: date) -> dict:
         legs["tertiary"] += sold
 
     lines, sec_sources = secondary_lines()
-    used = False
+    # Whether the dispatch raws were UPLOADED is a different question from
+    # whether they happened to contain a Fed or Bar line in this window. This
+    # used to be set only when a matching line was found, so a window in which
+    # Fed and Bar genuinely sold nothing was reported to the operator as a
+    # window whose raws had never been uploaded - sending them to re-upload
+    # files that were already there, to fix a zero that was correct.
+    sources["invoice"] = sec_sources
     for line in lines:
         day = line.get("date")
         if day is None or not (start <= day <= end):
@@ -2733,9 +2776,6 @@ def _tva_legs(start: date, end: date) -> dict:
             continue
         grid[bond][targets_mod.family_of(line.get("brand", ""))] += line["cases"]
         legs["fed" if cat == "FED" else "bar"] += line["cases"]
-        used = True
-    if used:
-        sources["invoice"] = sec_sources
 
     return {"grid": grid, "legs": legs, "sources": sources}
 
