@@ -140,18 +140,20 @@
   /* The swatch is the one thing tying this line to its bars in the grid
      below, so it keeps the stream's colour and gains a ring of it - a flat
      chip of colour reads as a bullet, a ringed one reads as a key. */
-  .kk .nm i { flex:none; width:10px; height:10px; border-radius:50%;
+  .kk .nm i { flex:none; width:11px; height:11px; border-radius:50%;
               margin-left:3px;
-              background:radial-gradient(circle at 34% 28%,
-                         color-mix(in srgb, var(--c) 78%, #fff),
-                         var(--c) 58%,
-                         color-mix(in srgb, var(--c) 86%, #0B1020));
-              box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 14%, transparent),
-                         0 0 6px -1px color-mix(in srgb, var(--c) 40%, transparent);
+              /* Same tightened highlight as the panel's disc, for the same
+                 reason: this one is half the tile dot's size. */
+              background:radial-gradient(circle at 36% 26%,
+                         color-mix(in srgb, var(--c) 90%, #fff) 0%,
+                         var(--c) 46%,
+                         color-mix(in srgb, var(--c) 94%, #0B1020) 100%);
+              box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 18%, transparent),
+                         0 0 7px -1px color-mix(in srgb, var(--c) 50%, transparent);
               transition:box-shadow .18s ease; }
   :root[data-theme="dark"] .kk .nm i {
-              box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 16%, transparent),
-                         0 0 9px -2px color-mix(in srgb, var(--c) 66%, transparent); }
+              box-shadow:0 0 0 2.5px color-mix(in srgb, var(--c) 22%, transparent),
+                         0 0 10px -1px color-mix(in srgb, var(--c) 80%, transparent); }
   .kk:hover .nm i, :root[data-theme="dark"] .kk:hover .nm i {
               box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent),
                          0 0 11px -2px color-mix(in srgb, var(--c) 75%, transparent); }
@@ -375,17 +377,22 @@
   /* The same disc as the calendar tile, at the size this row can carry - the
      panel names the five streams the tile drew, so the two should be the
      same mark. Halo and radial fill copied from .bars b. */
-  .daypop .up i, .daypop .st i { width:11px; height:11px; border-radius:50%; flex:none;
-                  background:radial-gradient(circle at 34% 28%,
-                             color-mix(in srgb, var(--c) 78%, #fff),
-                             var(--c) 58%,
-                             color-mix(in srgb, var(--c) 86%, #0B1020));
-                  box-shadow:0 0 0 1.5px color-mix(in srgb, var(--c) 10%, transparent),
-                             0 0 5px -1px color-mix(in srgb, var(--c) 34%, transparent); }
+  /* A tighter highlight than the tile's. The same gradient on an 11px disc
+     gives the white a third of the face and the colour never reaches full
+     strength - what reads as a lit bead at 22px reads as a washed one here.
+     The highlight is smaller and weaker, and the pure colour starts earlier,
+     so the small disc is as saturated as the big one. */
+  .daypop .up i, .daypop .st i { width:12px; height:12px; border-radius:50%; flex:none;
+                  background:radial-gradient(circle at 36% 26%,
+                             color-mix(in srgb, var(--c) 90%, #fff) 0%,
+                             var(--c) 46%,
+                             color-mix(in srgb, var(--c) 94%, #0B1020) 100%);
+                  box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 16%, transparent),
+                             0 0 7px -1px color-mix(in srgb, var(--c) 48%, transparent); }
   :root[data-theme="dark"] .daypop .up i,
   :root[data-theme="dark"] .daypop .st i {
-                  box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 15%, transparent),
-                             0 0 8px -2px color-mix(in srgb, var(--c) 62%, transparent); }
+                  box-shadow:0 0 0 2.5px color-mix(in srgb, var(--c) 22%, transparent),
+                             0 0 10px -1px color-mix(in srgb, var(--c) 78%, transparent); }
 
   /* Still wanted: the row wears its stream's colour and ends in a button. */
   .daypop .up { cursor:pointer; padding:9px 9px 9px 10px;
@@ -414,7 +421,11 @@
   .daypop .st.done { color:var(--muted); }
   .daypop .st.done b { font-weight:600; color:color-mix(in srgb, var(--ink) 72%,
                        var(--muted)); }
-  .daypop .st.done i { opacity:.55; }
+  /* The settled row goes quiet in its TEXT, not in its mark. Fading the disc
+     to 55% was fine when it was a flat square; on a lit disc it takes the
+     colour out with the brightness, and the colour is how the stream is
+     identified. The row reads as settled from its muted label and its tick;
+     the mark stays the same bead the tile draws. */
   .daypop .st.done span { margin-left:auto; flex:none; width:16px; height:16px;
                           border-radius:50%; display:grid; place-items:center;
                           font-size:9px; font-weight:800; color:#fff;
