@@ -805,6 +805,39 @@ function tog(btn) {
 })();
 </script>
 <script>
+// A signed-out session answers every /api call with the login page, not with
+// JSON. Each report then failed at .json() and reported "Could not reach the
+// server" while leaving the last figures it had on screen - so a page left
+// open overnight looked live, and the numbers on it were yesterday's. One
+// banner, said once, and the stale figures are dimmed so nobody reads them
+// as current.
+window.ksdSignedOut = function () {
+  if (document.getElementById('ksd-signed-out')) return;
+  const bar = document.createElement('div');
+  bar.id = 'ksd-signed-out';
+  bar.setAttribute('role', 'alert');
+  bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:10px 14px;'
+    + 'background:#7f1d1d;color:#fff;font:600 13px/1.4 system-ui,sans-serif;text-align:center';
+  bar.innerHTML = 'Your session has expired, so these figures are no longer being updated. '
+    + '<a href="/login" style="color:#fff;text-decoration:underline">Sign in again</a>.';
+  document.body.appendChild(bar);
+  document.body.style.opacity = '0.55';
+};
+
+// Every report's data call goes through here, so the signed-out case is
+// answered in one place rather than in each page's catch block.
+window.ksdFetch = async function (url, opts) {
+  const res = await fetch(url, opts);
+  const type = res.headers.get('content-type') || '';
+  if (res.status === 401 || res.status === 403
+      || res.redirected && /\/login/.test(res.url)
+      || type.includes('text/html')) {
+    window.ksdSignedOut();
+    throw new Error('signed out');
+  }
+  return res;
+};
+
 // One place decides what a case looks like. Off, a figure keeps its two
 // decimals; on, it reads as whole cases - and the exports are handed the
 // same flag, so the screen and the download never disagree.

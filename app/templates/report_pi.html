@@ -232,7 +232,7 @@ async function load(){
   foot.textContent = 'Loading…';
   let d;
   try {
-    const res = await fetch('/api/pi-variance?' + params().toString());
+    const res = await ksdFetch('/api/pi-variance?' + params().toString());
     d = await res.json();
   } catch (e) {
     msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;

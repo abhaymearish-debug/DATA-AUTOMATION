@@ -212,7 +212,7 @@ const longDay = iso => {
 async function load(){
   let d;
   try {
-    const res = await fetch('/api/secondary-analysis?' + params().toString());
+    const res = await ksdFetch('/api/secondary-analysis?' + params().toString());
     d = await res.json();
   } catch (e) {
     msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
@@ -342,7 +342,7 @@ function closeInd(){ indVeil.classList.remove('on'); }
 async function saveInd(){
   indSave.disabled = true; indSave.textContent = 'Saving…'; indErr.textContent = '';
   try {
-    const res = await fetch('/api/secondary-analysis/industry', {
+    const res = await ksdFetch('/api/secondary-analysis/industry', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({period: DATA.period,
                             cases: +indCur.value || 0,

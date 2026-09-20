@@ -224,14 +224,17 @@ let SPAN = {min:'', max:''};
 
 async function load(refresh){
   // A different window or filter means the cached shop rows describe a report
-  // that is no longer on screen.
+  // that is no longer on screen. openGroups is the operator's choice of what
+  // to have expanded and survives the reload, so those rows sat on
+  // "Loading shops..." forever - nothing refetches them, because fetchGroup
+  // only runs on a click. Re-fetched below, once the new data has landed.
   shopCache = {};
   const p = params();
   if (refresh) p.set('refresh', '1');
   foot.textContent = 'Loading…';
   let d;
   try {
-    const res = await fetch('/api/reports/brandwise?' + p.toString());
+    const res = await ksdFetch('/api/reports/brandwise?' + p.toString());
     d = await res.json();
   } catch (e) {
     msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
@@ -265,6 +268,7 @@ async function load(refresh){
   Cal.setData(d.days_with_data || [], []);
   Cal.init(FROM, TO, onPick);
   render(d);
+  refetchOpenGroups();
   // The row count, the brand columns and the period are all on screen already;
   // which files answered for them is not, so that goes in the chip.
   foot.textContent = '';
@@ -332,10 +336,18 @@ function shopRows(name, brands){
   }).join('');
 }
 
+function refetchOpenGroups(){
+  for (const name of openGroups) fetchGroup(name);
+}
+
 async function toggleGroup(name){
   if (openGroups.has(name)){ openGroups.delete(name); render(DATA); return; }
   openGroups.add(name);
   render(DATA);
+  await fetchGroup(name);
+}
+
+async function fetchGroup(name){
   if (shopCache[name]) return;
   const p = new URLSearchParams({ view, key: name });
   if (FROM) p.set('date_from', FROM);
@@ -344,7 +356,7 @@ async function toggleGroup(name){
   // Same columns as the table above, in the same order.
   p.set('brands', (DATA.brands || []).join('\u001f'));
   try {
-    const res = await fetch('/api/reports/brandwise/shops?' + p.toString());
+    const res = await ksdFetch('/api/reports/brandwise/shops?' + p.toString());
     shopCache[name] = res.ok ? await res.json() : {error: 'Could not load those shops.'};
   } catch (e) {
     shopCache[name] = {error: 'Could not load those shops.'};

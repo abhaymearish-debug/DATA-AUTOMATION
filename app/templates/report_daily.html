@@ -181,7 +181,7 @@ let SPAN = {min:'', max:''};
 async function load(){
   foot.textContent = 'Loading…';
   let d;
-  try { d = await (await fetch(`/api/reports/daily/${KIND}?` + params())).json(); }
+  try { d = await (await ksdFetch(`/api/reports/daily/${KIND}?` + params())).json(); }
   catch { msg.innerHTML = '<div class="banner">Could not reach the server.</div>'; return; }
 
   if (d.error){

@@ -498,7 +498,7 @@ async function load(){
 
   let res;
   try {
-    res = await fetch('/api/shop-cumulative?' + params().toString());
+    res = await ksdFetch('/api/shop-cumulative?' + params().toString());
   } catch (e) {
     fail('Could not reach the server. Check it is still running, then press Refresh.');
     return;
@@ -523,7 +523,13 @@ async function load(){
     fail('The server sent something this page could not read. Press Refresh to try again.');
     return;
   }
+  // The cache goes with the data it described, but openShops does not - it is
+  // the operator's choice of what to have expanded, and it survives a date
+  // change. Those rows then rendered "Loading..." forever, because nothing
+  // refetches them: toggleShop only runs when the row is clicked. Re-fetch
+  // them here, once the new data is in.
   shopCache = {};
+  refetchOpenShops();
   if (DATA.calendar) mountCal(DATA.calendar);
   if (DATA.error){ noData(DATA); return; }
   lede.hidden = false;
@@ -559,7 +565,14 @@ function render(){
       // anywhere on its line. A search whose hits you cannot see is worse
       // than one that misses.
       const shops = g.shops.filter(s => s.name.toLowerCase().includes(term));
-      return shops.length ? {...g, shops} : null;
+      if (!shops.length) return null;
+      // Re-total from the shops that survived the search. g.totals is the
+      // whole group as the server sent it, so leaving it alone printed one
+      // shop's row under its bond's Total, inside a cluster band and a Grand
+      // total that both still described the entire book - three figures that
+      // disagreed with the only row on screen.
+      const totals = [0,1,2,3].map(k => shops.reduce((sum, s) => sum + s.values[k], 0));
+      return {...g, shops, totals};
     })
     .filter(Boolean);
 
@@ -690,19 +703,27 @@ function detailRows(code){
   return out;
 }
 
-async function toggleShop(code){
-  if (openShops.has(code)){ openShops.delete(code); render(); return; }
-  openShops.add(code);
-  render();
+function refetchOpenShops(){
+  for (const code of openShops) fetchShop(code);
+}
+
+async function fetchShop(code){
   if (shopCache[code]) return;
   const q = params(); q.set('code', code);
   try {
-    const res = await fetch('/api/shop-cumulative/shop?' + q.toString());
+    const res = await ksdFetch('/api/shop-cumulative/shop?' + q.toString());
     shopCache[code] = res.ok ? await res.json() : {error: 'Could not load that shop.'};
   } catch (e) {
     shopCache[code] = {error: 'Could not load that shop.'};
   }
   if (openShops.has(code)) render();
+}
+
+async function toggleShop(code){
+  if (openShops.has(code)){ openShops.delete(code); render(); return; }
+  openShops.add(code);
+  render();
+  await fetchShop(code);
 }
 
 function toggle(bond){

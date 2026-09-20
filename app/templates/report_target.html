@@ -306,7 +306,12 @@
 
 {% block scripts %}
 <script>
-let FROM = '', TO = '', DATA = null;
+// Seeded from the page's own URL. A link with ?date_from=&date_to= - one
+// shared with a colleague, or a bookmark - used to be dropped on the floor
+// here, and the page opened on whatever period it would have chosen anyway.
+// The two people looking at "the same" link saw different months.
+const QS = new URLSearchParams(location.search);
+let FROM = QS.get('date_from') || '', TO = QS.get('date_to') || '', DATA = null;
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -327,7 +332,7 @@ function onPick(from, to){ FROM = from; TO = to; load(); }
 async function load(){
   let d;
   try {
-    const res = await fetch('/api/target-achievement?' + params().toString());
+    const res = await ksdFetch('/api/target-achievement?' + params().toString());
     d = await res.json();
   } catch (e) {
     msg.innerHTML = `<div class="banner">Could not reach the server.</div>`;
@@ -376,7 +381,16 @@ function setPace(d){
   if (!y || !m){ PACE = 1; return; }
   const last = new Date(y, m, 0).getDate();
   const to = new Date(d.period.to + 'T00:00:00');
-  const days = (to.getFullYear() === y && to.getMonth() + 1 === m) ? to.getDate() : last;
+  const from = new Date(d.period.from + 'T00:00:00');
+  const inMonth = x => x.getFullYear() === y && x.getMonth() + 1 === m;
+  // The share of the month the WINDOW covers, not the share that has elapsed
+  // by its last day. Using the end date alone scored a 16-30 September window
+  // as though it had all thirty days to sell in, so half a month of trade was
+  // measured against a whole month's target and every bond looked to be
+  // failing by half.
+  const lastDay = inMonth(to) ? to.getDate() : last;
+  const firstDay = inMonth(from) ? from.getDate() : 1;
+  const days = Math.max(1, lastDay - firstDay + 1);
   PACE = Math.max(0.01, Math.min(1, days / last));
 }
 
@@ -449,7 +463,7 @@ function closeEditor(){ edVeil.classList.remove('on'); }
 async function loadTargets(month){
   const want = typeof month === 'string' && month ? month
              : (edMonth.value || (DATA ? DATA.month : ''));
-  const res = await fetch('/api/targets?month=' + encodeURIComponent(want));
+  const res = await ksdFetch('/api/targets?month=' + encodeURIComponent(want));
   ED = await res.json();
 
   const months = new Set([ED.month, ...(ED.months || [])]);
@@ -562,7 +576,7 @@ async function saveTargets(){
 
   edSave.disabled = true; edSave.textContent = 'Saving…'; edErr.textContent = '';
   try {
-    const res = await fetch('/api/targets', {
+    const res = await ksdFetch('/api/targets', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({month: edMonth.value, bonds}),
     });

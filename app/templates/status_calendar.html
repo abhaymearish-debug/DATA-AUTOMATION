@@ -373,7 +373,15 @@ const MONTHS = ['January','February','March','April','May','June',
 const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun',
                   'Jul','Aug','Sep','Oct','Nov','Dec'];
 const iso = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-const today = new Date().toISOString().slice(0,10);
+// The browser's own calendar day, not UTC's. toISOString() converts to UTC
+// first, so between midnight and 05:30 IST it returned yesterday - and the
+// calendar then treated today as "not due yet", hiding a day's missing
+// uploads from whoever checks first thing in the morning.
+const today = (() => {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+})();
 // The day a stream's raw for `key` can first exist: same day for the stock
 // photograph, the morning after for anything that reports a finished day.
 const dueBy = (key, s) => {
