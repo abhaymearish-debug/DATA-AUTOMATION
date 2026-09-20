@@ -244,30 +244,31 @@
                   box-shadow:inset 0 0 0 1.3px color-mix(in srgb, var(--bad) 28%,
                              transparent); }
 
-  /* ---------- the five bars ---------- */
-  .bars { display:flex; align-items:stretch; gap:5px; flex:1 1 auto; min-height:16px;
-          margin-top:8px; }
-  .bars b { flex:1; min-width:0; border-radius:5px;
-            background:linear-gradient(175deg,
-                       color-mix(in srgb, var(--c) 92%, #fff),
-                       var(--c) 46%,
-                       color-mix(in srgb, var(--c) 90%, #0B1020));
-            transform-origin:bottom;
-            animation:ksd-grow .36s cubic-bezier(.2,.8,.3,1) var(--in, 0ms) both; }
+  /* ---------- the five dots ---------- */
+  .bars { display:flex; align-items:center; justify-content:center; gap:6px;
+          flex:1 1 auto; min-height:16px; margin-top:8px; }
+  .bars b { flex:0 1 auto; width:100%; max-width:22px; aspect-ratio:1;
+            border-radius:50%; min-width:0;
+            background:radial-gradient(circle at 34% 28%,
+                       color-mix(in srgb, var(--c) 78%, #fff),
+                       var(--c) 58%,
+                       color-mix(in srgb, var(--c) 86%, #0B1020));
+            box-shadow:0 1px 3px color-mix(in srgb, var(--c) 40%, transparent);
+            animation:ksd-pop .34s cubic-bezier(.2,.9,.3,1.25) var(--in, 0ms) both; }
   /* The month draws itself, one day after another, left to right. It takes a
      third of a second and it is the difference between a chart appearing and
      a chart arriving. */
-  @keyframes ksd-grow { from { transform:scaleY(.14); opacity:0; } }
+  @keyframes ksd-pop { from { transform:scale(.3); opacity:0; } }
   @media (prefers-reduced-motion: reduce){
     .bars b { animation:none; }
   }
-  /* Missing: the bar is still there, and it is empty. */
+  /* Missing: the dot is still there, and it is empty. */
   .bars b.off { background:color-mix(in srgb, var(--bad) 5%, transparent);
                 box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 32%,
                            var(--line)); }
-  /* Not due: the slot has not opened yet. */
-  .bars b.wait { align-self:flex-end; height:4px; border-radius:2px;
-                 background:var(--line); }
+  /* Not due: the slot has not opened yet, so it is a mark rather than a disc. */
+  .bars b.wait { aspect-ratio:auto; height:4px; max-width:14px; border-radius:2px;
+                 background:var(--line); box-shadow:none; }
 
   /* The verdict, carried by the tile rather than written on it. */
   .cell.full { border-color:color-mix(in srgb, var(--ok) 32%, var(--line));
@@ -595,7 +596,7 @@ function draw(){
    ordinary behaviour of a page, and costs nothing to learn. The only
    adaptation left is downward, on a window too short to show even four rows,
    where scrolling every month would be worse than a smaller day. */
-const TILE = 116, GAP = 12, MIN_TILE = 62, MIN_GAP = 9;
+const TILE = 78, GAP = 11, MIN_TILE = 62, MIN_GAP = 9;
 function fit(rows){
   const room = window.innerHeight
              - (board.getBoundingClientRect().top + window.scrollY) - 28;
