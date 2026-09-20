@@ -17,7 +17,8 @@ from pathlib import Path
 import openpyxl
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
+from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+                               FileResponse, PlainTextResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -130,13 +131,23 @@ async def page_not_found(request: Request, exc):
     at a route the running process has never heard of. Raw {"detail":"Not Found"}
     gives the operator nothing to act on; this says which half is stale.
     """
-    wants_json = (request.url.path.startswith(("/api/", "/jobs/"))
+    # A download route that 404s must not answer with a web page. The browser
+    # is saving whatever comes back under the name it asked for, so an HTML
+    # "page not found" lands on disk as a .pdf or .xlsx that no reader can
+    # open - the operator sees a corrupt export rather than the reason there
+    # was nothing to export. These say it in text, which the browser shows.
+    path = request.url.path
+    is_download = path.endswith((".pdf", ".xlsx", ".zip", ".csv"))
+    wants_json = (path.startswith(("/api/", "/jobs/"))
                   or "application/json" in request.headers.get("accept", ""))
     if wants_json or not current_user(request):
         # A 404 raised with something to say keeps saying it: "Nothing is filed
         # for January 2026" is an answer, "Not Found" is a shrug.
         said = getattr(exc, "detail", None)
         return JSONResponse({"detail": said or "Not Found"}, status_code=404)
+    if is_download:
+        said = getattr(exc, "detail", None) or "Nothing to export for that selection."
+        return PlainTextResponse(said, status_code=404)
     return templates.TemplateResponse(
         request, "notfound.html",
         {"user": current_user(request), "page": "", "started_at": STARTED_AT,
@@ -2228,6 +2239,21 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
         if not pdfs:
             raise HTTPException(404, f"No bonds in cluster {cluster} for that period.")
 
+    if warehouse:
+        # The books are cut by bond, so a warehouse filter was simply ignored
+        # here and the whole book came back - the screen showing one
+        # warehouse, the download holding every shop in the state. Narrowed to
+        # the bonds that actually have shops in that warehouse, which is as
+        # close as a bond-cut book can get to the screen.
+        want = reports_api.canon_warehouse(warehouse)
+        bonds_in = {(sh.get("bond") or "").title().lower()
+                    for sh in win.get("shops", [])
+                    if reports_api.canon_warehouse(sh.get("warehouse") or "") == want}
+        pdfs = [f for f in pdfs if f.stem.split(" - ", 1)[-1].lower() in bonds_in]
+        if not pdfs:
+            raise HTTPException(
+                404, f"No shops in {warehouse.title()} for that period.")
+
     stamp = f"{chosen['start'].isoformat()} to {chosen['end'].isoformat()}"
     label = f"Cluster {cluster} " if cluster else ""
     bundle = outdir / f"Shop Sales Cumulative {label}({stamp}).zip"
@@ -2716,9 +2742,13 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
     # delta reads as the sheet prints it and still behaves as a number.
     places = "0" if round_off else "0.00"
     FIG = f'{places};-{places};"-"'
-    CS_FMT = f'"\u25b2 "{places};"\u25bc -"{places};"\u25b2 "{places}'
+    # The arrow carries the sign, so the negative section must not print one
+    # too: Excel's negative section already drops the minus, and the literal
+    # '-' put back beside the down arrow made the workbook read "\u25bc -3"
+    # where the screen reads "\u25bc 3".
+    CS_FMT = f'"\u25b2 "{places};"\u25bc "{places};"\u25b2 "{places}'
     pc = "0%" if round_off else "0.0%"
-    PC_FMT = f'"\u25b2 "{pc};"\u25bc -"{pc};"\u25b2 "{pc}'
+    PC_FMT = f'"\u25b2 "{pc};"\u25bc "{pc};"\u25b2 "{pc}'
 
     r = 4
     stripe = 0

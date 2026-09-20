@@ -66,6 +66,17 @@ F_TOTAL = 8.8
 HEAD_PITCH = 7.6
 
 
+def _fit(text: str, font: str, size: float, width: float) -> str:
+    """`text` shortened to `width`, with an ellipsis when anything was cut."""
+    if pdfmetrics.stringWidth(text, font, size) <= width:
+        return text
+    ell = "\u2026"
+    out = text
+    while out and pdfmetrics.stringWidth(out + ell, font, size) > width:
+        out = out[:-1]
+    return (out + ell) if out else text[:1]
+
+
 def _wrap(text: str, size: float, max_w: float) -> list[str]:
     """Wrap a column label on word boundaries, measured by real glyph width."""
     words, lines, cur = text.split(), [], ""
@@ -222,10 +233,12 @@ def draw_page(c, *, width: float, height: float, label_w: float,
         base = y - 10.5
         c.setFillColor(colors.black)
         c.setFont("Helvetica", F_ROW)
-        name = str(r["name"])
-        while (pdfmetrics.stringWidth(name, "Helvetica", F_ROW) > label_w - 2 * PAD_L
-               and len(name) > 3):
-            name = name[:-1]
+        # Cut with an ellipsis, so a shortened label reads as shortened. Bare
+        # truncation produced '2016-KARUNAGAPALLY SOUT' and
+        # '2016-KARUNAGAPALLY SOUTH' as the same string, which is two
+        # different shops printing under one name with no sign anything was
+        # lost.
+        name = _fit(str(r["name"]), "Helvetica", F_ROW, label_w - 2 * PAD_L)
         c.drawString(PAD_L, base, name)
 
         for j, col in enumerate(columns):
