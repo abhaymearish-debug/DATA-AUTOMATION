@@ -2758,7 +2758,7 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
 
 
 @app.get("/reports/warehouse-stock/export.pdf")
-def stock_pdf(request: Request, scope: str = "cluster", cluster: str = "1",
+def stock_pdf(request: Request, scope: str = "cluster", cluster: str = "",
               as_of: str = "", warehouse: str = ""):
     """scope='cluster' -> one cluster; scope='current' -> whatever is filtered."""
     require_user(request)
@@ -2782,10 +2782,17 @@ def stock_pdf(request: Request, scope: str = "cluster", cluster: str = "1",
         return _as_folder(built, "Warehouse Stock Report - All Clusters")
 
     if scope == "current":
+        # No cluster on the query means the screen is showing all of them.
+        # The default used to be "1", so an unfiltered screen quietly exported
+        # Cluster 1 and called it the current view - the same file, byte for
+        # byte, as an explicit cluster-1 export.
         cl = int(cluster) if cluster in ("1", "2", "3") else None
         data = reports_api.warehouse_stock(as_of=as_of, cluster=cl, warehouse=warehouse)
         label = warehouse or (f"Cluster {cl}" if cl else "All Warehouses")
     else:
+        # The official book is per-cluster and has always defaulted to 1;
+        # that default belongs here, not on the shared signature.
+        cluster = cluster or "1"
         if cluster not in ("1", "2", "3"):
             raise HTTPException(400, "Cluster must be 1, 2 or 3.")
         data = reports_api.warehouse_stock(as_of=as_of, cluster=int(cluster))
