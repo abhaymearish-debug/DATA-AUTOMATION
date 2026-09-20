@@ -387,7 +387,28 @@ WAREHOUSE_CLUSTERS: dict[int, list[str]] = {
     3: ["KANNUR", "KOZHIKODE", "PALAKKAD", "PERINTHALMANNA", "MENONPARA",
         "BATTATHUR", "KALPETTA", "NADUVANNUR"],
 }
+# Bevco spells one warehouse differently in different exports. The name that
+# matches nothing is not an item-issue problem - it is a warehouse-name
+# problem, and every report that groups by warehouse hits it. Mapped here,
+# beside the cluster map, so one spelling cannot belong to a cluster in one
+# report and to no cluster in the others.
+WAREHOUSE_ALIASES = {
+    "PATHANAMTHITA": "PATHANAMTHITTA",
+}
+
+
+def canon_warehouse(name: str) -> str:
+    """The one spelling of a warehouse name that the cluster map knows."""
+    n = (name or "").strip().upper()
+    return WAREHOUSE_ALIASES.get(n, n)
+
+
 CLUSTER_OF_WAREHOUSE = {w: c for c, whs in WAREHOUSE_CLUSTERS.items() for w in whs}
+
+
+def cluster_of_warehouse(name: str):
+    """Cluster for a warehouse under any spelling Bevco uses for it."""
+    return CLUSTER_OF_WAREHOUSE.get(canon_warehouse(name))
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, object]] = {}
@@ -621,7 +642,34 @@ def _workbook_rank(p: Path) -> tuple:
     r = _RANGE_IN_NAME.search(name)
     end_day = int(r.group(2)) if r else 31
     mtime = p.stat().st_mtime
-    return (datetime.fromtimestamp(mtime).year, month, end_day, mtime)
+    return (_year_for(month, min(end_day, 28), mtime), month, end_day, mtime)
+
+
+def _year_for(month: int, day: int, mtime: float) -> int:
+    """The year a raw named '<month> <day>' belongs to, given when it landed.
+
+    KSBC's daily filenames carry a month and a day but no year, so the year
+    came from the file's modification time. That is right for eleven months
+    and wrong for the one that matters: the 31 December pull is downloaded and
+    uploaded on 1 January, and filing it under the mtime's year put it eleven
+    months in the FUTURE - out of every December report, and silently inside
+    the next one.
+
+    A raw cannot cover a day that has not happened yet, so a date that lands
+    after the file arrived belongs to the year before. Three days of slack
+    absorbs clock skew and a file touched slightly before midnight.
+    """
+    if not month:
+        return datetime.fromtimestamp(mtime).year
+    landed = datetime.fromtimestamp(mtime).date()
+    for year in (landed.year, landed.year - 1):
+        try:
+            covers = date(year, month, day)
+        except ValueError:
+            continue
+        if covers <= landed + timedelta(days=3):
+            return year
+    return landed.year
 
 
 def load_dispatch_lines(workbook: Path) -> list[dict]:
@@ -734,9 +782,10 @@ def secondary_raw_files() -> list:
             month = _MONTH_NUM.get(m.group(1).upper())
             if not month:
                 continue
-            year = datetime.fromtimestamp(path.stat().st_mtime).year
+            dom = int(m.group(2))
+            year = _year_for(month, dom, path.stat().st_mtime)
             try:
-                end = date(year, month, int(m.group(2)))
+                end = date(year, month, dom)
             except ValueError:
                 continue
             # One upload per day; the input folder's copy wins over an archive.
@@ -1115,7 +1164,7 @@ def warehouse_stock(as_of: str = "", cluster: int | None = None,
     sel = [r for r in rows if r["date"] == day]
 
     if cluster in (1, 2, 3):
-        sel = [r for r in sel if CLUSTER_OF_WAREHOUSE.get(r["warehouse"]) == cluster]
+        sel = [r for r in sel if cluster_of_warehouse(r["warehouse"]) == cluster]
     if warehouse:
         sel = [r for r in sel if r["warehouse"] == warehouse]
 
@@ -1124,7 +1173,7 @@ def warehouse_stock(as_of: str = "", cluster: int | None = None,
         by_wh[r["warehouse"]].append(r)
 
     def order(wh: str) -> tuple:
-        cl = CLUSTER_OF_WAREHOUSE.get(wh)
+        cl = cluster_of_warehouse(wh)
         members = WAREHOUSE_CLUSTERS.get(cl, [])
         return (cl or 9, members.index(wh) if wh in members else 99, wh)
 
@@ -1137,7 +1186,7 @@ def warehouse_stock(as_of: str = "", cluster: int | None = None,
             grand[k] += totals[k]
         warehouses.append({
             "name": wh,
-            "cluster": CLUSTER_OF_WAREHOUSE.get(wh),
+            "cluster": cluster_of_warehouse(wh),
             "rows": [{"brand": i["brand"], "pack": i["pack"],
                       "physical": i["physical"], "allotable": i["allotable"],
                       "pending": i["pending"]} for i in items],
@@ -1280,7 +1329,7 @@ def load_shop_daily_raws() -> list[dict]:
     master = load_master()
     out: list[dict] = []
     for path, month, dom in files:
-        year = datetime.fromtimestamp(path.stat().st_mtime).year
+        year = _year_for(month, dom, path.stat().st_mtime)
         try:
             day = date(year, month, dom)
         except ValueError:
@@ -1550,7 +1599,13 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
         field = "bond"
     of_bond = of_group
 
-    present = {l.get(field) for l in lines if lo <= l["date"] <= hi and l.get(field)}
+    # KSBC's own spellings, normalised, so an alternate spelling of a known
+    # warehouse is not treated as an unknown one.
+    def group_key(l) -> str:
+        v = l.get(field) or ""
+        return canon_warehouse(v) if by_warehouse else v
+
+    present = {group_key(l) for l in lines if lo <= l["date"] <= hi and group_key(l)}
     groups = [g for c in (1, 2, 3) for g in live.get(c, [])
               if (cluster in (None, 0) or of_group.get(g) == cluster)
               and (not by_warehouse or g in present)]
@@ -1558,11 +1613,21 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
 
     exact: dict[tuple[str, date], float] = defaultdict(float)
     seen_days: set = set()
+    # A key the cluster map does not know used to be dropped here, silently -
+    # its cases appeared in no bond row, no cluster subtotal and no Grand
+    # Total, so this report disagreed with Secondary Sales - Cumulative on the
+    # same window while both looked complete. Those lines are kept and shown
+    # as their own rows after the clusters, which is what brandwise() already
+    # does with the same data.
+    outside: set = set()
     for l in lines:
-        key = l.get(field) or ""
-        if lo <= l["date"] <= hi and key in of_group:
-            exact[(key, l["date"])] += l["cases"]
-            seen_days.add(l["date"])
+        key = group_key(l)
+        if not key or not (lo <= l["date"] <= hi):
+            continue
+        exact[(key, l["date"])] += l["cases"]
+        seen_days.add(l["date"])
+        if key not in of_group:
+            outside.add(key)
 
     # Every day in the window gets a column, including days nothing moved: a
     # dry Sunday is information. What the report must not do is let a day with
@@ -1592,7 +1657,14 @@ def daily_grid(kind: str = "secondary", date_from=None, date_to=None,
             continue
         rows += [row(b, [b], "bond", c) for b in members]
         rows.append(row(f"CLUSTER {c}", members, "cluster", c))
-    rows.append(row("Grand Total", bonds, "grand"))
+    # Named in the open, below the clusters they belong to none of, and inside
+    # the Grand Total - the alternative is a total that quietly disagrees with
+    # every other report on the same window.
+    loose = sorted(k for k in outside
+                   if cluster in (None, 0) or of_group.get(k) == cluster)
+    for k in loose:
+        rows.append(row(k, [k], "row"))
+    rows.append(row("Grand Total", bonds + loose, "grand"))
 
     return {
         "kind": kind,
@@ -1661,7 +1733,8 @@ def cumulative_periods() -> list[dict]:
         out.append({
             "key": f"{start.isoformat()}..{end.isoformat()}",
             "start": start, "end": end, "path": path,
-            "days": max(1, (end - start).days),
+            # Inclusive of both ends: 1-16 Aug is 16 days, not 15.
+            "days": (end - start).days + 1,
             "long": f"{start.day} {start.strftime('%B')} {year} - {end.day} {end.strftime('%B')} {year}",
             "short": f"{start.day} {start.strftime('%b')} {year} to {end.day} {end.strftime('%b')} {year}",
         })
@@ -1807,9 +1880,10 @@ def shop_day_files() -> dict:
         month = _MONTH_NUM.get(m.group(1).upper())
         if not month:
             continue
-        year = datetime.fromtimestamp(path.stat().st_mtime).year
+        dom = int(m.group(2))
+        year = _year_for(month, dom, path.stat().st_mtime)
         try:
-            out[date(year, month, int(m.group(2)))] = path
+            out[date(year, month, dom)] = path
         except ValueError:
             continue
     return out
@@ -2111,7 +2185,9 @@ def _group_shops(shops: list, period: dict, cluster: int | None, bond: str,
 def period_for(start: date, end: date) -> dict:
     return {
         "key": f"{start.isoformat()}..{end.isoformat()}",
-        "start": start, "end": end, "days": max(1, (end - start).days),
+        # Inclusive of both ends: 1-16 Aug is 16 days, not 15. The bare
+        # subtraction made every per-day average divide by one day too few.
+        "start": start, "end": end, "days": (end - start).days + 1,
         "long": f"{start.day} {start.strftime('%B')} {start.year} - "
                 f"{end.day} {end.strftime('%B')} {end.year}",
         "short": f"{start.day} {start.strftime('%b')} {start.year} to "
@@ -2336,8 +2412,10 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
     its own span rather than by the current one twice.
     """
     p_start, p_end = prev if prev else _same_window_last_month(start, end)
-    span = max(1, (end - start).days)
-    p_span = max(1, (p_end - p_start).days) if p_start else 1
+    # Both ends count: a 1-16 August window is 16 days. These two spans are
+    # the divisors for every per-day average on the report.
+    span = (end - start).days + 1
+    p_span = ((p_end - p_start).days + 1) if p_start else 1
 
     shop_now = _shop_sales_by_bond(start, end)
     shop_was = _shop_sales_by_bond(p_start, p_end) if p_start else {}
@@ -2763,14 +2841,10 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
 # The export spells one warehouse differently from the master data, and a name
 # that matches nothing would drop a whole warehouse out of the network total
 # without saying so. Known differences are mapped; anything else is reported.
-ITEM_ISSUE_ALIASES = {
-    "PATHANAMTHITA": "PATHANAMTHITTA",
-}
-
-
 def _ii_name(raw: str) -> str:
-    name = (raw or "").strip().upper()
-    return ITEM_ISSUE_ALIASES.get(name, name)
+    # Was its own copy of the alias table; now the one shared with every other
+    # warehouse-grouped report, so the spellings cannot drift apart.
+    return canon_warehouse(raw)
 
 
 def _ii_row(label: str, kind: str, members: list[str], cur: dict, prior: dict,
