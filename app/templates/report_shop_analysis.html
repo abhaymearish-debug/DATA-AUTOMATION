@@ -60,12 +60,17 @@
              padding:7px 6px; text-align:center; line-height:1.28;
              border-bottom:1px solid #22407F; }
   thead th.grp { color:var(--gold); border-bottom:1px solid rgba(255,189,48,.45); }
-  thead th:first-child { left:0; z-index:4; text-align:left; padding-left:15px; }
+  /* Only the bond column is pinned. Bond spans both header rows, so the
+     second row's first child is CM, the first average column - and
+     thead th:first-child pinned that to the left edge too, where it sat over
+     the bond names with its own figures scrolling away beneath it. */
+  thead tr:first-child th:first-child { left:0; z-index:5; text-align:left;
+                                        padding-left:15px; }
 
   /* Ruled both ways, and the bond column casts an edge so a half-scrolled
      column passes beneath it rather than printing its digits down the middle. */
   thead th + th { border-left:1px solid rgba(255,255,255,.12); }
-  thead th:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
+  thead tr:first-child th:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
   tbody td { padding:0 6px; height:36px; text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line);
              border-left:1px solid var(--line); }

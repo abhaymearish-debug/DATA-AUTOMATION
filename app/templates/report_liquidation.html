@@ -52,7 +52,15 @@
                            letter-spacing:.2px; }
   thead th.gut { width:8px; padding:0; background:var(--navy);
                  border-left:1px solid var(--gold); border-right:1px solid var(--gold); }
-  thead th:first-child { left:0; z-index:4; text-align:left; padding-left:14px; }
+  /* The bond column is pinned, and only the cell that IS the bond column may
+     be. Bond spans both header rows, so the second row's first child is not
+     Bond at all - it is SEP, the first figure column. This read
+     thead th:first-child, which pinned that one too: scroll the table right
+     and SEP stayed clamped to the left edge, clipped to a single letter,
+     sitting on top of the bond names while its own figures slid away
+     underneath. The heads no longer lined up with the columns they named. */
+  thead tr:first-child th:first-child { left:0; z-index:5; text-align:left;
+                                        padding-left:14px; }
   /* Ruled the way the rest of the reports are: a line between every column,
      dark on the navy header so it reads as a seam rather than a scratch. */
   thead tr:last-child th { border-left:1px solid rgba(255,255,255,.10); }
@@ -65,6 +73,11 @@
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
                          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                          padding-left:14px; font-weight:600; border-left:0; }
+  /* Frozen, so it casts an edge. Without one a half-scrolled figure column
+     arrives at the bond names with nothing between them and reads as the two
+     colliding rather than as one passing beneath the other. */
+  thead tr:first-child th:first-child,
+  tbody td:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
   /* The gold rules either side of the channel are the seam there, so the grid
      does not draw a second line beside them. */
   tbody td.gut, tbody td.gut + td { border-left:0; }

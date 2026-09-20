@@ -209,7 +209,11 @@
   .topbar { display:flex; align-items:center; gap:12px; padding:14px 26px;
             background:var(--card); border-bottom:1px solid var(--line); }
   .topbar h1 { margin:0; font-size:19px; font-weight:650; }
-  .content { padding:22px 26px 60px; }
+  /* The tail below a report - the Source chip and whatever else - is what
+     ksdFit reserves before it caps the table, and this padding is part of
+     it. Sixty pixels of it was a band of nothing under every report that the
+     table could have been using. */
+  .content { padding:22px 26px 22px; }
 
   .btn { border:1px solid var(--line); background:var(--card); color:var(--ink);
          border-radius:8px; padding:8px 14px; font-size:13.5px; cursor:pointer; }
@@ -236,7 +240,7 @@
     .burger { display:inline-block; }
     .topbar { padding:11px 14px; gap:10px; }
     .topbar h1 { font-size:16px; }
-    .content { padding:16px 14px 60px; }
+    .content { padding:16px 14px 18px; }
   }
 
   .banner { background:color-mix(in srgb, var(--bad) 12%, var(--card));
