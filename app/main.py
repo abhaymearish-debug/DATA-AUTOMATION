@@ -1279,6 +1279,29 @@ def brandwise_shops_data(
     ))
 
 
+def centre_all(wb) -> None:
+    """Every cell in the book, centred - the office reads these side by side.
+
+    Each export grew its own alignment rules: the stock sheet left-aligned
+    item names, liquidation right-aligned its figures, the analysis sheet
+    left-aligned the first column and centred the rest. Printed and laid next
+    to each other they did not line up, and the rule people actually wanted
+    turned out to be the simple one. Vertical placement and wrapping are left
+    as each sheet set them - those are about row height, not about columns.
+    """
+    from openpyxl.styles import Alignment
+
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                a = c.alignment
+                c.alignment = Alignment(horizontal="center",
+                                        vertical=a.vertical or "center",
+                                        wrap_text=a.wrap_text,
+                                        indent=0, shrink_to_fit=a.shrink_to_fit,
+                                        text_rotation=a.text_rotation)
+
+
 @app.get("/reports/brandwise/export.xlsx")
 def brandwise_xlsx(
     request: Request,
@@ -1436,6 +1459,7 @@ def brandwise_xlsx(
     ws.print_title_rows = f"1:{head}"
 
     tmp = Path(tempfile.mkdtemp()) / "Secondary Sales - Cumulative.xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -1991,6 +2015,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     ws.sheet_view.showGridLines = False
 
     tmp = Path(tempfile.mkdtemp()) / f"Shop Sales Cumulative - {scope} ({chosen['short']}).xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -2254,6 +2279,7 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
     ws.freeze_panes = "B2"
 
     tmp = Path(tempfile.mkdtemp()) / f"Shop Sales Analysis ({chosen['short']}).xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -2628,6 +2654,7 @@ def liquidation_xlsx(request: Request, date_from: str = "", date_to: str = "",
     ws.print_title_rows = "1:4"
 
     tmp = Path(tempfile.mkdtemp()) / f"Liquidation Summary ({data['period']['short']}).xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -2812,6 +2839,7 @@ def stock_xlsx(request: Request, as_of: str = "", cluster: str = "", warehouse: 
 
     label = warehouse or (f"Cluster {cl}" if cl else "All Warehouses")
     tmp = Path(tempfile.mkdtemp()) / f"Warehouse Stock Report - {label}.xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -3064,6 +3092,7 @@ def daily_xlsx(request: Request, kind: str, date_from: str = "", date_to: str = 
 
     suffix = f" (Cluster {cl})" if cl else ""
     out = Path(tempfile.mkdtemp()) / f"{data['title']}{suffix}.xlsx"
+    centre_all(wb)
     wb.save(out)
     return FileResponse(out, filename=out.name)
 
@@ -3355,6 +3384,7 @@ def target_achievement_xlsx(request: Request, date_from: str = "", date_to: str 
 
     label = data["period"]["short"].replace(" to ", " - ")
     tmp = Path(tempfile.mkdtemp()) / f"TARGET vs ACHIEVEMENT ({label}).xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -3593,6 +3623,7 @@ def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
 
     tmp = (Path(tempfile.mkdtemp())
            / f"SECONDARY SALES ANALYSIS ({data['period_label']}).xlsx")
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
@@ -3846,5 +3877,6 @@ def pi_xlsx(request: Request, month: str = "", prior: str = "",
         b.column_dimensions["C"].width = 16
 
     tmp = Path(tempfile.mkdtemp()) / f"pi_variance_report_{data['month']}.xlsx"
+    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
