@@ -253,7 +253,13 @@
                        color-mix(in srgb, var(--c) 78%, #fff),
                        var(--c) 58%,
                        color-mix(in srgb, var(--c) 86%, #0B1020));
-            box-shadow:0 1px 3px color-mix(in srgb, var(--c) 40%, transparent);
+            /* A little of the dot's own light escaping it: a soft halo in
+               its colour, plus a whisper of a ring to keep the edge crisp.
+               Only the filled dots carry it - a hollow ring has nothing to
+               give off. */
+            box-shadow:0 0 0 1.5px color-mix(in srgb, var(--c) 10%, transparent),
+                       0 0 5px -1px color-mix(in srgb, var(--c) 34%, transparent),
+                       0 1px 2px color-mix(in srgb, var(--c) 26%, transparent);
             animation:ksd-pop .34s cubic-bezier(.2,.9,.3,1.25) var(--in, 0ms) both; }
   /* The month draws itself, one day after another, left to right. It takes a
      third of a second and it is the difference between a chart appearing and
@@ -262,6 +268,12 @@
   @media (prefers-reduced-motion: reduce){
     .bars b { animation:none; }
   }
+  /* Dark ground takes a wider, softer halo - on white the same bloom turns
+     to haze around the disc rather than light coming off it. */
+  :root[data-theme="dark"] .bars b {
+            box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 15%, transparent),
+                       0 0 8px -2px color-mix(in srgb, var(--c) 62%, transparent); }
+
   /* Missing: the dot is still there, and it is empty. */
   .bars b.off { background:color-mix(in srgb, var(--bad) 5%, transparent);
                 box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 32%,
