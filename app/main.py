@@ -587,7 +587,33 @@ def _bootstrap_month(month_u: str, folder: Path) -> Path:
     return out
 
 
+def _plain_name(original: str, fallback: str) -> str:
+    """The file's own name, with any path the browser sent stripped off.
+
+    A multipart filename is whatever the client chose to put in the header:
+    Starlette hands it over untouched, dots and slashes and all.
+    """
+    name = Path(original or "").name.strip()
+    return name if name and name not in (".", "..") else fallback
+
+
 def _save_upload(upload: UploadFile, destination: Path) -> None:
+    # An upload's filename is attacker-controlled, and two of the streams put
+    # it straight into a path. `Path(scratch) / "../../../x.xlsx"` walks out of
+    # the workspace, and the mkdir below then CREATES whatever directories that
+    # takes - so a signed-in user could drop or overwrite a workbook anywhere
+    # the process can write, including the seed master data and the live
+    # month workbooks. Every destination on this route belongs under the
+    # workspace; anything that resolves outside it is refused here, at the one
+    # place every caller passes through, rather than at each call site.
+    root = config.WORKSPACE_ROOT.resolve()
+    try:
+        destination.resolve().relative_to(root)
+    except ValueError:
+        raise UploadRejected(
+            f"'{upload.filename}' is not a usable file name — it has to be a "
+            "plain name, with no folders in it."
+        )
     destination.parent.mkdir(parents=True, exist_ok=True)
     size = 0
     with destination.open("wb") as fh:
@@ -747,7 +773,7 @@ async def build(
                     expect = ""
             staged = []
             for upload in files:
-                target = scratch_dir / (upload.filename or "pi.xls")
+                target = scratch_dir / _plain_name(upload.filename, "pi.xls")
                 _save_upload(upload, target)
                 staged.append(target)
             got = pi_mod.store(staged, expect=expect)
@@ -776,7 +802,7 @@ async def build(
                 expect = (a, b)
             staged = []
             for upload in files:
-                target = scratch_dir / (upload.filename or "issue.xls")
+                target = scratch_dir / _plain_name(upload.filename, "issue.xls")
                 _save_upload(upload, target)
                 staged.append(target)
             got = itemissue.store(staged, expect=expect)
