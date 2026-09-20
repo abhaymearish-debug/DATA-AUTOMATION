@@ -343,7 +343,20 @@ ST_COLS = [259.2, 79.4, 83.8, 94.8, 78.0]
 ST_HEADINGS = ["ITEM NAME", "PACK", "PHYSICAL", "ALLOTABLE", "PENDING"]
 ST_INK = colors.Color(0.059, 0.098, 0.176)
 ST_ZERO = colors.Color(0.784, 0.804, 0.843)
-ST_ROWS_PER_PAGE = 18
+ST_FOOT = 52.0                 # air under the table, and the page number in it
+
+
+def stock_page_height(n_rows: int) -> float:
+    """A4, or as much taller as this warehouse needs.
+
+    A warehouse used to be cut at eighteen rows and continued overleaf, so
+    the long ones arrived as two pages that had to be read together - and
+    the first of them ended in a blank space exactly where its total should
+    have been. One warehouse is one page now; the page is what stretches.
+    """
+    need = (ST_TITLE_H + ST_BAND_H * 2 + ST_HEAD_H
+            + n_rows * ST_ROW_H + ST_ROW_H + ST_FOOT)
+    return max(A4_H, need)
 # The grid. A hairline between cells so a long name and its figures stay on
 # one line for the eye, and a gold rule closing the two navy bands - the
 # header and the total - the way the office's own sheets rule a block.
@@ -358,19 +371,11 @@ def _col_x(i: int) -> float:
 
 
 def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
-                    totals: dict | None, page_no: int, pages: int,
-                    part: int = 1, parts: int = 1) -> None:
-    """One warehouse page of the Warehouse Stock Report.
-
-    A warehouse longer than a page is broken across several, and the total
-    belongs on the last of them. Nothing said so: a full first page carried
-    eighteen rows, a blank foot where the total would go, and a band naming
-    the warehouse - then the next page opened with the same band and the
-    same name. It read as a warehouse whose total had been left out, which
-    is the one thing a stock sheet must not look like. `part` and `parts`
-    let the page say which piece of the warehouse it is.
-    """
-    y = A4_H
+                    totals: dict | None, page_no: int, pages: int) -> None:
+    """One warehouse, one page - as tall as that warehouse needs it to be."""
+    page_h = stock_page_height(len(rows))
+    c.setPageSize((A4_W, page_h))
+    y = page_h
 
     c.setFillColor(NAVY)
     c.rect(0, y - ST_TITLE_H, A4_W, ST_TITLE_H, stroke=0, fill=1)
@@ -391,8 +396,7 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
     c.rect(0, y - ST_BAND_H, A4_W, ST_BAND_H, stroke=0, fill=1)
     c.setFillColor(NAVY)
     c.setFont("Helvetica-Bold", 11)
-    said = warehouse if parts < 2 else f"{warehouse}  ({part} of {parts})"
-    c.drawCentredString(A4_W / 2, y - 15.5, said)
+    c.drawCentredString(A4_W / 2, y - 15.5, warehouse)
     y -= ST_BAND_H
 
     head_top = y
@@ -486,13 +490,6 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
 
     c.setFillColor(colors.Color(0.45, 0.48, 0.55))
     c.setFont("Helvetica", 8)
-    # Said where the total would have been, so the blank foot of a split page
-    # is explained at the place the eye goes looking for the figure.
-    if totals is None:
-        c.setFont("Helvetica-Oblique", 9)
-        c.drawCentredString(A4_W / 2, bottom - 20.0,
-                            f"{warehouse} continues on the next page")
-        c.setFont("Helvetica", 8)
     c.drawRightString(A4_W - 9.9, 24.0, f"Page {page_no} of {pages}")
     c.showPage()
 
@@ -506,21 +503,14 @@ def build_stock_pdf(data: dict, out_path: Path, *, title_suffix: str = "") -> Pa
     except ValueError:
         pass
 
-    # Work out the page count first so "Page n of m" is right from page one.
-    plan = []
-    for wh in data["warehouses"]:
-        rows = wh["rows"]
-        chunks = [rows[i:i + ST_ROWS_PER_PAGE]
-                  for i in range(0, len(rows), ST_ROWS_PER_PAGE)] or [[]]
-        for k, chunk in enumerate(chunks):
-            plan.append((wh, chunk, k == len(chunks) - 1, k + 1, len(chunks)))
+    # One page per warehouse, so the count is simply how many there are.
+    houses = list(data["warehouses"])
 
     c = pdfcanvas.Canvas(str(out_path), pagesize=(A4_W, A4_H))
-    for i, (wh, chunk, is_last, part, parts) in enumerate(plan, start=1):
+    for i, wh in enumerate(houses, start=1):
         draw_stock_page(
-            c, warehouse=wh["name"], as_of=as_of, rows=chunk,
-            totals=wh["totals"] if is_last else None,
-            page_no=i, pages=len(plan), part=part, parts=parts,
+            c, warehouse=wh["name"], as_of=as_of, rows=wh["rows"],
+            totals=wh["totals"], page_no=i, pages=len(houses),
         )
     c.save()
     return out_path
