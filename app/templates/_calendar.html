@@ -40,6 +40,17 @@
   .cal-g button.d.in.has::after { background:#3B5FA8; }
   .cal-g button.d.edge { background:var(--blue); color:#fff; border-radius:8px; }
   .cal-g button.d.edge.has::after { background:#fff; }
+  /* The band between the two ends was a fixed pale blue - a tint on white and
+     a lit strip on the dark ground, with the day numbers left in their light
+     colour on top of it, so the selected range was the hardest part of the
+     picker to read. On dark it becomes a tint OF the ground rather than a
+     patch of light on it, and the numbers keep their ink. */
+  :root[data-theme="dark"] .cal-g button.d.in {
+      background:color-mix(in srgb, var(--blue) 24%, var(--card)); color:var(--ink); }
+  :root[data-theme="dark"] .cal-g button.d.in.has::after {
+      background:color-mix(in srgb, var(--blue) 72%, #fff); }
+  :root[data-theme="dark"] .cal-g button.d.edge { color:#08122B; }
+  :root[data-theme="dark"] .cal-g button.d.edge.has::after { background:#08122B; }
   .cal-g button.d.s-start { border-radius:8px 0 0 8px; }
   .cal-g button.d.s-end { border-radius:0 8px 8px 0; }
 

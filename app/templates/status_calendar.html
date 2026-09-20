@@ -271,11 +271,15 @@
             box-shadow:0 0 0 1.5px color-mix(in srgb, var(--c) 10%, transparent),
                        0 0 5px -1px color-mix(in srgb, var(--c) 34%, transparent),
                        0 1px 2px color-mix(in srgb, var(--c) 26%, transparent);
-            animation:ksd-pop .34s cubic-bezier(.2,.9,.3,1.25) var(--in, 0ms) both; }
+            animation:ksd-bead .34s cubic-bezier(.2,.9,.3,1.25) var(--in, 0ms) both; }
   /* The month draws itself, one day after another, left to right. It takes a
      third of a second and it is the difference between a chart appearing and
      a chart arriving. */
-  @keyframes ksd-pop { from { transform:scale(.3); opacity:0; } }
+  /* Its own name: ksd-pop belongs to the panels in base.html, and taking it
+     here re-animated every one of them from a third of their size - and,
+     because the day panel is measured while it animates, made it place
+     itself wrong. */
+  @keyframes ksd-bead { from { transform:scale(.3); opacity:0; } }
   @media (prefers-reduced-motion: reduce){
     .bars b { animation:none; }
   }
@@ -721,9 +725,22 @@ function openDay(cell){
   pop.style.top = Math.round(top) + 'px';
   pop.classList.add('on');
 
-  // Keep it on screen: if the panel would hang below the fold, lift it.
-  const over = pop.getBoundingClientRect().bottom - (window.innerHeight - 8);
-  if (over > 0){ top -= over; pop.style.top = Math.round(top) + 'px'; }
+  // Keep it on screen AND inside the card. The board is overflow:hidden so
+  // its corners can be round, which makes its own bottom edge a clip - and
+  // this only measured against the fold. For a day on one of the last rows
+  // the card ends well above the fold, so nothing lifted and the panel was
+  // cut off mid-row, usually losing the one stream the day was still
+  // waiting on. Whichever edge comes first is the one to clear.
+  const clip = cal.closest('.board') || cal;
+  const floor = Math.min(window.innerHeight - 8, clip.getBoundingClientRect().bottom - 8);
+  const over = pop.getBoundingClientRect().bottom - floor;
+  if (over > 0){
+    top -= over;
+    // Never push it out of the top of the card to save the bottom: a panel
+    // taller than the space sits against the top edge and is read from there.
+    top = Math.max(4, top);
+    pop.style.top = Math.round(top) + 'px';
+  }
 
   // The caret tracks the tile however far the panel has had to move.
   const h = pop.getBoundingClientRect().height;
