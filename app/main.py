@@ -401,8 +401,10 @@ _LEAVE_LOOK = {
         "noun_pl": "warehouses",
         "blurb": "A day the KSBC warehouses did not issue. Pick the days on the "
                  "calendar and write down why.",
-        "feeds": "Recorded, and shown here. <b>No report divides by it yet</b> - "
-                 "say the word and secondary-sales dispatch rates can use it.",
+        "feeds": "Used by the <b>Liquidation Summary</b>: the per-day figures "
+                 "under Secondary Sales and Fed / Bar Invoice divide by the days "
+                 "the warehouses could issue, not by every day in the window. "
+                 "The report says what it divided by.",
     },
 }
 
