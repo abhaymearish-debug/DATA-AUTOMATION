@@ -244,19 +244,30 @@
           border-bottom:1px solid var(--line); }
   .hbar label { font-size:10.5px; letter-spacing:.7px; text-transform:uppercase;
                 color:var(--muted); font-weight:700; }
-  .hbar input[type=date], .hbar select {
-      width:auto; padding:7.5px 11px; border-radius:9px; font-size:12.5px;
-      font-weight:650; color:var(--ink); background:var(--card);
-      border:1px solid var(--line); font-variant-numeric:tabular-nums;
-      transition:border-color .14s ease, box-shadow .14s ease; }
-  .hbar input[type=date]:hover, .hbar select:hover { border-color:var(--zero); }
-  .hbar input[type=date]:focus, .hbar select:focus { outline:none;
-      border-color:var(--blue);
-      box-shadow:0 0 0 3px color-mix(in srgb, var(--blue) 15%, transparent); }
-  .hbar label { white-space:nowrap; }
-  .hbar .to { font-size:12px; color:var(--muted); }
-  .hbar .act { border-radius:9px; padding:7px 12px; font-weight:650; }
-  .hbar .count { margin-left:auto; font-size:11.5px; font-weight:650; color:var(--muted);
+  .hbar label { white-space:nowrap; flex:none; }
+  /* One press per month. They scroll sideways when a stream has been filed
+     for longer than the bar is wide. */
+  .months { display:flex; gap:6px; flex:1 1 auto; min-width:0;
+            overflow-x:auto; padding:2px 1px; scrollbar-width:none; }
+  .months::-webkit-scrollbar { display:none; }
+  .months.over { -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 22px),
+                 transparent);
+                 mask-image:linear-gradient(to right, #000 calc(100% - 22px),
+                 transparent); }
+  .months button { flex:none; border:1px solid var(--line); background:var(--card);
+                   color:var(--muted); font:inherit; font-size:12px; font-weight:650;
+                   letter-spacing:-.1px; padding:6.5px 13px; border-radius:999px;
+                   cursor:pointer; white-space:nowrap;
+                   transition:background-color .14s ease, color .14s ease,
+                              border-color .14s ease; }
+  .months button:hover { background:var(--hover); color:var(--ink); }
+  .months button.on { font-weight:750;
+                      color:color-mix(in srgb, var(--c, var(--blue)) 80%, var(--ink));
+                      background:color-mix(in srgb, var(--c, var(--blue)) 11%,
+                                 transparent);
+                      border-color:color-mix(in srgb, var(--c, var(--blue)) 34%,
+                                   transparent); }
+  .hbar .count { flex:none; font-size:11.5px; font-weight:650; color:var(--muted);
                  background:var(--row); border-radius:999px; padding:5px 11px;
                  box-shadow:inset 0 0 0 1px var(--line); white-space:nowrap;
                  white-space:nowrap; }
@@ -583,16 +594,14 @@
     <header><span class="dic" id="hIc"></span><h4 id="hTitle">History</h4>
       <button type="button" onclick="closeHistory()" aria-label="Close">&times;</button></header>
     <div class="body scroll">
+      <!-- A month, picked in one press. The question asked of history is
+           "what went in during September", not "what went in between the
+           14th and the 22nd" - and a pair of date fields made you answer the
+           second one to get the first. The months are built from what is
+           actually filed, so none of them can come back empty. -->
       <div class="hbar">
-        <label for="hFrom" id="hLbl">Dates covered</label>
-        <input type="date" id="hFrom" onchange="drawHistory()">
-        <!-- Months, not a month picker: Safari has no native one, and a
-             stream filed monthly only ever has a handful of them anyway. -->
-        <select id="hFromM" hidden onchange="drawHistory()"></select>
-        <span class="to">to</span>
-        <input type="date" id="hTo" onchange="drawHistory()">
-        <select id="hToM" hidden onchange="drawHistory()"></select>
-        <button class="act" onclick="clearHistoryFilter()">Clear</button>
+        <label id="hLbl">Month</label>
+        <div class="months" id="hMonths"></div>
         <span class="count" id="hCount"></span>
       </div>
       <div id="hBody"></div>
@@ -1215,13 +1224,9 @@ function openHistory(c){
   const hsrc = document.querySelector(`.uc[data-card="${c.id}"] .ic`);
   hIc.innerHTML = hsrc ? hsrc.innerHTML : '';
   hVeil.style.setProperty('--c', c.colour || '#2563EB');
-  // A day picker over a stream filed by month asks a question it cannot
-  // answer, so the filter takes the shape of what is behind it.
-  const month = wantsMonth(c);
-  hLbl.textContent = month ? 'Months covered' : 'Dates covered';
-  hFrom.hidden = hTo.hidden = month;
-  hFromM.hidden = hToM.hidden = !month;
-  hFrom.value = hTo.value = hFromM.value = hToM.value = '';
+  historyMonth = '';
+  hMonths.dataset.sig = '';
+  hMonths.innerHTML = '';
   hCount.textContent = '';
   hBody.innerHTML = '<p class="empty">Loading…</p>';
   hVeil.classList.add('on');
@@ -1298,8 +1303,7 @@ const keyEnd   = k => (k.length > 10 ? k.slice(12) : '');
 
 function niceDate(isoDay){
   const [y,m,d] = isoDay.split('-').map(Number);
-  return new Date(y, m-1, d).toLocaleDateString('en-GB',
-    { day:'numeric', month:'short', year:'numeric' });
+  return `${d} ${MON3[m-1]} ${y}`;
 }
 
 // The purchase instruction has no date in it. KSBC exports it a month at a
@@ -1313,18 +1317,41 @@ function niceMonth(isoDay){
 }
 function byMonth(){ return historyCard ? wantsMonth(historyCard) : false; }
 
-// Newest first, the way the list below reads, with a blank meaning no bound.
-function fillMonthPickers(keys){
+// Newest first, the way the list below reads. Built from the months actually
+// filed, so a month on the bar always has something behind it.
+let historyMonth = '';
+function fillMonths(keys){
   const months = [...new Set(keys.map(k => k.slice(0, 7)))].sort().reverse();
-  const sig = months.join('|');
-  for (const sel of [hFromM, hToM]){
-    if (sel.dataset.sig === sig) continue;
-    const had = sel.value;
-    sel.dataset.sig = sig;
-    sel.innerHTML = `<option value="">Any month</option>`
-      + months.map(m => `<option value="${m}">${escapeHtml(niceMonth(m + '-01'))}</option>`).join('');
-    if (months.includes(had)) sel.value = had;
-  }
+  if (historyMonth && !months.includes(historyMonth)) historyMonth = '';
+  const sig = months.join('|') + '#' + historyMonth;
+  if (hMonths.dataset.sig === sig) return months;
+  hMonths.dataset.sig = sig;
+  const chip = (v, label) =>
+    `<button type="button" class="${historyMonth === v ? 'on' : ''}"`
+    + ` onclick="pickMonth('${v}')">${escapeHtml(label)}</button>`;
+  hMonths.innerHTML = chip('', 'All')
+    + months.map(m => chip(m, shortMonth(m))).join('');
+  // A rail that runs past its edge says so, rather than ending in a chip cut
+  // in half that looks like a rendering fault.
+  requestAnimationFrame(() => hMonths.classList.toggle('over',
+    hMonths.scrollWidth > hMonths.clientWidth + 1));
+  return months;
+}
+// "Sep 2026" on the chip; the long form is for sentences. Spelled from a
+// fixed set because en-GB renders September as "Sept" and nothing else with
+// four letters, which makes one chip in twelve the odd one out.
+const MON3 = ['Jan','Feb','Mar','Apr','May','Jun',
+              'Jul','Aug','Sep','Oct','Nov','Dec'];
+function shortMonth(ym){
+  const [y,m] = ym.split('-').map(Number);
+  return `${MON3[m-1]} ${y}`;
+}
+function pickMonth(v){
+  historyMonth = v;
+  hMonths.dataset.sig = '';
+  drawHistory();
+  const on = hMonths.querySelector('button.on');
+  if (on) on.scrollIntoView({ block:'nearest', inline:'nearest' });
 }
 function whenWords(isoDay){ return byMonth() ? niceMonth(isoDay) : niceDate(isoDay); }
 function clock(iso){
@@ -1332,17 +1359,11 @@ function clock(iso){
     { hour:'numeric', minute:'2-digit', hour12:true });
 }
 
-function clearHistoryFilter(){
-  hFrom.value = hTo.value = hFromM.value = hToM.value = '';
-  drawHistory();
-}
-
 function drawHistory(){
-  // A range, because the question is usually "what went in that week?" rather
-  // than one exact day. Either end on its own works as an open bound.
+  // One month at a time. The shape of a row is still whatever the stream is
+  // filed as - a day, a window, or a month - but the filter over them is
+  // always the month, because that is the question.
   const month = byMonth();
-  const from = month ? hFromM.value : hFrom.value;
-  const to   = month ? hToM.value   : hTo.value;
 
   const byDate = new Map();
   for (const j of historyJobs){
@@ -1350,25 +1371,18 @@ function drawHistory(){
     if (!key) continue;
     (byDate.get(key) || byDate.set(key, []).get(key)).push(j);
   }
-  // The two month selects are built from the months actually filed, so the
-  // filter can never ask for one that was never uploaded.
-  if (month) fillMonthPickers([...byDate.keys()].map(keyStart));
+  fillMonths([...byDate.keys()].map(keyStart));
 
-  // In month mode the filter values are YYYY-MM, so the key is cut to match.
-  const cut = d => month ? keyStart(d).slice(0, 7) : keyStart(d);
   const days = [...byDate.keys()].sort().reverse()
-    .filter(d => (!from || cut(d) >= from) && (!to || cut(d) <= to));
+    .filter(d => !historyMonth || keyStart(d).slice(0, 7) === historyMonth);
 
   const unit = month ? 'month' : 'date';
-  hCount.textContent = (from || to)
+  hCount.textContent = historyMonth
     ? `${days.length} of ${byDate.size} ${unit}s`
     : `${byDate.size} ${unit}${byDate.size === 1 ? '' : 's'} covered`;
 
   if (!days.length){
-    const say = v => month ? niceMonth(v + '-01') : niceDate(v);
-    const span = from && to ? `${say(from)} – ${say(to)}`
-               : from ? `on or after ${say(from)}`
-               : to ? `on or before ${say(to)}` : '';
+    const span = historyMonth ? `in ${niceMonth(historyMonth + '-01')}` : '';
     const box = '<svg viewBox="0 0 24 24" aria-hidden="true">'
       + '<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z"/>'
       + '<path d="m3 8.5 9 4.5 9-4.5M12 13v7"/></svg>';
