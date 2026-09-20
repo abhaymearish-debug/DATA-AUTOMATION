@@ -49,7 +49,12 @@ ROW_MAX, ROW_MIN, TOTAL_MIN = 22.8, 18.35, 20.075
 BOTTOM, FOOT_BASE = 26.0, 17.7
 INSET, BRAND_X, PACK_X, HEAD_X = 15.0, 6.2, 18.2, 5.0
 COL0_PAD, BASE_BAND, BASE_TITLE = 4.841, 15.0, 28.0
-RULE_V, RULE_H = 1.6, 2.2
+# The gold rules that close a band, and the hairline grid inside the body -
+# both the weights the Warehouse Stock Report uses, so the two reports sit in
+# a folder together without one looking heavier-handed than the other. The
+# rule under the header used to be 2.2, which read as a bar rather than a line.
+RULE_V, RULE_H = 0.9, 1.3
+GRID_LW = 0.4
 
 F_TITLE, F_BAND, F_HEAD, F_ROW, F_TOTAL, F_FOOT = 18.0, 11.0, 9.5, 9.0, 10.5, 8.0
 BOLD, BOOK = "Helvetica-Bold", "Helvetica"
@@ -61,6 +66,7 @@ GOLD_T = colors.Color(1.0, 0.741, 0.192)
 PAPER  = colors.Color(0.96, 0.97, 0.99)
 INK    = colors.Color(0.314, 0.314, 0.314)
 ZERO   = colors.Color(0.784, 0.804, 0.843)
+HAIR   = colors.Color(0.855, 0.871, 0.898)
 
 HEADINGS = ["BRAND/PACK", "OPENING", "RECEIPT", "SALES", "CLOSING"]
 MEASURES = [("Shop Opening Cases", "Shop Opening Bottles"),
@@ -252,7 +258,7 @@ def draw_bands(c, cols, width, page_one, shop, bond, period) -> float:
             c.setLineWidth(RULE_V)
             c.line(x + cw, y, x + cw, y - HEAD_H)
         c.setLineWidth(RULE_H)
-        c.line(x, y - HEAD_H + 1.1, x + cw, y - HEAD_H + 1.1)
+        c.line(x, y - HEAD_H + RULE_H / 2, x + cw, y - HEAD_H + RULE_H / 2)
         x += cw
     return y - HEAD_H
 
@@ -283,6 +289,35 @@ def draw_row(c, cols, width, y, row, h, stripe) -> None:
         c.setFillColor(ZERO if (not brand and not total and row["values"][k] == 0) else ink)
         c.drawCentredString(x + cw / 2, base, text)
         x += cw
+
+
+def draw_grid(c, cols, width, placed) -> None:
+    """The grid, laid over the rows so no fill can paint across it.
+
+    A pack row is ruled into cells the way the stock report rules its body:
+    hairline columns, and a hairline closing each row. A brand row is a navy
+    band and stays solid - it is the heading for the packs under it, not a
+    row of cells. The shop's total is lined in gold above and below, which is
+    how the stock report closes its own total and is what tells you, at a
+    glance down a page of shops, where one shop ends and the next begins.
+    """
+    edges = [sum(cols[:i]) for i in range(1, len(cols))]
+
+    c.setLineWidth(GRID_LW)
+    c.setStrokeColor(HAIR)
+    for row, y, rh in placed:
+        if row["kind"] in ("brand", "total"):
+            continue
+        for x in edges:
+            c.line(x, y - rh, x, y)
+        c.line(0, y - rh, width, y - rh)
+
+    c.setLineWidth(RULE_H)
+    c.setStrokeColor(GOLD)
+    for row, y, rh in placed:
+        if row["kind"] == "total":
+            c.line(0, y, width, y)
+            c.line(0, y - rh, width, y - rh)
 
 
 def paginate(shops, h):
@@ -316,10 +351,13 @@ def build_bond_pdf(bond, shops, names, master, period, out) -> tuple[int, float]
     for n, (shop_ix, rows) in enumerate(pages):
         y = draw_bands(c, cols, width, n == 0, names.get(codes[shop_ix], codes[shop_ix]),
                        bond, period)
+        placed = []
         for i, row in enumerate(rows):
             rh = max(h, TOTAL_MIN) if row["kind"] == "total" else h
             draw_row(c, cols, width, y, row, rh, i)
+            placed.append((row, y, rh))
             y -= rh
+        draw_grid(c, cols, width, placed)
         c.setFont(BOOK, F_FOOT)
         c.setFillColor(NAVY_T)
         c.drawCentredString(width / 2, FOOT_BASE, f"Page {n + 1} of {len(pages)}")
