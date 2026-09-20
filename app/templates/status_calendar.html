@@ -62,30 +62,40 @@
      the five meters underneath say where they are. */
   .sum { flex:1 1 auto; display:flex; align-items:center; gap:12px;
          flex-wrap:wrap; min-width:0; }
+  /* One chip, so it can carry some weight. It used to share the corner with
+     "1 day with nothing in" - a second count of the same shortfall, sliced a
+     different way, which made two pills out of one fact and left neither of
+     them worth reading. The number is a figure here, the word is its unit,
+     and the mark beside it is the empty bar the tiles are full of. */
   .sum .pills { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
-  .sum .pill { display:inline-flex; align-items:center; gap:7px;
-               border-radius:999px; padding:5.5px 12px 5.5px 10px;
-               font-size:12px; font-weight:650; white-space:nowrap;
-               color:var(--muted); background:var(--row);
+  .sum .pill { display:inline-flex; align-items:center; gap:10px;
+               border-radius:13px; padding:7px 15px 7px 12px;
+               font-size:12.5px; font-weight:650; letter-spacing:-.1px;
+               white-space:nowrap; color:var(--muted); background:var(--row);
                box-shadow:inset 0 0 0 1px var(--line); }
-  .sum .pill b { color:var(--ink); font-weight:800; font-variant-numeric:tabular-nums; }
-  .sum .pill i { width:9px; height:11px; border-radius:3px; flex:none; }
-  /* The gaps chip wears the same empty bar the tiles do. */
-  .sum .pill.gap { color:color-mix(in srgb, var(--bad) 78%, var(--ink));
-                   background:color-mix(in srgb, var(--bad) 7%, var(--card));
-                   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 22%,
-                              transparent); }
+  .sum .pill b { font-size:15.5px; font-weight:800; letter-spacing:-.45px;
+                 color:var(--ink); font-variant-numeric:tabular-nums; }
+  .sum .pill i { width:10px; height:13px; border-radius:3.5px; flex:none; }
+  .sum .pill.gap { color:color-mix(in srgb, var(--bad) 58%, var(--ink));
+      background:linear-gradient(180deg,
+                 color-mix(in srgb, var(--bad) 12%, var(--card)),
+                 color-mix(in srgb, var(--bad) 6%, var(--card)));
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 26%, transparent),
+                 0 1px 2px color-mix(in srgb, var(--bad) 12%, transparent); }
   .sum .pill.gap b { color:var(--bad); }
-  .sum .pill.gap i { background:color-mix(in srgb, var(--bad) 5%, transparent);
-                     box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 46%,
+  .sum .pill.gap i { background:color-mix(in srgb, var(--bad) 6%, transparent);
+                     box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--bad) 48%,
                                 transparent); }
-  .sum .pill.none i { background:none;
-                      box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 40%,
-                                 var(--line)); }
-  .sum .pill.all { color:var(--ok); background:color-mix(in srgb, var(--ok) 8%, var(--card));
-                   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ok) 24%,
-                              transparent); }
-  .sum .pill.all i { background:var(--ok); }
+  /* Nothing outstanding is a sentence, not a count, so it drops the figure. */
+  .sum .pill.all { color:var(--ok); font-weight:700;
+      background:linear-gradient(180deg,
+                 color-mix(in srgb, var(--ok) 12%, var(--card)),
+                 color-mix(in srgb, var(--ok) 6%, var(--card)));
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ok) 26%, transparent),
+                 0 1px 2px color-mix(in srgb, var(--ok) 12%, transparent); }
+  .sum .pill.all i { width:15px; height:15px; border-radius:50%; background:var(--ok);
+                     color:#fff; display:grid; place-items:center;
+                     font-size:9px; font-weight:800; font-style:normal; }
 
   /* ---------- the key ----------
      Not a chart. One line that names the five streams in the order their
@@ -459,22 +469,25 @@ function draw(){
   // What the month asked for, and what it got - counted over every stream on
   // every day it was due, which is the only figure on this screen that can be
   // believed on its own.
-  const wanted = S.reduce((n, s) => n + (dueDays[s.key] || 0), 0);
-  const inAll  = S.reduce((n, s) => n + Math.min(tally[s.key] || 0,
-                                                 dueDays[s.key] || 0), 0);
+  // A raw can arrive before it is due - today's shop daily, uploaded this
+  // evening rather than tomorrow morning - and then a stream has more days in
+  // than were asked of it. Counting those against the days due gave "20/19",
+  // which reads as a fault in the arithmetic rather than as being early. The
+  // denominator is whichever is larger, so a day that came early counts as a
+  // day answered instead of as an overflow.
+  const asked = s => Math.max(dueDays[s.key] || 0, tally[s.key] || 0);
+  const wanted = S.reduce((n, s) => n + asked(s), 0);
+  const inAll  = S.reduce((n, s) => n + (tally[s.key] || 0), 0);
   const gaps = wanted - inAll;
-  const pill = (cls, body) => `<span class="pill ${cls}"><i></i>${body}</span>`;
-  lede.innerHTML =
-    `<span class="pills">${
-      gaps ? pill('gap', `<b>${gaps}</b> ${gaps === 1 ? 'gap' : 'gaps'}`)
-           : pill('all', 'Nothing outstanding')}${
-      blank ? pill('none', `<b>${blank}</b> ${
-        blank === 1 ? 'day with nothing in' : 'days with nothing in'}`) : ''}</span>`;
+  lede.innerHTML = `<span class="pills">${gaps
+    ? `<span class="pill gap"><i></i><b>${gaps}</b> ${
+        gaps === 1 ? 'gap' : 'gaps'}</span>`
+    : `<span class="pill all"><i>\u2713</i>Nothing outstanding</span>`}</span>`;
 
   // The key. Fixed order, never re-sorted - it is what the bars below mean,
   // and a colour learnt here has to still be in the same place down there.
   key.innerHTML = S.map(s => {
-    const n = tally[s.key] || 0, of = dueDays[s.key] || 0;
+    const n = tally[s.key] || 0, of = asked(s);
     const pct = of ? Math.min(100, Math.round(n / of * 100)) : 0;
     return `<div class="kk${of && n >= of ? ' done' : ''}" style="--c:${esc(s.colour)}"
                  title="${esc(s.label)}: ${n} of ${of} days due">
