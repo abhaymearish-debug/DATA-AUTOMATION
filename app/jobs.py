@@ -193,6 +193,17 @@ def run_pipeline(job: Job, ctx: JobContext) -> None:
         return
 
     job.status = JobStatus.RUNNING
+    # warehouse_stock writes its dated workbook straight into the stream
+    # folder, so "what did this build produce" cannot be answered by looking
+    # at the folder afterwards - the newest file there may be last week's.
+    # Remembered here so _resolve_output can tell a new workbook from an old
+    # one, rather than reporting the latest it finds as this build's.
+    ctx.before = {}
+    if job.stream_key == "warehouse_stock":
+        folder = STREAMS["warehouse_stock"].input_path()
+        if folder.is_dir():
+            ctx.before = {p.name: p.stat().st_mtime_ns
+                          for p in folder.glob("* WAREHOUSE STOCK.xlsx")}
     STORE.persist(job)
 
     log_path = STORE.dir_for(job) / "build.log"
@@ -249,7 +260,8 @@ def run_pipeline(job: Job, ctx: JobContext) -> None:
                 result.status = "failed"
                 if step.fatal:
                     job.status = JobStatus.FAILED
-                    job.error = _explain(step, result, proc.stdout, proc.stderr)
+                    job.error = _explain(step, result, proc.stdout,
+                                        proc.stderr, job.stream_key)
                     for later in job.steps[i + 1:]:
                         later.status = "skipped"
                     _finish(job, log_path, log_lines)
@@ -296,7 +308,8 @@ def run_pipeline(job: Job, ctx: JobContext) -> None:
     _finish(job, log_path, log_lines)
 
 
-def _explain(step: Step, result: StepResult, stdout: str, stderr: str) -> str:
+def _explain(step: Step, result: StepResult, stdout: str, stderr: str,
+             stream_key: str = "") -> str:
     """Say what the script said, not just that it exited non-zero.
 
     These scripts fail loudly and usefully — 'ERROR: gap between existing
@@ -318,9 +331,20 @@ def _explain(step: Step, result: StepResult, stdout: str, stderr: str) -> str:
                 break
 
     head = f"{step.display()} failed"
+    # Only true for the streams that build in a scratch folder and promote
+    # afterwards. build_warehouse_stock.py writes its workbook into the live
+    # folder and appends the history CSVs as it goes, so by the time a step
+    # fails the live data may already have changed - and telling the operator
+    # otherwise sends them away without checking.
+    if stream_key == "warehouse_stock":
+        tail = ("The warehouse stock workbook and history are written in place, "
+                "so check the stream folder before retrying — this run may have "
+                "changed them.")
+    else:
+        tail = "The live workbook was NOT modified."
     if said:
-        return f"{head}: {said} (exit {result.returncode}) — the live workbook was NOT modified."
-    return (f"{head} (exit {result.returncode}). The live workbook was NOT modified. "
+        return f"{head}: {said} (exit {result.returncode}) — {tail}"
+    return (f"{head} (exit {result.returncode}). {tail} "
             "See the build log for what the script printed.")
 
 
@@ -358,7 +382,14 @@ def _resolve_output(job: Job, ctx: JobContext) -> Path | None:
         # the history CSVs. Snapshot semantics, so there is no scratch stage —
         # see docs/KNOWN_DIFFERENCES.md.
         folder = STREAMS["warehouse_stock"].input_path()
-        books = sorted(folder.glob("* WAREHOUSE STOCK.xlsx"), key=lambda p: p.stat().st_mtime)
-        return books[-1] if books else None
+        before = getattr(ctx, "before", None) or {}
+        fresh = [p for p in folder.glob("* WAREHOUSE STOCK.xlsx")
+                 if before.get(p.name) != p.stat().st_mtime_ns]
+        if not fresh:
+            # A build that wrote nothing used to hand back the newest workbook
+            # in the folder - very often another date's - and the job reported
+            # PROMOTED, pointing the operator at a file this run never touched.
+            return None
+        return max(fresh, key=lambda p: p.stat().st_mtime_ns)
 
     return None

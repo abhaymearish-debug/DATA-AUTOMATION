@@ -1104,6 +1104,14 @@ def delete_upload_date(request: Request, stream_key: str, day: str = Form(...),
                     removed += 1
             except OSError:
                 pass
+        # Purchase Instruction and Item Issue do not keep their files loose in
+        # the stream folder - they are filed under the month or period they
+        # cover, so the loop above matched nothing and deleted nothing. The
+        # job record was still forgotten, which left the data answering reports
+        # with no run behind it: a second attempt then found no jobs and
+        # returned "Nothing uploaded for that period", so it could never be
+        # deleted at all.
+        removed += _purge_filed_period(stream_key, job)
         shutil.rmtree(STORE.dir_for(job), ignore_errors=True)
         STORE.forget(job.id)
 
@@ -1126,6 +1134,45 @@ def delete_upload_date(request: Request, stream_key: str, day: str = Form(...),
                     "still uploaded.")
 
     return JSONResponse({"ok": True, "runs": len(jobs), "raws": removed, "note": note})
+
+
+def _purge_filed_period(stream_key: str, job) -> int:
+    """Remove the month or period folder a filed-by-period stream stores under.
+
+    Returns how many files went. These two streams answer their reports from
+    the filed folder, not from loose raws, so deleting the run without
+    deleting the folder leaves the report unchanged and the upload
+    untraceable.
+    """
+    folder = None
+    try:
+        if stream_key == "purchase_instruction":
+            month = (job.covers or "")[:7]
+            folder = pi_mod.month_dir(month) if month else None
+        elif stream_key == "item_issue":
+            period = (job.summary or {}).get("period") or ""
+            if not period and job.covers:
+                period = next((d.name for d in itemissue.root().iterdir()
+                               if d.is_dir() and d.name.endswith(job.covers)), "")
+            folder = (itemissue.root() / period) if period else None
+    except (ValueError, OSError):
+        return 0
+    if folder is None or not folder.is_dir():
+        return 0
+    count = sum(1 for _ in folder.glob("*"))
+    # Kept, not erased: the same promise the built workbooks get.
+    bin_dir = config.WORKSPACE_ROOT / "_deleted" / stream_key
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    dest = bin_dir / folder.name
+    n = 1
+    while dest.exists():
+        dest = bin_dir / f"{folder.name} ({n})"
+        n += 1
+    try:
+        shutil.move(str(folder), str(dest))
+    except OSError:
+        return 0
+    return count
 
 
 # Which built workbooks belong to which stream. They are outputs, not sources:

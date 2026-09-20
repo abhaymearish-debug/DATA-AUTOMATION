@@ -101,6 +101,10 @@ class JobContext:
     workbook: Path | None = None
     scratch_dir: Path | None = None
     meta: dict = field(default_factory=dict)
+    # name -> mtime_ns of the stream folder's workbooks before the build, for
+    # the streams that write in place and so cannot be asked afterwards which
+    # file this run produced.
+    before: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
