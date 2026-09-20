@@ -633,6 +633,139 @@
     .chk .sw, .chk .sw::after { transition:none; }
     .act:hover, .btn:hover, .act:active, .btn:active, .seg button:active { transform:none; }
   }
+
+/* =====================================================================
+   Dark refinements for the report tables
+   =====================================================================
+   The tables were built light-first, and several of their colours are
+   written as literals rather than tokens - which is fine until the page
+   turns dark underneath them. Three things go wrong there, and all three
+   are fixed here rather than in eight templates, so the reports cannot
+   drift apart again.
+
+   Specificity is deliberate: :root[data-theme="dark"] outranks the plain
+   `tr.grand td` in each template whatever the order the styles land in.
+   ===================================================================== */
+
+/* 1. The GRAND TOTAL row. On white, a gold band under a black figure is
+      the row you look for. On a dark ground the same band is a slab of
+      light - the brightest thing on the page by a distance, and the eye
+      goes to it before the figures. It keeps the gold and loses the slab:
+      a deep gold-tinted surface, the figure in gold, and a hairline rule
+      above it doing the work the fill used to. */
+:root[data-theme="dark"] tr.grand td,
+:root[data-theme="dark"] tr.gt td,
+:root[data-theme="dark"] tr.total td {
+  background:linear-gradient(180deg,
+             color-mix(in srgb, var(--gold) 15%, var(--card)),
+             color-mix(in srgb, var(--gold) 9%, var(--card)));
+  color:var(--gold);
+  border-left-color:color-mix(in srgb, var(--gold) 20%, transparent);
+  box-shadow:inset 0 1px 0 color-mix(in srgb, var(--gold) 55%, transparent);
+}
+:root[data-theme="dark"] tr.grand td.z,
+:root[data-theme="dark"] tr.gt td.z,
+:root[data-theme="dark"] tr.total td.z {
+  color:color-mix(in srgb, var(--gold) 42%, var(--muted));
+}
+/* Its label leads, so it carries a little more weight than its figures. */
+:root[data-theme="dark"] tr.grand td:first-child,
+:root[data-theme="dark"] tr.gt td:first-child,
+:root[data-theme="dark"] tr.total td:first-child {
+  color:color-mix(in srgb, var(--gold) 88%, #fff);
+}
+/* Whatever the row carries beside its label - a count of what it totals, a
+   figure in another accent - was written to sit on gold, which means a dark
+   ink that vanishes once the gold is gone. */
+:root[data-theme="dark"] tr.grand .cnt,
+:root[data-theme="dark"] tr.gt .cnt,
+:root[data-theme="dark"] tr.total .cnt {
+  color:color-mix(in srgb, var(--gold) 55%, var(--muted)); }
+:root[data-theme="dark"] tr.grand > td.amber,
+:root[data-theme="dark"] tr.gt > td.amber { color:var(--warn); }
+/* Its sticky footer needs an opaque backing, or the rows scroll through it. */
+:root[data-theme="dark"] tbody tr.grand > td {
+  border-top-color:color-mix(in srgb, var(--gold) 45%, transparent); }
+
+/* 2. The cluster bands. Full-strength gold on navy is a lot of colour for
+      a row that repeats three times per table; on the dark ground it also
+      sits at almost the same brightness as the grand total, so the two
+      stop ranking. Pulled back to a tinted surface with the gold kept for
+      the text alone. */
+:root[data-theme="dark"] tr.cluster td,
+:root[data-theme="dark"] tr.cl td {
+  background:color-mix(in srgb, var(--blue) 11%, var(--card));
+  color:color-mix(in srgb, var(--gold) 82%, var(--ink));
+  border-bottom-color:color-mix(in srgb, var(--blue) 26%, transparent);
+  border-left-color:color-mix(in srgb, var(--blue) 22%, transparent);
+}
+:root[data-theme="dark"] tr.cluster td.z,
+:root[data-theme="dark"] tr.cl td.z { color:var(--zero); }
+
+/* 3. Text written as --navy. In the light theme that token is the deep
+      blue these labels are printed in; in the dark theme it is very nearly
+      the page itself, so on Target vs Achievement the bond names and the
+      TARGET / ACHIEVED labels were invisible - present, selectable, and
+      unreadable. They take the ink they should have been asking for. */
+:root[data-theme="dark"] tbody td.bond,
+:root[data-theme="dark"] tbody td.nm,
+:root[data-theme="dark"] tbody tr.tgt td.ty,
+:root[data-theme="dark"] tbody tr.ach td.ty { color:var(--ink); }
+:root[data-theme="dark"] tbody tr.cl.tgt td.ty,
+:root[data-theme="dark"] tbody tr.cl.ach td.ty {
+  color:color-mix(in srgb, var(--gold) 82%, var(--ink)); }
+:root[data-theme="dark"] tbody tr.gt.tgt td.ty,
+:root[data-theme="dark"] tbody tr.gt.ach td.ty { color:var(--gold); }
+
+/* 4. Rules and fills written as light literals. A 1px #EEF1F6 is invisible
+      on white and a bright wire on navy; an #F7F8FB cell is a page-coloured
+      panel on white and a lamp in the dark. Both become the theme's own
+      line and row colours. */
+:root[data-theme="dark"] tbody tr.tgt td { border-bottom-color:var(--line); }
+:root[data-theme="dark"] tbody td.nc,
+:root[data-theme="dark"] thead th.nc { background:var(--row); color:var(--zero); }
+:root[data-theme="dark"] tr.cluster td.nc,
+:root[data-theme="dark"] tr.cl td.nc {
+  background:color-mix(in srgb, var(--blue) 8%, var(--card)); color:var(--zero); }
+:root[data-theme="dark"] tr.grand td.nc,
+:root[data-theme="dark"] tr.gt td.nc {
+  background:color-mix(in srgb, var(--gold) 8%, var(--card));
+  color:color-mix(in srgb, var(--gold) 38%, var(--muted)); }
+
+/* 5. The notice blocks. A cream panel with brown text is a quiet note on
+      white and a lit rectangle on navy - and on Target vs Achievement it is
+      the first thing the page shows. Same meaning, built from the theme's
+      own warning and danger colours instead of fixed creams. */
+:root[data-theme="dark"] .warn {
+  background:color-mix(in srgb, var(--warn) 13%, var(--card));
+  border-color:color-mix(in srgb, var(--warn) 34%, transparent);
+  color:color-mix(in srgb, var(--warn) 62%, var(--ink)); }
+:root[data-theme="dark"] .warn strong { color:var(--warn); }
+:root[data-theme="dark"] .banner {
+  background:color-mix(in srgb, var(--bad) 12%, var(--card));
+  border-color:color-mix(in srgb, var(--bad) 32%, transparent);
+  color:color-mix(in srgb, var(--bad) 58%, var(--ink)); }
+:root[data-theme="dark"] .banner strong { color:var(--bad); }
+
+/* 6. The gold seams on Liquidation Summary. Four blocks of columns divided
+      by full-height gold rules: on white they are a hairline, on navy they
+      are four lit wires running the height of the table, and the eye keeps
+      catching them instead of the figures. Same seam, at the weight a rule
+      should have. */
+:root[data-theme="dark"] tbody td.gut,
+:root[data-theme="dark"] thead th.gut {
+  border-left-color:color-mix(in srgb, var(--gold) 34%, transparent);
+  border-right-color:color-mix(in srgb, var(--gold) 34%, transparent); }
+
+/* 7. A table is easier to read across when its surface is lifted off the
+      page rather than drawn onto it. The card gets a touch more separation
+      and a softer edge, which on a dark ground does more than a border. */
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .board {
+  box-shadow:0 1px 0 color-mix(in srgb, #fff 4%, transparent) inset,
+             0 12px 32px -18px rgba(0,0,0,.75);
+}
 </style>
 {% block head %}{% endblock %}
 </head>
