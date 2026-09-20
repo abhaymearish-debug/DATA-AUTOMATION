@@ -36,19 +36,13 @@
   .selw i { position:absolute; right:2px; font-style:normal; font-size:9px;
             color:var(--muted); pointer-events:none; }
 
-  input[type=search].search { border:1px solid var(--line); background:var(--card);
-      border-radius:10px; padding:9px 11px 9px 36px; font:inherit; font-size:13.5px;
-      color:var(--ink); min-width:268px; }
-  input[type=search].search:focus { outline:2px solid #C7D2FE; outline-offset:-1px;
-      border-color:var(--blue); }
-  .searchwrap { position:relative; }
   /* In the filter row the search gives way before the buttons wrap: it keeps
      its width while there is room and shrinks when there is not. */
   /* Two stacks rather than one long line: search over the switch, Excel over
      PDF. The strip then keeps its shape at any width instead of spilling the
      buttons onto a row of their own. */
   .bar1 .stack { display:flex; flex-direction:column; gap:7px;
-                 flex:1 1 150px; max-width:262px; }
+                 flex:1 1 244px; max-width:296px; }
   .bar1 .searchwrap { width:100%; }
   /* The stack stretches what is in it, and a pill stretched to the width of
      the search box is mostly empty pill. It takes the width of its own words
@@ -57,9 +51,7 @@
   .bar1 .sp { flex-direction:column; align-items:stretch; gap:7px; }
   .bar1 .sp > * { width:176px; }
   .bar1 .sp .act { width:100%; box-sizing:border-box; text-align:center; }
-  .bar1 .searchwrap .search { min-width:0; width:100%; box-sizing:border-box; }
-  .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
-                    color:var(--muted); font-size:15px; pointer-events:none; }
+
   .menu { position:relative; display:inline-block; }
   .menu .items { display:none; position:absolute; right:0; top:112%; background:var(--card);
                  border:1px solid var(--line); border-radius:10px; min-width:248px; z-index:40;
@@ -278,7 +270,6 @@
     .selw select { max-width:none; width:100%; }
     .fdiv { display:none; }
     .searchwrap { flex:1 1 150px; }
-    input[type=search].search { min-width:0; width:100%; }
     .lede { display:none; }
     .bd-h { flex-wrap:wrap; }
     .bd-h .mini { margin-left:0; width:100%; justify-content:space-between; }
@@ -341,7 +332,6 @@
          strip stays one block however narrow the window gets. -->
     <div class="stack">
       <div class="searchwrap" id="bar2">
-        <span class="ic">⌕</span>
         <input id="q" class="search" type="search" placeholder="Search bond or shop" autocomplete="off">
       </div>
       <label class="chk"><input type="checkbox" id="round" checked onchange="load()"><span class="sw"></span><span class="t">Round off</span></label>

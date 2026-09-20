@@ -36,10 +36,6 @@
             color:var(--muted); pointer-events:none; }
   .fitem:focus-within { background:var(--hover); box-shadow:inset 0 0 0 1px #C7D2FE; }
 
-  input[type=search] {
-      border:1px solid var(--line); background:var(--card); border-radius:10px;
-      padding:9px 11px; font:inherit; font-size:13.5px; color:var(--ink); }
-  input[type=search]:focus { outline:2px solid #C7D2FE; outline-offset:-1px; border-color:var(--blue); }
 
   /* ---------- calendar ---------- */
   .calpop { display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:50;
@@ -68,18 +64,12 @@
   .cal-f button { margin-left:auto; border:0; background:none; font:inherit; font-size:12px;
                   font-weight:650; color:var(--blue); cursor:pointer; padding:0; }
 
-  input[type=search].search { min-width:268px; padding-left:36px; padding-right:34px; }
-  .searchwrap { position:relative; }
   /* In the filter row the search gives way before the buttons wrap: it keeps
-     its width while there is room and shrinks when there is not. */
-  .bar1 .searchwrap { flex:1 1 150px; max-width:268px; }
-  .bar1 .searchwrap .search { min-width:0; width:100%; box-sizing:border-box; }
-  .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
-                    color:var(--muted); font-size:15px; pointer-events:none; }
-  .searchwrap kbd { position:absolute; right:9px; top:50%; transform:translateY(-50%);
-                    font:600 10px/1 ui-monospace,monospace; color:var(--muted);
-                    border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
-                    padding:3px 5px; background:var(--row); }
+     its width while there is room and shrinks when there is not. Wide enough
+     that "Search brand, pack or warehouse" fits - it used to be cut off at
+     "wareho", which is a placeholder telling you less than half of what it
+     is for. */
+  .bar1 .searchwrap { flex:1 1 250px; max-width:342px; }
 
                 color:var(--muted); padding:6px 13px; border-radius:7px; cursor:pointer; }
   .seg button.on { background:var(--card); color:var(--ink); box-shadow:0 1px 2px rgba(16,24,40,.10); }
@@ -218,10 +208,8 @@
 
   @media (max-width:760px){
     .searchwrap kbd { display:none; }
-    input[type=search].search { padding-right:11px; }
     .controls { padding-bottom:11px; }
     .bar1 .sp, .bar2 .sp { margin-left:0; width:100%; }
-    .search { min-width:0; width:100%; }
     .searchwrap { flex:1 1 150px; }
     .fbar { width:100%; flex-wrap:wrap; }
     .fitem { flex:1 1 44%; padding:7px 11px; }
@@ -263,7 +251,6 @@
       </div>
     </div>
     <div class="searchwrap">
-      <span class="ic">⌕</span>
       <input id="q" class="search" type="search" placeholder="Search brand, pack or warehouse" autocomplete="off">
       <kbd>/</kbd>
     </div>
@@ -476,7 +463,6 @@ let t = null;
 const q_ = document.getElementById('q');
 q_.addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 130); });
 document.addEventListener('keydown', e => {
-  if (e.key === '/' && document.activeElement !== q_){ e.preventDefault(); q_.focus(); }
   if (e.key === 'Escape'){ closeCal();
     if (document.activeElement === q_){ q_.value = ''; render(); q_.blur(); } }
 });

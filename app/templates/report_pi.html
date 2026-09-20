@@ -20,14 +20,8 @@
 
   /* Search sits with the filters - it is one - and the two downloads stack
      beside it, so the strip stays one block however narrow the window is. */
-  input[type=search].search { border:1px solid var(--line); background:var(--card);
-      border-radius:10px; padding:9px 11px 9px 36px; font:inherit; font-size:13.5px;
-      color:var(--ink); width:100%; box-sizing:border-box; }
-  input[type=search].search:focus { outline:2px solid #C7D2FE; outline-offset:-1px;
-      border-color:var(--blue); }
-  .searchwrap { position:relative; flex:1 1 140px; max-width:262px; }
-  .searchwrap .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%);
-                    color:var(--muted); font-size:15px; pointer-events:none; }
+  /* The box itself lives in base.html; a page only says how wide. */
+  .searchwrap { flex:1 1 244px; max-width:296px; }
   .bar1 .sp { flex-direction:column; align-items:stretch; gap:7px; }
   .bar1 .sp > * { width:176px; }
   .bar1 .sp .act { width:100%; box-sizing:border-box; text-align:center; }
@@ -170,7 +164,6 @@
       </label>
     </div>
     <div class="searchwrap">
-      <span class="ic">&#8981;</span>
       <input id="q" class="search" type="search" placeholder="Search bond or shop"
              autocomplete="off" oninput="onSearch()">
     </div>

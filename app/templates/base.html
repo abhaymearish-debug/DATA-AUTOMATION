@@ -375,10 +375,81 @@
   /* Anything that opens under a control opens rather than appears. */
   .calpop.on, .menu.open .items { animation:ksd-pop .16s cubic-bezier(.2,.7,.3,1) both; }
 
-  /* Search: the ring grows, and the glass takes the accent. */
-  input[type=search].search { transition:box-shadow .18s ease, border-color .18s ease; }
-  .searchwrap .ic { transition:color .18s ease; }
-  .searchwrap:focus-within .ic { color:var(--blue); }
+  /* ------------------------------------------------------------------
+     Search. One box, defined once, wherever it appears.
+
+     Four screens had four copies of it - three of them near-identical,
+     each with its own border, radius and focus ring - so the same control
+     read slightly differently depending on which report you were on. It
+     is one component now, and a page only says how wide it should be.
+
+     The box sits a shade above the page rather than being cut into it:
+     the same gradient, hairline and inner highlight the Source chip and
+     the buttons wear, so a filter strip reads as one set of controls.
+  ------------------------------------------------------------------ */
+  .searchwrap { position:relative; display:flex; align-items:center; }
+  .searchwrap input[type=search], input[type=search].search {
+      -webkit-appearance:none; appearance:none;
+      width:100%; box-sizing:border-box; min-width:0;
+      border:1px solid var(--line); border-radius:11px;
+      background:linear-gradient(180deg,
+                 color-mix(in srgb, var(--card) 97%, #fff),
+                 color-mix(in srgb, var(--card) 92%, var(--bg)));
+      box-shadow:0 1px 1px rgba(16,24,40,.04),
+                 inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
+      padding:9.5px 38px 9.5px 37px;
+      font:inherit; font-size:13.5px; font-weight:550; letter-spacing:-.1px;
+      color:var(--ink);
+      transition:border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+  .searchwrap input[type=search]::placeholder {
+      color:var(--muted); font-weight:500; letter-spacing:0; }
+  /* The browser's own clear cross is a different shape on every platform;
+     the one below is ours and is there on all of them. */
+  .searchwrap input[type=search]::-webkit-search-cancel-button,
+  .searchwrap input[type=search]::-webkit-search-decoration { -webkit-appearance:none; }
+  .searchwrap:hover input[type=search] {
+      border-color:color-mix(in srgb, var(--blue) 26%, var(--line)); }
+  .searchwrap input[type=search]:focus {
+      outline:none; background:var(--card);
+      border-color:color-mix(in srgb, var(--blue) 45%, var(--line));
+      box-shadow:0 2px 8px -3px rgba(16,24,40,.16),
+                 0 0 0 3.5px color-mix(in srgb, var(--blue) 11%, transparent),
+                 inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent); }
+
+  /* The glass: drawn, not typed. It was the character U+2315, which is a
+     different weight and sits on a different baseline in every font the
+     app might fall back to. */
+  .searchwrap .ic { position:absolute; left:12.5px; top:50%; flex:none;
+                    width:15px; height:15px; margin-top:-7.5px;
+                    fill:none; stroke:var(--muted); stroke-width:1.9;
+                    stroke-linecap:round; pointer-events:none;
+                    transition:stroke .2s ease, transform .2s cubic-bezier(.2,.7,.3,1); }
+  .searchwrap:focus-within .ic { stroke:var(--blue); transform:scale(1.04); }
+
+  /* The key that focuses it, drawn as a key. It steps aside the moment the
+     box is in use - the hint has done its job by then. */
+  .searchwrap kbd { position:absolute; right:9px; top:50%; transform:translateY(-50%);
+                    font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+                    color:var(--muted); letter-spacing:.2px;
+                    border:1px solid var(--line); border-bottom-width:2px;
+                    border-radius:5px; padding:3.5px 6px;
+                    background:linear-gradient(180deg,
+                               color-mix(in srgb, var(--card) 96%, #fff), var(--row));
+                    pointer-events:none; transition:opacity .16s ease; }
+  .searchwrap:focus-within kbd, .searchwrap.has kbd { opacity:0; }
+
+  /* Clear. Only there when there is something to clear. */
+  .searchwrap .clr { position:absolute; right:7px; top:50%; margin-top:-11px;
+                     width:22px; height:22px; display:grid; place-items:center;
+                     border:0; padding:0; border-radius:50%; cursor:pointer;
+                     background:transparent; color:var(--muted);
+                     opacity:0; pointer-events:none;
+                     transition:opacity .16s ease, background-color .16s ease,
+                                color .16s ease; }
+  .searchwrap.has .clr { opacity:1; pointer-events:auto; }
+  .searchwrap .clr:hover { background:var(--hover); color:var(--ink); }
+  .searchwrap .clr svg { width:11px; height:11px; fill:none; stroke:currentColor;
+                         stroke-width:2.2; stroke-linecap:round; }
 
   /* ------------------------------------------------------------------
      Source: where a report's figures came from.
@@ -1002,6 +1073,69 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') ksdShutSources();
+});
+
+/* Every search box on every screen, finished in one place: the glass, the
+   key hint, the clear button and the shortcut it promises. Four screens
+   wrote their own markup for this and only one of them had a working "/",
+   so the other three showed a key that did nothing. */
+document.addEventListener('DOMContentLoaded', function () {
+  const boxes = [...document.querySelectorAll('input[type=search]')];
+  boxes.forEach(input => {
+    let wrap = input.closest('.searchwrap');
+    if (!wrap) {
+      // A bare input - wrap it where it stands, so it gains the glass and
+      // the rest without its page having to be rebuilt around it.
+      wrap = document.createElement('div');
+      wrap.className = 'searchwrap';
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+    }
+    if (!wrap.querySelector('.ic')) {
+      wrap.insertAdjacentHTML('afterbegin',
+        '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true">' +
+        '<circle cx="7" cy="7" r="5"></circle><path d="M10.8 10.8 14.5 14.5"></path></svg>');
+    }
+    // The old markup had the glass as a character in a span. Retire it.
+    wrap.querySelectorAll('span.ic').forEach(el => el.remove());
+    if (!wrap.querySelector('kbd')) {
+      wrap.insertAdjacentHTML('beforeend', '<kbd>/</kbd>');
+    }
+    if (!wrap.querySelector('.clr')) {
+      wrap.insertAdjacentHTML('beforeend',
+        '<button type="button" class="clr" tabindex="-1" aria-label="Clear search">' +
+        '<svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8"></path></svg></button>');
+    }
+    const mark = () => wrap.classList.toggle('has', !!input.value);
+    input.addEventListener('input', mark);
+    mark();
+    wrap.querySelector('.clr').addEventListener('click', () => {
+      input.value = '';
+      mark();
+      // The page listens for input, not for the button - so say it happened.
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      input.focus();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && input.value) {
+        e.preventDefault();
+        wrap.querySelector('.clr').click();
+      }
+    });
+  });
+
+  if (!boxes.length) return;
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const on = document.activeElement;
+    if (on && (on.tagName === 'INPUT' || on.tagName === 'TEXTAREA' ||
+               on.tagName === 'SELECT' || on.isContentEditable)) return;
+    const box = boxes.find(b => b.offsetParent !== null);
+    if (!box) return;
+    e.preventDefault();
+    box.focus();
+    box.select();
+  });
 });
 
 // Server-rendered pages hand their block over in a script tag rather than

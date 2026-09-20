@@ -58,10 +58,11 @@
   .spare[hidden] { display:none !important; }
 
   .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-  .bar input[type=search], .bar select {
+  .bar select {
       border:1px solid var(--line); background:var(--card); border-radius:9px;
       padding:8px 11px; font:inherit; font-size:13.5px; color:var(--ink); }
-  .bar input[type=search] { min-width:260px; }
+  /* The box is base.html's; this is only how much room it gets. */
+  .bar .searchwrap { flex:0 1 376px; }
   .bar .sp { margin-left:auto; display:flex; gap:9px; align-items:center; }
   .bar .count { font-size:12.5px; color:var(--muted); }
 
