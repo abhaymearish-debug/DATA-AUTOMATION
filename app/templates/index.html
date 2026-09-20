@@ -1247,7 +1247,15 @@ function openHistory(c){
   const hsrc = document.querySelector(`.uc[data-card="${c.id}"] .ic`);
   hIc.innerHTML = hsrc ? hsrc.innerHTML : '';
   hVeil.style.setProperty('--c', c.colour || '#2563EB');
-  historyMonth = '';
+  // Open on this month. Nine times in ten the question is "did today's go
+  // in", not "what has ever gone in", and All is one press away. The purchase
+  // instruction is the exception: it is filed a month at a time and usually
+  // uploaded in the month after the one it is for, so opening on the current
+  // month would open on nothing. If this month has nothing behind it, the
+  // month rail drops back to All on its own rather than showing an empty list.
+  const now = new Date();
+  historyMonth = wantsMonth(c) ? ''
+    : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   hMonths.dataset.sig = '';
   hMonths.innerHTML = '';
   hCount.textContent = '';
@@ -1354,6 +1362,10 @@ function fillMonths(keys){
     + ` onclick="pickMonth('${v}')">${escapeHtml(label)}</button>`;
   hMonths.innerHTML = chip('', 'All')
     + months.map(m => chip(m, shortMonth(m))).join('');
+  // A month picked before the rail was drawn - the one it opens on - may sit
+  // past the right edge on a stream with a long history.
+  const lit = hMonths.querySelector('button.on');
+  if (lit) lit.scrollIntoView({ block:'nearest', inline:'nearest' });
   // A rail that runs past its edge says so, rather than ending in a chip cut
   // in half that looks like a rendering fault.
   requestAnimationFrame(() => hMonths.classList.toggle('over',
