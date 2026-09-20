@@ -14,6 +14,7 @@ Rules enforced here:
 from __future__ import annotations
 
 import re
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -178,7 +179,21 @@ def promote(job: Job) -> Path:
         backup_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target, backup_dir / f"{target.stem}.bak_{stamp}{target.suffix}")
 
-    shutil.copyfile(source, target)
+    # Copied to a sibling and moved into place, never written over the live
+    # path directly. shutil.copyfile truncates the target and then streams into
+    # it, so an interruption - a full disk, a killed worker - left a live
+    # workbook that is half a file. build_secondary.py treats a workbook it
+    # cannot open as "no prior month" and starts the month from zero, so a
+    # half-written file does not fail loudly; it quietly costs a month of
+    # accumulated days. os.replace is atomic within a filesystem, so the live
+    # path is either the old workbook or the new one and never something in
+    # between.
+    staging = target.with_name(target.name + ".part")
+    try:
+        shutil.copyfile(source, staging)
+        os.replace(staging, target)
+    finally:
+        staging.unlink(missing_ok=True)
     _copy_artifacts(job, target.parent)
 
     job.status = JobStatus.PROMOTED

@@ -254,8 +254,17 @@ def _find_prior_workbook():
         try:
             wb=openpyxl.load_workbook(path, data_only=True, read_only=True)
         except Exception as _e:
-            print(f"WARN: could not read candidate prior workbook {fn}: {_e}")
-            continue
+            # This file IS the month's live analysis workbook - the name says so.
+            # Skipping it means _find_prior_workbook returns None, the build
+            # calls the month "fresh", seeds nothing, and the coverage guard
+            # below (which compares against this same workbook) is disabled with
+            # it. One upload then replaces the whole month with whatever days
+            # its raw happens to cover, and the job reports success. An
+            # unreadable live workbook is a stop, not a fresh month.
+            print(f"ERROR: prior month workbook {fn} is unreadable: {_e}")
+            print("       Refusing to rebuild: this would wipe the month's "
+                  "accumulated days. Restore it from a backup and retry.")
+            sys.exit(3)
         sn=next((x for x in wb.sheetnames if "COMBINED DISPATCHES" in x.upper()), None)
         n=(wb[sn].max_row if sn else -1)
         wb.close()
