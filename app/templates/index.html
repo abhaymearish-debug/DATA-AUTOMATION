@@ -413,6 +413,9 @@
 {% block scripts %}
 <script>
 const POLL_MS = 2000;
+// The same cards the tiles above are drawn from, so a link that names a
+// stream can find its card without scraping the page for a button.
+const CARDS = {{ cards|tojson }};
 let card = null;
 let historyStream = null;
 let historyCard = null;
@@ -1238,6 +1241,28 @@ function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s??
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape'){ closeUpload(); closeHistory(); }
 });
+
+/* Arriving from the Status Calendar, which knows both which card is wanted
+   and for which day: it says so in the link, and the dialog opens filled in.
+   Without this the calendar could only drop you on this page to find the
+   right tile and type the date back in - the two things it already knew. */
+(function openFromLink(){
+  const p = new URLSearchParams(location.search);
+  const want = p.get('upload'), day = p.get('date');
+  if (!want) return;
+  const card = CARDS.find(c => c.stream === want && c.ready);
+  if (!card) return;
+  openUpload(card);
+  if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)){
+    if (card.mode === 'day' || card.mode === 'files') setDay(day);
+    // A cumulative is pulled from the 1st to the day you are standing on.
+    else if (card.mode === 'range') setRange(day.slice(0, 7), 1, Number(day.slice(8)));
+    // Purchase instruction is filed a month at a time and sets its own month.
+  }
+  // The link has been spent; leave the address bar showing the page itself,
+  // so a refresh does not re-open the dialog.
+  history.replaceState(null, '', location.pathname);
+})();
 
 poll();
 </script>

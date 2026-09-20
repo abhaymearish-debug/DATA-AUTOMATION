@@ -2473,17 +2473,31 @@ def upload_calendar() -> dict:
         # so today's is available today. Without this the screen marked four
         # streams missing on every single today, which is not a gap anybody
         # can close.
+        # `tiny` is the name as a day tile says it - every tile names all five
+        # streams, so the names have to fit five to a tile and still tell the
+        # two shop streams and the two secondary streams apart.
+        #
+        # `card` is the same stream's name on Raw Data Upload. This screen has
+        # always called them something shorter than that page does, which was
+        # nobody's business until a tile here could send you straight to a
+        # card there - a link keyed on "shop_cumulative" finds nothing on a
+        # page whose card is called "shop_sales_cumulative".
         "streams": [
-            {"key": "shop_cumulative", "label": "Shop Sales - Cumulative",
-             "short": "Shop cumulative", "colour": "#2563EB", "due_after": 1},
-            {"key": "shop_daily", "label": "Shop Sales - Daily",
-             "short": "Shop daily", "colour": "#0EA5E9", "due_after": 1},
-            {"key": "secondary", "label": "Secondary Sales - Daily",
-             "short": "Secondary daily", "colour": "#10B981", "due_after": 1},
-            {"key": "item_issue", "label": "Secondary Sales - Analysis",
-             "short": "Secondary analysis", "colour": "#8B5CF6", "due_after": 1},
-            {"key": "warehouse", "label": "Warehouse Physical Stock",
-             "short": "Stock", "colour": "#F59E0B", "due_after": 0},
+            {"key": "shop_cumulative", "card": "shop_sales_cumulative", "label": "Shop Sales - Cumulative",
+             "short": "Shop cumulative", "tiny": "Shop cumulative",
+             "colour": "#2563EB", "due_after": 1},
+            {"key": "shop_daily", "card": "shop_sales_daily", "label": "Shop Sales - Daily",
+             "short": "Shop daily", "tiny": "Shop daily",
+             "colour": "#0EA5E9", "due_after": 1},
+            {"key": "secondary", "card": "secondary_sales", "label": "Secondary Sales - Daily",
+             "short": "Secondary daily", "tiny": "Secondary daily",
+             "colour": "#10B981", "due_after": 1},
+            {"key": "item_issue", "card": "item_issue", "label": "Secondary Sales - Analysis",
+             "short": "Secondary analysis", "tiny": "Secondary analysis",
+             "colour": "#8B5CF6", "due_after": 1},
+            {"key": "warehouse", "card": "warehouse_stock", "label": "Warehouse Physical Stock",
+             "short": "Stock", "tiny": "Stock",
+             "colour": "#F59E0B", "due_after": 0},
         ],
         "span": {"first": min(days) if days else "", "last": max(days) if days else ""},
     }

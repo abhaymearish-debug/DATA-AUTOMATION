@@ -68,6 +68,43 @@
               opacity:.8; font-variant-numeric:tabular-nums;
               min-width:58px; text-align:right; }
 
+  /* ---------- what a day still wants ----------
+     Hovering a tile used to produce the browser's own tooltip: five lines of
+     plain text, after a delay, that you could read and not act on. The panel
+     below names the uploads that day is missing and hands you each one - the
+     card on Raw Data Upload opens with the date already filled in, because
+     the day you are pointing at IS the date. */
+  .cal { position:relative; }
+  .daypop { position:absolute; z-index:40; width:280px; display:none;
+            background:var(--card); border:1px solid var(--line); border-radius:13px;
+            box-shadow:0 10px 30px -8px rgba(16,24,40,.22),
+                       0 2px 6px rgba(16,24,40,.06);
+            overflow:hidden; }
+  .daypop.on { display:block; animation:ksd-pop .14s cubic-bezier(.2,.7,.3,1) both; }
+  .daypop .hd { padding:10px 13px 8px; font-size:9.5px; font-weight:800;
+                letter-spacing:.9px; text-transform:uppercase; color:var(--muted);
+                border-bottom:1px solid var(--line); }
+  .daypop .hd b { display:block; font-size:13px; font-weight:750; letter-spacing:-.2px;
+                  text-transform:none; color:var(--ink); margin-top:2px; }
+  .daypop .bd { padding:5px; max-height:260px; overflow:auto; }
+  .daypop .up { display:flex; align-items:center; gap:9px; width:100%;
+                border:0; background:none; font:inherit; text-align:left;
+                padding:8px 9px; border-radius:9px; cursor:pointer;
+                color:var(--ink); font-size:12.5px; font-weight:650;
+                transition:background-color .14s ease; }
+  .daypop .up:hover { background:var(--hover); }
+  .daypop .up b { flex:1 1 auto; min-width:0; font-weight:650; white-space:nowrap;
+                  overflow:hidden; text-overflow:ellipsis; }
+  .daypop .up i { width:7px; height:7px; border-radius:50%; flex:none;
+                  background:none;
+                  box-shadow:inset 0 0 0 1.7px color-mix(in srgb, var(--bad) 60%,
+                             transparent); }
+  .daypop .up span { margin-left:auto; flex:none; font-size:10.5px; font-weight:750;
+                     color:var(--blue); opacity:0; transition:opacity .14s ease; }
+  .daypop .up:hover span { opacity:1; }
+  .daypop .ok { padding:11px 13px 13px; font-size:12.5px; color:var(--muted); }
+  .daypop .ok b { color:var(--ok); }
+
   /* ---------- the grid ---------- */
   .cal { background:var(--card); border:1px solid var(--line); border-radius:14px;
          padding:14px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
@@ -76,8 +113,8 @@
          text-transform:uppercase; color:var(--muted); padding-bottom:6px; opacity:.85; }
   /* min-width:0 or the nowrap note below sets a floor the column cannot go
      under, and seven of those push the whole grid off the side of a laptop. */
-  .cell { min-height:94px; min-width:0; border:1px solid var(--line); border-radius:11px;
-          padding:9px 10px 10px; display:flex; flex-direction:column; background:var(--card);
+  .cell { min-height:126px; min-width:0; border:1px solid var(--line); border-radius:12px;
+          padding:10px 11px 11px; display:flex; flex-direction:column; background:var(--card);
           transition:box-shadow .15s ease, border-color .15s ease; }
   .cell:not(.pad):hover { border-color:color-mix(in srgb, var(--blue) 30%, var(--line));
           box-shadow:0 2px 10px rgba(16,24,40,.07); }
@@ -91,27 +128,44 @@
   .cell.future { opacity:.4; }
   .cell.today { border-color:var(--gold); box-shadow:0 0 0 2px
                 color-mix(in srgb, var(--gold) 28%, transparent); }
-  .cell .n { font-size:13px; font-weight:700; color:var(--ink); display:flex;
-             align-items:center; gap:6px; }
+  .cell .n { font-size:14px; font-weight:750; color:var(--ink); display:flex;
+             align-items:center; gap:6px; letter-spacing:-.2px; }
   .cell.today .n { color:var(--gold); }
   .cell .n em { font-style:normal; font-size:8.5px; font-weight:800; letter-spacing:.7px;
                 text-transform:uppercase; color:var(--gold); }
   .cell .n .tick { margin-left:auto; color:var(--ok); font-size:11px; }
 
-  /* Four slots, always four, always in the same order - so where a colour
-     sits is what names it, and the card above is the key. */
-  .slots { display:flex; gap:4px; margin-top:auto; }
-  .slots b { flex:1; height:5px; border-radius:3px; background:var(--line); }
-  /* Not due yet is not missing: a hollow slot, not an empty one. */
-  .slots b.wait { background:none; box-shadow:inset 0 0 0 1px var(--line); }
-  .cell.none .slots, .cell.future .slots { visibility:hidden; }
-  /* Two lines, so "no Secondary daily, Stock" reads out in full rather than
-     truncating - the names are the point, and a count was what this screen
-     used to say instead. */
-  .gap.soon { font-style:italic; opacity:.75; }
-  .gap { font-size:10.5px; color:var(--muted); margin-top:6px; line-height:1.3;
-         min-width:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2;
-         -webkit-box-orient:vertical; }
+  /* Every tile names all five streams, in the same order, every day.
+
+     It used to draw five anonymous bars and, under them, a sentence listing
+     the missing ones - which truncated on exactly the days that had the most
+     to say: "no Shop cumulative, Shop daily, Secondary daily, ..." tells you
+     there is a problem and not what it is. Reading a bar meant learning
+     which of five positions meant which stream, then checking it against
+     the card above.
+
+     Five lines instead. An uploaded stream is its own colour, filled in; one
+     that is missing is a hollow red ring; one whose raw cannot exist yet is
+     a faint grey ring, because it is not a gap you can close today. Which
+     three of the five are missing is now something you read, not decode. */
+  .sts { display:grid; gap:3.5px; margin-top:7px; }
+  .sts .st { display:flex; align-items:center; gap:6px; min-width:0;
+             font-size:10.5px; font-weight:600; letter-spacing:-.05px;
+             line-height:1.25; white-space:nowrap;
+             overflow:hidden; text-overflow:ellipsis; }
+  .sts .st i { width:6.5px; height:6.5px; border-radius:50%; flex:none;
+               background:var(--c); }
+  .sts .st.on { color:var(--ink); }
+  .sts .st.off { color:color-mix(in srgb, var(--bad) 72%, var(--muted)); }
+  .sts .st.off i { background:none;
+                   box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--bad) 60%,
+                              transparent); }
+  /* Not due yet is not missing. */
+  .sts .st.wait { color:var(--muted); opacity:.5; }
+  .sts .st.wait i { background:none; box-shadow:inset 0 0 0 1.5px var(--line); }
+  /* A day with nothing on it used to hide its five rows, back when a line of
+     text said "nothing uploaded" instead. That is the day with the most to
+     answer for, so it shows all five, all missing. */
 
   /* On a phone seven columns have about fifty pixels each, which is room for
      a number and four slots and nothing else. The note goes; the tooltip and
@@ -122,12 +176,15 @@
     .lede2 { flex:1 1 100%; }
     .cal { padding:10px; }
     .grid { gap:5px; }
+    /* Seven columns of about fifty pixels: room for the number and five
+       dots, and not for their names. The tooltip still has them. */
     .cell { min-height:58px; padding:6px 5px 7px; border-radius:9px; }
     .cell .n { font-size:11.5px; gap:3px; }
     .cell .n em, .cell .n .tick { display:none; }
-    .gap { display:none; }
-    .slots { gap:2px; }
-    .slots b { height:4px; }
+    .sts { grid-auto-flow:column; gap:3px; margin-top:auto;
+           justify-content:start; align-items:center; }
+    .sts .st { font-size:0; gap:0; }
+    .sts .st i { width:5.5px; height:5.5px; }
     .dow { font-size:8.5px; letter-spacing:.4px; }
   }
 
@@ -150,7 +207,7 @@
   <div class="streams" id="streams"></div>
 </div>
 
-<div class="cal"><div class="grid" id="grid"></div></div>
+<div class="cal" id="cal"><div class="grid" id="grid"></div></div>
 {% endblock %}
 
 {% block scripts %}
@@ -242,33 +299,21 @@ function draw(){
         : dueBy(key, s) > today ? `\u00b7 ${s.label} \u2014 not due yet`
         : `\u2014 ${s.label}`).join('\n');
 
-    const slots = S.map(s => {
+    // All five, named, every day. Which ones are missing is the question
+    // this screen exists to answer, and it should not need a hover or a
+    // legend to answer it.
+    const sts = S.map(s => {
       const got = have.includes(s.key);
       const wait = !got && dueBy(key, s) > today;
-      return `<b class="${wait ? 'wait' : ''}" style="${got ? 'background:' + s.colour : ''}"
-                 title="${esc(s.label)}"></b>`;
+      const cls = got ? 'on' : wait ? 'wait' : 'off';
+      return `<div class="st ${cls}" style="--c:${esc(s.colour)}"
+                   title="${esc(s.label)}"><i></i>${esc(s.tiny || s.short)}</div>`;
     }).join('');
 
-    // A day short of one upload says which. A day whose raws cannot exist
-    // yet says that instead - it is not a gap, and calling it one made
-    // every today look like the worst day of the month.
-    let note = '';
-    if (!nothingDue){
-      if (!have.length && !waiting.length)
-        note = '<div class="gap">nothing uploaded</div>';
-      else if (missing.length)
-        note = `<div class="gap">no ${esc(missing.map(s => s.short).join(', '))}</div>`;
-      else if (waiting.length && have.length)
-        note = `<div class="gap soon">rest due tomorrow</div>`;
-      else if (waiting.length)
-        note = `<div class="gap soon">nothing due yet</div>`;
-    }
-
-    html += `<div class="${cls}" title="${esc(tip)}">
+    html += `<div class="${cls}" data-day="${key}" title="${esc(tip)}">
         <div class="n">${d}${key === today ? '<em>today</em>' : ''}${
           done ? '<span class="tick">\u2713</span>' : ''}</div>
-        ${note}
-        <div class="slots">${slots}</div>
+        <div class="sts">${sts}</div>
       </div>`;
   }
   grid.innerHTML = html;
@@ -311,6 +356,84 @@ function draw(){
         </div>`;
     }).join('');
 }
+/* ---------- the day panel ----------
+   What this day still wants, and the way to give it to it. Each row opens
+   Raw Data Upload with that card already open and this date already in the
+   box, so a gap you spotted is a gap you can close without first working
+   out which tile to press and typing the date back in by hand. */
+const pop = document.createElement('div');
+pop.className = 'daypop';
+cal.appendChild(pop);
+
+let popFor = null, popTimer = null;
+const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec'];
+const saidDay = key => {
+  const [y, m, d] = key.split('-').map(Number);
+  return `${d} ${MONTHS_S[m - 1]} ${y}`;
+};
+
+function openDay(cell){
+  const key = cell.dataset.day;
+  if (!key) return;
+  clearTimeout(popTimer);
+  if (popFor === key && pop.classList.contains('on')) return;
+  popFor = key;
+
+  const S = CAL.streams;
+  const have = CAL.days[key] || [];
+  const due = S.filter(s => dueBy(key, s) <= today);
+  if (!due.length){ shutDay(); return; }
+  const missing = due.filter(s => !have.includes(s.key));
+
+  pop.innerHTML =
+    `<div class="hd">Raw data<b>${esc(saidDay(key))}</b></div>` +
+    (missing.length
+      ? `<div class="bd">${missing.map(s =>
+          `<button type="button" class="up" data-stream="${esc(s.card || s.key)}">` +
+          `<i style="--c:${esc(s.colour)}"></i><b>${esc(s.label)}</b>` +
+          `<span>Upload</span></button>`).join('')}</div>`
+      : `<div class="ok"><b>\u2713</b> Everything uploaded.</div>`);
+
+  // Placed against the grid, and flipped when it would run off the right.
+  const box = cell.getBoundingClientRect();
+  const host = cal.getBoundingClientRect();
+  const w = 280, gap = 8;
+  let left = box.left - host.left + box.width + gap;
+  if (left + w > host.width - 4) left = box.left - host.left - w - gap;
+  if (left < 4) left = Math.max(4, box.left - host.left);
+  pop.style.left = Math.round(left) + 'px';
+  pop.style.top = Math.round(box.top - host.top) + 'px';
+  pop.classList.add('on');
+
+  // Keep it on screen: if the panel would hang below the fold, lift it.
+  const over = pop.getBoundingClientRect().bottom - (window.innerHeight - 8);
+  if (over > 0) pop.style.top = Math.round(box.top - host.top - over) + 'px';
+}
+
+function shutDay(){ pop.classList.remove('on'); popFor = null; }
+const laterDay = () => { clearTimeout(popTimer); popTimer = setTimeout(shutDay, 240); };
+
+grid.addEventListener('mouseover', e => {
+  const cell = e.target.closest('.cell');
+  if (!cell || cell.classList.contains('pad')) return;
+  openDay(cell);
+});
+grid.addEventListener('mouseleave', laterDay);
+pop.addEventListener('mouseenter', () => clearTimeout(popTimer));
+pop.addEventListener('mouseleave', laterDay);
+grid.addEventListener('click', e => {
+  const cell = e.target.closest('.cell');
+  if (cell && !cell.classList.contains('pad')) openDay(cell);
+});
+pop.addEventListener('click', e => {
+  const btn = e.target.closest('.up');
+  if (!btn || !popFor) return;
+  location.href = '/?upload=' + encodeURIComponent(btn.dataset.stream) +
+                  '&date=' + encodeURIComponent(popFor);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') shutDay(); });
+
 draw();
 </script>
 {% endblock %}
