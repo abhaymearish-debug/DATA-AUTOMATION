@@ -884,6 +884,28 @@ function flipTheme(){
   try { localStorage.setItem('ksd-theme', next); } catch {}
 }
 
+// The theme is read once, when a page loads. A tab that was already open when
+// you switched somewhere else kept the theme it started with - so with the
+// reports open in one tab and Warehouse Leaves in another, half the app was
+// light and half was dark, and neither tab was wrong about what it had been
+// told. The browser tells every OTHER tab when localStorage changes; that is
+// the signal, and it costs one listener.
+window.addEventListener('storage', e => {
+  if (e.key !== 'ksd-theme' || !e.newValue) return;
+  document.documentElement.dataset.theme = e.newValue;
+});
+
+// A tab restored from the back/forward cache does not re-run the boot script
+// either, so it can come back wearing a theme that was changed while it was
+// away.
+window.addEventListener('pageshow', e => {
+  if (!e.persisted) return;
+  try {
+    const saved = localStorage.getItem('ksd-theme');
+    if (saved) document.documentElement.dataset.theme = saved;
+  } catch (err) {}
+});
+
 function drawer() {
   document.getElementById('sb').classList.toggle('open');
   document.getElementById('scrim').classList.toggle('on');
