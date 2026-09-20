@@ -194,6 +194,11 @@
                        box-shadow:inset 0 0 0 1px color-mix(in srgb,
                                   var(--c, var(--blue)) 17%, transparent); }
   .modal header .dic:empty { display:none; }
+  .modal header .hname { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .modal header .hname em { font-style:normal; font-size:9.5px; font-weight:800;
+                            letter-spacing:.95px; text-transform:uppercase;
+                            color:var(--muted); line-height:1; }
+  .modal header .hname h4 { line-height:1.15; }
   .modal header .dic svg { width:17px; height:17px; fill:none; stroke:currentColor;
                            stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
   .modal header button { margin-left:auto; flex:none; background:none; border:0;
@@ -603,7 +608,11 @@
 <!-- history dialog -->
 <div class="veil" id="hVeil" onclick="if(event.target===this)closeHistory()">
   <div class="modal wide">
-    <header><span class="dic" id="hIc"></span><h4 id="hTitle">History</h4>
+    <!-- "Shop Sales - Cumulative — history" put two dashes in one line and
+         made the last word look like part of the name. The word that says
+         which dialog this is goes above the name, where a label belongs. -->
+    <header><span class="dic" id="hIc"></span>
+      <span class="hname"><em>History</em><h4 id="hTitle">History</h4></span>
       <button type="button" onclick="closeHistory()" aria-label="Close">&times;</button></header>
     <div class="body scroll">
       <!-- A month, picked in one press. The question asked of history is
@@ -1147,9 +1156,9 @@ function daysAgo(iso){
 // The date itself, beside the words. "4 days ago" is the feeling; "16 Sep"
 // is the fact, and the two together answer the question in one look.
 function onDate(iso){
-  const t = new Date(iso), fmt = { day:'numeric', month:'short' };
-  if (t.getFullYear() !== new Date().getFullYear()) fmt.year = 'numeric';
-  return t.toLocaleDateString('en-GB', fmt);
+  const t = new Date(iso), now = new Date();
+  return `${t.getDate()} ${MON3[t.getMonth()]}`
+       + (t.getFullYear() !== now.getFullYear() ? ` ${t.getFullYear()}` : '');
 }
 function ago(iso){
   const then = new Date(iso), now = new Date();
@@ -1157,9 +1166,7 @@ function ago(iso){
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 14) return `${days} days ago`;
-  const fmt = { day:'numeric', month:'short' };
-  if (then.getFullYear() !== now.getFullYear()) fmt.year = 'numeric';
-  return 'on ' + then.toLocaleDateString('en-GB', fmt);
+  return 'on ' + onDate(iso);
 }
 
 // A build's state belongs on the card it came from, not in a banner over the
@@ -1236,7 +1243,7 @@ async function poll(immediate){
 function openHistory(c){
   historyCard = c;
   historyStream = c.stream;
-  hTitle.textContent = c.title + ' — history';
+  hTitle.textContent = c.title;
   const hsrc = document.querySelector(`.uc[data-card="${c.id}"] .ic`);
   hIc.innerHTML = hsrc ? hsrc.innerHTML : '';
   hVeil.style.setProperty('--c', c.colour || '#2563EB');
