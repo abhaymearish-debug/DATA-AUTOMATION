@@ -14,19 +14,23 @@
      thing worth knowing. The tiles carry the same four colours in the
      same four places, so the card IS the key.
   ------------------------------------------------------------------ */
-  .controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
-  .controls .sp { margin-left:auto; display:flex; gap:8px; align-items:center; }
-  .mnav { display:inline-flex; align-items:center; gap:4px; background:var(--card);
-          border:1px solid var(--line); border-radius:12px; padding:5px;
-          box-shadow:0 1px 2px rgba(16,24,40,.05); }
-  .mnav button { border:0; background:none; border-radius:9px; width:30px; height:30px;
+  /* The month sits inside the card it describes.
+
+     It used to be a strip of its own above it - a pill on the left, an
+     "Upload raw data" button on the right, and a band of empty page between
+     that strip and the figures it was choosing. Two cards for one subject.
+     The button goes with it: the sidebar has that page, and a day tile now
+     hands you the upload for the day you are actually pointing at. */
+  .mnav { display:inline-flex; align-items:center; gap:2px; flex:none;
+          background:var(--row); border:1px solid var(--line); border-radius:11px;
+          padding:3px; }
+  .mnav button { border:0; background:none; border-radius:8px; width:26px; height:26px;
                  cursor:pointer; color:var(--muted); font-size:14px; line-height:1; padding:0;
                  transition:background .15s ease, color .15s ease; }
-  .mnav button:hover { background:var(--hover); color:var(--ink); }
-  .mnav .m { font-size:14.5px; font-weight:700; letter-spacing:-.2px;
-             min-width:150px; text-align:center; }
-  .mnav .m small { display:block; font-size:9px; font-weight:800; letter-spacing:.9px;
-                   text-transform:uppercase; color:var(--muted); margin-top:-1px; }
+  .mnav button:hover { background:var(--card); color:var(--ink);
+                       box-shadow:0 1px 2px rgba(16,24,40,.08); }
+  .mnav .m { font-size:13.5px; font-weight:750; letter-spacing:-.25px;
+             min-width:134px; text-align:center; color:var(--ink); }
 
   /* ---------- the month, in one card ----------
 
@@ -44,10 +48,12 @@
            padding:0; margin-bottom:14px; overflow:hidden;
            box-shadow:0 1px 2px rgba(16,24,40,.05); }
 
-  .hero { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
-          padding:16px 20px 15px;
+  .hero { display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+          padding:14px 18px 14px;
           background:linear-gradient(180deg,
                      color-mix(in srgb, var(--blue) 4%, var(--card)), var(--card)); }
+  .hero .sum { flex:1 1 auto; display:flex; align-items:baseline; gap:11px;
+               flex-wrap:wrap; min-width:0; }
   .hero .v { font-size:32px; font-weight:800; letter-spacing:-1.4px; line-height:1;
              color:var(--ink); font-variant-numeric:tabular-nums; }
   .hero .v i { font-style:normal; font-size:17px; font-weight:700; color:var(--muted);
@@ -221,17 +227,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="controls">
-  <div class="mnav">
-    <button type="button" onclick="step(-1)" aria-label="Previous month">&lsaquo;</button>
-    <span class="m" id="mLabel">—</span>
-    <button type="button" onclick="step(1)" aria-label="Next month">&rsaquo;</button>
-  </div>
-  <div class="sp"><a class="act" href="/">Upload raw data</a></div>
-</div>
-
 <div class="board">
-  <div class="hero" id="lede"></div>
+  <div class="hero">
+    <div class="mnav">
+      <button type="button" onclick="step(-1)" aria-label="Previous month">&lsaquo;</button>
+      <span class="m" id="mLabel">—</span>
+      <button type="button" onclick="step(1)" aria-label="Next month">&rsaquo;</button>
+    </div>
+    <div class="sum" id="lede"></div>
+  </div>
   <div class="streams" id="streams"></div>
 </div>
 
