@@ -13,6 +13,7 @@ import csv
 import re
 import threading
 from collections import defaultdict
+import calendar
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -1887,6 +1888,13 @@ def plan_window(start: date, end: date) -> dict:
     pulled whole is answered by that very file rather than reassembled from a
     fortnight of days.
     """
+    # A reversed window tiles nothing, and the empty chain that follows used
+    # to surface as an IndexError two frames up rather than as an error a
+    # caller could handle. plan_window is reachable from several places, so
+    # the guard belongs here as well as at the callers.
+    if start > end:
+        return {"error": f"{start} is after {end} — that window runs backwards."}
+
     by_start: dict = {}
     for s, e, kind, path in segments():
         by_start.setdefault(s, []).append((e, kind, path))
@@ -2226,12 +2234,23 @@ def resolve_window(start: date, end: date) -> dict:
 
 
 def _same_window_last_month(start: date, end: date):
+    # The whole window shifted back one month, NOT rebuilt from the two day
+    # numbers. Rebuilding gave a start and an end that were independently
+    # mapped into the previous month, so a window crossing a month boundary
+    # came back with its end before its start: 31 Aug - 2 Sep asked for
+    # 31 Jul - 2 Jul. That window matches no stored file, plan_window returns
+    # an empty chain, and resolve_window then raises IndexError - a 500 on the
+    # page and on both exports. Where it did not crash it compared against an
+    # empty window and labelled it last month, so every row read as pure
+    # growth. Shifting preserves the length and can never reverse.
+    # A start day the previous month does not have (31 Mar -> 31 Feb) is
+    # clamped to that month's last day, which keeps the comparison the report
+    # is for; it used to be dropped entirely, silently.
     month = start.month - 1 or 12
     year = start.year - (1 if start.month == 1 else 0)
-    try:
-        return date(year, month, start.day), date(year, month, end.day)
-    except ValueError:
-        return None, None
+    p_start = date(year, month, min(start.day, calendar.monthrange(year, month)[1]))
+    p_end = p_start + (end - start)
+    return p_start, p_end
 
 
 def _shop_sales_by_bond(start: date, end: date) -> dict:

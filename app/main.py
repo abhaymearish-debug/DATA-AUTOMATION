@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import os
 import re
 import shutil
@@ -12,6 +13,8 @@ from urllib.parse import urlencode
 import subprocess
 import sys
 from pathlib import Path
+
+import openpyxl
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
@@ -636,9 +639,40 @@ def _save_upload(upload: UploadFile, destination: Path) -> None:
                         f"{MAX_UPLOAD_BYTES // (1024*1024)}MB."
                     )
                 fh.write(chunk)
+        _reject_unreadable_workbook(
+            part, destination.suffix, upload.filename or destination.name)
         os.replace(part, destination)
     finally:
         part.unlink(missing_ok=True)
+
+
+def _reject_unreadable_workbook(path: Path, suffix: str, shown_as: str) -> None:
+    """Refuse an upload that is not actually a workbook, before it goes live.
+
+    A 0-byte file, a KSBC error page saved as .xlsx, or a download that was
+    interrupted all used to be accepted as a successful upload: the job went
+    green, the file replaced the day's good raw, and the report only fell over
+    later, when something tried to read it. A file that cannot be opened is
+    rejected here, while the live raw is still untouched.
+    """
+    if path.stat().st_size == 0:
+        raise UploadRejected(f"'{shown_as}' is empty — nothing was uploaded.")
+    # The suffix of the REAL destination, not of the .part file being checked.
+    if suffix.lower() != ".xlsx":
+        return          # .xls is a different format; openpyxl cannot judge it
+    # Opened through a handle rather than by path: this is still the .part
+    # file, and openpyxl refuses a filename whose extension it does not know
+    # before it ever looks at the bytes.
+    try:
+        with path.open("rb") as fh:
+            wb = openpyxl.load_workbook(fh, read_only=True, data_only=True)
+            wb.close()
+    except Exception:
+        raise UploadRejected(
+            f"'{shown_as}' could not be opened as a workbook. It may have been "
+            "cut short while downloading, or saved from an error page — "
+            "download it from KSBC again and retry."
+        )
 
 
 @app.post("/build/{stream_key}")
@@ -2185,12 +2219,23 @@ def _previous_span(period: dict):
     asked for rather than the ones that were found.
     """
     start, end = period["start"], period["end"]
+    # The whole window shifted back one month, NOT rebuilt from the two day
+    # numbers. Rebuilding gave a start and an end that were independently
+    # mapped into the previous month, so a window crossing a month boundary
+    # came back with its end before its start: 31 Aug - 2 Sep asked for
+    # 31 Jul - 2 Jul. That window matches no stored file, plan_window returns
+    # an empty chain, and resolve_window then raises IndexError - a 500 on the
+    # page and on both exports. Where it did not crash it compared against an
+    # empty window and labelled it last month, so every row read as pure
+    # growth. Shifting preserves the length and can never reverse.
+    # A start day the previous month does not have (31 Mar -> 31 Feb) is
+    # clamped to that month's last day, which keeps the comparison the report
+    # is for; it used to be dropped entirely, silently.
     month = start.month - 1 or 12
     year = start.year - (1 if start.month == 1 else 0)
-    try:
-        return date(year, month, start.day), date(year, month, end.day)
-    except ValueError:
-        return None
+    p_start = date(year, month, min(start.day, calendar.monthrange(year, month)[1]))
+    p_end = p_start + (end - start)
+    return p_start, p_end
 
 
 def _analysis_basis(chosen: dict, prev: dict | None) -> dict:
