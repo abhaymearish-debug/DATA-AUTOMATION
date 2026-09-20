@@ -582,25 +582,29 @@ function draw(){
   fit(Math.ceil((first + last) / 7));
 }
 
-/* A month is five rows or six, and a screen is whatever the screen is. A
-   fixed tile height has to be short enough for the worst case, which leaves
-   a band of empty page on every other one. Measure instead: shrink to the
-   floor, ask the page how much room it did not use, and hand it back - to
-   the tiles first, and once a day is as tall as a day should be, to the
-   space between the weeks. */
-const MIN_TILE = 62, MAX_TILE = 132, MIN_GAP = 9, MAX_GAP = 18;
+/* A day is the same size in every month.
+
+   This used to divide the leftover page height between the rows, so the tile
+   size fell out of how many weeks the month happened to span. A five-row
+   September drew tall tiles with big blocks; a six-row August squeezed the
+   same day down to two-thirds of that, and stepping between the two months
+   read as stepping between two different screens. Fitting the page was worth
+   less than being recognisable.
+
+   So the size is fixed, and a month that does not fit scrolls - which is the
+   ordinary behaviour of a page, and costs nothing to learn. The only
+   adaptation left is downward, on a window too short to show even four rows,
+   where scrolling every month would be worse than a smaller day. */
+const TILE = 116, GAP = 12, MIN_TILE = 62, MIN_GAP = 9;
 function fit(rows){
-  grid.style.setProperty('--tile', MIN_TILE + 'px');
-  grid.style.setProperty('--gap', MIN_GAP + 'px');
-  let slack = window.innerHeight
-            - (board.getBoundingClientRect().bottom + window.scrollY) - 18;
-  const h = Math.max(MIN_TILE,
-            Math.min(MAX_TILE, MIN_TILE + Math.floor(slack / rows)));
-  grid.style.setProperty('--tile', h + 'px');
-  slack -= (h - MIN_TILE) * rows;
-  const g = Math.max(MIN_GAP,
-            Math.min(MAX_GAP, MIN_GAP + Math.floor(slack / rows)));
-  grid.style.setProperty('--gap', g + 'px');
+  const room = window.innerHeight
+             - (board.getBoundingClientRect().top + window.scrollY) - 28;
+  const wanted = rows * (TILE + GAP);
+  // Only a genuinely short window gets smaller days, and then every month
+  // gets them - the size still does not depend on the month.
+  const cramped = room > 0 && room < 4 * (TILE + GAP);
+  grid.style.setProperty('--tile', (cramped ? MIN_TILE : TILE) + 'px');
+  grid.style.setProperty('--gap', (cramped ? MIN_GAP : GAP) + 'px');
 }
 
 /* ---------- the day panel ----------
