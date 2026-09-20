@@ -514,10 +514,6 @@ def home(request: Request):
             "streams_by_key": STREAMS,
             "cards": UPLOAD_CARDS,
             "leave_cards": LEAVE_CARDS,
-            # The same coverage the Status Calendar draws. A card that offers
-            # to take a file should be able to say which days it is short of,
-            # and this is the page you are on when you go to fix that.
-            "calendar": reports_api.upload_calendar(),
             "jobs": STORE.recent(),
             "problems": getattr(app.state, "problems", []),
             "today": date.today().isoformat(),
