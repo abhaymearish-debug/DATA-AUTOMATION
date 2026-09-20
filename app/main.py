@@ -1033,13 +1033,39 @@ def _parse_date(value: str) -> date:
         raise UploadRejected("Tell the app which date this export covers.")
 
 
+# KSBC's ERP exports a cumulative in two halves and no other way: the first
+# runs from the 1st and stops at the 16th at the latest, the second starts on
+# the 17th and stops at month end at the latest. So 1-17 and 1-19 are not
+# windows anyone can pull - the second half of such a month is 17-17, 17-18,
+# 17-19 and so on. A window that ignores this cannot be filled, whatever the
+# app asks for.
+CUM_SPLIT = 16
+
+
+def cumulative_half(day: int) -> tuple[int, int]:
+    """The KSBC pull that covers `day`: (first day of its half, day)."""
+    return (1, day) if day <= CUM_SPLIT else (CUM_SPLIT + 1, day)
+
+
 def _parse_cumulative(value: str) -> tuple[int, int] | None:
     if not value.strip():
         return None
     m = re.match(r"^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$", value)
     if not m:
         raise UploadRejected("A cumulative period looks like '1-16' or '17-30'.")
-    return int(m.group(1)), int(m.group(2))
+    a, b = int(m.group(1)), int(m.group(2))
+    if b < a:
+        raise UploadRejected(f"'{a}-{b}' runs backwards.")
+    if a == 1 and b > CUM_SPLIT:
+        raise UploadRejected(
+            f"KSBC cannot export 1-{b} in one pull: a first-half cumulative stops "
+            f"at the {CUM_SPLIT}th. Upload 1-{CUM_SPLIT}, then {CUM_SPLIT + 1}-{b} "
+            "as a second file.")
+    if a not in (1, CUM_SPLIT + 1):
+        raise UploadRejected(
+            f"A cumulative pull starts on the 1st or the {CUM_SPLIT + 1}th, not the "
+            f"{a}th. For a few days inside a half, upload them as daily exports.")
+    return a, b
 
 
 # ---------------------------------------------------------------------------

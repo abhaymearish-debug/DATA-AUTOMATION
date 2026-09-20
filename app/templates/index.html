@@ -714,7 +714,7 @@ function openUpload(c){
 
   if (c.mode === 'range' || wantsPeriod(c)){
     const ym = today.slice(0,7);
-    setRange(ym, 1, Math.min(16, daysIn(ym)));
+    setRange(ym, 1, Math.min(CUM_SPLIT, daysIn(ym)));
   } else if (c.mode !== 'batch'){
     setDay(c.mode === 'files' ? '' : today);
   } else {
@@ -724,6 +724,10 @@ function openUpload(c){
   upVeil.classList.add('on');
 }
 function closeUpload(){ upVeil.classList.remove('on'); }
+
+/* KSBC exports a cumulative in two halves: 1 to 16 at most, then 17 to month
+   end at most. Every default window here has to land inside one of them. */
+const CUM_SPLIT = 16;
 
 /* ---------------- dates without the fight ----------------
    The same two-month picker the reports use: one click for a daily upload
@@ -1583,8 +1587,15 @@ document.addEventListener('keydown', e => {
   openUpload(card);
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)){
     if (card.mode === 'day' || card.mode === 'files') setDay(day);
-    // A cumulative is pulled from the 1st to the day you are standing on.
-    else if (card.mode === 'range') setRange(day.slice(0, 7), 1, Number(day.slice(8)));
+    // A cumulative is pulled in halves and no other way: KSBC's ERP exports
+    // the 1st to the 16th at most, then the 17th to month end at most. Asking
+    // from the 1st to whatever day you clicked produced windows nobody can
+    // pull - clicking the 19th opened the dialog on 1-19. The day decides
+    // which half it is in, and the pull starts at that half's first day.
+    else if (card.mode === 'range'){
+      const d = Number(day.slice(8));
+      setRange(day.slice(0, 7), d <= CUM_SPLIT ? 1 : CUM_SPLIT + 1, d);
+    }
     // Purchase instruction is filed a month at a time and sets its own month.
   }
   // The link has been spent; leave the address bar showing the page itself,
