@@ -1836,10 +1836,40 @@ def jobs_list(request: Request, stream: str = ""):
     # stream and only needs enough to colour the cards.
     limit = 5000 if stream else 60
     jobs = [j for j in STORE.recent(limit) if not stream or j.stream_key == stream]
-    return JSONResponse({
+    payload = {
         "jobs": [j.to_dict() for j in jobs],
         "labels": {k: v.label for k, v in STREAMS.items()},
-    })
+    }
+    if not stream:
+        payload["cards"] = _card_state()
+    return JSONResponse(payload)
+
+
+def _card_state() -> dict:
+    """Per stream: its most recent run, and when it last succeeded.
+
+    The upload page used to work this out from the sixty most recent jobs,
+    which is the wrong window for the question. Six streams uploading daily
+    push sixty runs past in under a fortnight, so a stream filed monthly -
+    Purchase Instruction, Item Issue - fell off the end and its card read
+    "Nothing uploaded yet" while its own History, which reads every run a
+    stream has ever had, listed three months of them. The last run per stream
+    does not depend on how busy the others have been, so it is answered here
+    over all of them.
+    """
+    out: dict = {}
+    for job in STORE.recent(100000):
+        key = job.stream_key
+        if not key:
+            continue
+        slot = out.setdefault(key, {"latest": None, "last_ok": ""})
+        if slot["latest"] is None:
+            slot["latest"] = job.to_dict()          # recent() is newest first
+        if job.status == JobStatus.PROMOTED:
+            when = job.finished_at or job.created_at
+            if when > slot["last_ok"]:
+                slot["last_ok"] = when
+    return out
 
 
 # ---------------------------------------------------------------------------

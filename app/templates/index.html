@@ -1197,15 +1197,27 @@ function ago(iso){
 
 // A build's state belongs on the card it came from, not in a banner over the
 // whole page. Running, failed or idle — the line under the title says which.
-function paintCards(jobs){
+function paintCards(jobs, cards){
   const latest = {}, lastOk = {};
-  for (const j of jobs){
-    if (!j.stream_key) continue;
-    const t = j.finished_at || j.created_at;
-    if (!latest[j.stream_key] || (j.created_at > latest[j.stream_key].created_at))
-      latest[j.stream_key] = j;
-    if (j.status === 'promoted' && (!lastOk[j.stream_key] || t > lastOk[j.stream_key]))
-      lastOk[j.stream_key] = t;
+  // The server answers this over every run it has, which is the right window:
+  // working it out from the recent-jobs feed meant a stream filed monthly
+  // dropped off the end and its card said "Nothing uploaded yet" while its
+  // History listed three months of uploads. The feed is still the fallback,
+  // so an older server keeps working.
+  if (cards){
+    for (const [k, v] of Object.entries(cards)){
+      if (v.latest) latest[k] = v.latest;
+      if (v.last_ok) lastOk[k] = v.last_ok;
+    }
+  } else {
+    for (const j of jobs){
+      if (!j.stream_key) continue;
+      const t = j.finished_at || j.created_at;
+      if (!latest[j.stream_key] || (j.created_at > latest[j.stream_key].created_at))
+        latest[j.stream_key] = j;
+      if (j.status === 'promoted' && (!lastOk[j.stream_key] || t > lastOk[j.stream_key]))
+        lastOk[j.stream_key] = t;
+    }
   }
 
   document.querySelectorAll('.uc .meta[data-stream]').forEach(el => {
@@ -1259,7 +1271,7 @@ async function poll(immediate){
   } catch { setTimeout(poll, POLL_MS*3); return; }
 
   labels = data.labels || {};
-  paintCards(data.jobs);
+  paintCards(data.jobs, data.cards);
   // Only builds that are still moving or still need a decision appear here.
   // Everything finished lives behind the History button on its card.
   const busy = data.jobs.some(j => j.status === 'queued' || j.status === 'running');
