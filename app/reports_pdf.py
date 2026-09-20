@@ -348,8 +348,8 @@ ST_ROWS_PER_PAGE = 18
 # one line for the eye, and a gold rule closing the two navy bands - the
 # header and the total - the way the office's own sheets rule a block.
 ST_HAIR = colors.Color(0.855, 0.871, 0.898)
-ST_GOLD_DIM = colors.Color(0.42, 0.40, 0.33)   # gold at a whisper, over navy
 ST_LW_GRID = 0.4
+ST_LW_HEAD = 0.9      # the seams between the header's five labels
 ST_LW_GOLD = 1.3
 
 
@@ -444,13 +444,17 @@ def draw_stock_page(c, *, warehouse: str, as_of: str, rows: list[dict],
         yy = body_top - k * ST_ROW_H
         c.line(0, yy, A4_W, yy)
 
-    # Inside the navy the same columns carry on, in a gold so dim it reads as
-    # a seam rather than as a line drawn across the band.
-    c.setStrokeColor(ST_GOLD_DIM)
+    # Inside the header band the same columns carry on, in the gold the labels
+    # themselves are set in and a shade heavier than the body grid, so the five
+    # headings read as five cells rather than as one long navy strip with words
+    # spaced along it. The total band gets none: the header is five labels and
+    # the seams tell them apart, but the total is one statement about the
+    # warehouse, and ruling it into cells only put stray lines across a band
+    # that should read solid.
+    c.setLineWidth(ST_LW_HEAD)
+    c.setStrokeColor(GOLD)
     for x in edges:
         c.line(x, head_top, x, body_top)
-        if total_top is not None:
-            c.line(x, total_top, x, total_bottom)
 
     # And the gold lining: a rule above and below each navy band.
     c.setLineWidth(ST_LW_GOLD)
