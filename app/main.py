@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import threading
@@ -615,17 +616,29 @@ def _save_upload(upload: UploadFile, destination: Path) -> None:
             "plain name, with no folders in it."
         )
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # Written to a sibling and moved into place only once the whole body has
+    # been accepted. Streaming straight into `destination` meant an upload that
+    # turned out to be too big - or a browser that hung up mid-transfer - had
+    # already truncated the day's good raw, and the size check then DELETED
+    # what was left of it. The operator saw a rejection and assumed nothing had
+    # happened; the file they were replacing was gone. os.replace is atomic
+    # within a filesystem, so a reader never sees a half-written workbook
+    # either.
+    part = destination.with_name(destination.name + ".part")
     size = 0
-    with destination.open("wb") as fh:
-        while chunk := upload.file.read(1024 * 1024):
-            size += len(chunk)
-            if size > MAX_UPLOAD_BYTES:
-                fh.close()
-                destination.unlink(missing_ok=True)
-                raise UploadRejected(
-                    f"'{upload.filename}' is larger than {MAX_UPLOAD_BYTES // (1024*1024)}MB."
-                )
-            fh.write(chunk)
+    try:
+        with part.open("wb") as fh:
+            while chunk := upload.file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise UploadRejected(
+                        f"'{upload.filename}' is larger than "
+                        f"{MAX_UPLOAD_BYTES // (1024*1024)}MB."
+                    )
+                fh.write(chunk)
+        os.replace(part, destination)
+    finally:
+        part.unlink(missing_ok=True)
 
 
 @app.post("/build/{stream_key}")
