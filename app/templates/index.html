@@ -75,8 +75,8 @@
   .cards { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(316px,1fr)); }
 
   .uc { position:relative; display:flex; flex-direction:column;
-        background:var(--card); border:1px solid var(--line); border-radius:16px;
-        padding:17px 18px 14px; overflow:hidden;
+        background:var(--card); border:1px solid var(--line); border-radius:17px;
+        padding:16px 17px 15px; overflow:hidden;
         box-shadow:0 1px 2px rgba(16,24,40,.04);
         transition:box-shadow .18s ease, transform .18s cubic-bezier(.2,.7,.3,1),
                    border-color .18s ease; }
@@ -98,22 +98,24 @@
                                transparent); }
 
   .uc .top { display:flex; align-items:center; gap:13px; }
-  .uc .ic { flex:none; width:42px; height:42px; border-radius:13px; display:grid;
-            place-items:center; background:var(--chip); color:var(--navy); }
+  .uc .ic { flex:none; width:46px; height:46px; border-radius:15px; display:grid;
+            place-items:center; background:var(--chip); color:var(--navy);
+            transition:transform .18s cubic-bezier(.2,.7,.3,1); }
+  .uc.ready:hover .ic { transform:scale(1.05) rotate(-2deg); }
   .uc.ready .ic { color:var(--c, var(--blue));
                   background:color-mix(in srgb, var(--c, var(--blue)) 11%, var(--card));
                   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--c, var(--blue)) 17%,
                              transparent); }
-  .uc .ic svg { width:20px; height:20px; fill:none; stroke:currentColor;
+  .uc .ic svg { width:22px; height:22px; fill:none; stroke:currentColor;
                 stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
-  .uc h4 { margin:0; font-size:14.5px; font-weight:680; line-height:1.3;
-           letter-spacing:-.2px; }
+  .uc h4 { margin:0; font-size:15px; font-weight:700; line-height:1.28;
+           letter-spacing:-.3px; }
   /* What the card takes, in five words, for anyone who has not met it. */
   .uc .cap { font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.35; }
 
   /* Replaces the fixed blurb: what the app actually holds for this stream. */
   .uc .meta { display:flex; align-items:center; gap:7px; font-size:12px;
-              color:var(--muted); margin-top:auto; padding-top:15px; min-height:17px; }
+              color:var(--muted); margin-top:5px; min-height:17px; }
   .uc .meta b { color:var(--ink); font-weight:650; }
   .uc .meta .dot { flex:none; width:6px; height:6px; border-radius:50%;
                    background:var(--ok);
@@ -132,23 +134,64 @@
   .uc .meta .when { margin-left:auto; flex:none; font-size:11px; color:var(--muted);
                     opacity:.72; font-variant-numeric:tabular-nums; }
 
-  /* The card is the upload. The row underneath is the one thing the card is
-     not - the history behind it - plus the button for anyone who wants to be
-     told where to press. */
-  .uc .row { display:flex; gap:8px; align-items:center; margin-top:12px;
-             padding-top:11px; border-top:1px solid var(--line); }
-  .uc .go { display:inline-flex; align-items:center; gap:7px; border:0; padding:0;
-            background:none; font:inherit; cursor:pointer;
-            font-size:12.5px; font-weight:700; letter-spacing:-.1px;
-            color:var(--c, var(--blue)); }
+  /* ---------- the last fortnight ----------
+     A card that offers to take a file should be able to say which days it is
+     short of. Fourteen marks in the stream's colour, drawn the way the Status
+     Calendar draws them: filled is a day that is in, an empty outline is a day
+     that is missing, a stub is a day not due yet. It fills the middle of the
+     card with the one thing worth looking at there. */
+  .uc .strip { display:flex; align-items:stretch; gap:3px; height:22px;
+               padding-top:15px; box-sizing:content-box; }
+  .uc .strip[hidden], .uc .cap2[hidden] { display:none !important; }
+  .uc .strip b { flex:1; min-width:0; border-radius:4px; background:var(--c);
+                 transform-origin:bottom;
+                 animation:ksd-rise .34s cubic-bezier(.2,.8,.3,1) var(--in,0ms) both; }
+  @keyframes ksd-rise { from { transform:scaleY(.15); opacity:0 } }
+  .uc .strip b.off { background:color-mix(in srgb, var(--bad) 5%, transparent);
+                     box-shadow:inset 0 0 0 1.4px color-mix(in srgb, var(--bad) 32%,
+                                var(--line)); }
+  .uc .strip b.wait { align-self:flex-end; height:3px; border-radius:2px;
+                      background:var(--line); animation:none; }
+  .uc .cap2 { display:flex; align-items:baseline; gap:8px; margin-top:7px;
+              font-size:10.5px; font-weight:650; color:var(--muted);
+              letter-spacing:-.05px; }
+  .uc .cap2 .miss { margin-left:auto; color:var(--bad); font-weight:750; }
+  .uc .cap2 .all { margin-left:auto; color:var(--ok); font-weight:750; }
+  @media (prefers-reduced-motion: reduce){ .uc .strip b { animation:none; } }
+  /* Navy swallows a five-per-cent wash, so an empty day needs a firmer rim. */
+  :root[data-theme="dark"] .uc .strip b.off {
+      background:color-mix(in srgb, var(--bad) 8%, transparent);
+      box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 44%, var(--line)); }
+
+  /* The card is the upload, and now it says so with a button rather than a
+     word in colour. History keeps its name, quietly, beside it. */
+  /* Pinned to the foot of the card, so six cards in a row end together
+     whether or not there is a fortnight to show. */
+  .uc .row { display:flex; gap:8px; align-items:center; margin-top:auto;
+             padding-top:14px; }
+  .uc .go { display:inline-flex; align-items:center; gap:7px; border:0;
+            padding:8px 14px 8px 12px; border-radius:10px; cursor:pointer;
+            font:inherit; font-size:12.5px; font-weight:750; letter-spacing:-.1px;
+            color:#fff; background:var(--deep, var(--blue));
+            box-shadow:0 1px 2px rgba(16,24,40,.18),
+                       0 6px 14px -8px var(--deep, var(--blue));
+            transition:filter .15s ease, transform .15s cubic-bezier(.2,.7,.3,1),
+                       box-shadow .15s ease; }
+  .uc.ready:hover .go { filter:brightness(1.08);
+                        box-shadow:0 1px 2px rgba(16,24,40,.18),
+                                   0 10px 20px -8px var(--deep, var(--blue)); }
+  .uc .go:active { transform:scale(.97); }
   .uc .go svg { width:14px; height:14px; fill:none; stroke:currentColor;
-                stroke-width:2.1; stroke-linecap:round; stroke-linejoin:round;
+                stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round;
                 transition:transform .18s cubic-bezier(.2,.7,.3,1); }
   .uc.ready:hover .go svg { transform:translateY(-2px); }
+  .uc .go.tail { color:var(--ink); background:var(--row); box-shadow:none;
+                 box-shadow:inset 0 0 0 1px var(--line); }
+  .uc.ready:hover .go.tail { filter:none; background:var(--hover); }
   .uc.ready:hover .go.tail svg { transform:translateX(2px); }
   .uc .hist { margin-left:auto; border:0; background:none; font:inherit;
-              cursor:pointer; font-size:12px; font-weight:600; color:var(--muted);
-              padding:4px 9px; border-radius:8px;
+              cursor:pointer; font-size:12.5px; font-weight:650; color:var(--muted);
+              padding:6px 10px; border-radius:9px;
               transition:background-color .14s ease, color .14s ease; }
   .uc .hist:hover { background:var(--hover); color:var(--ink); }
 
@@ -377,7 +420,8 @@
 <div class="cards">
   {% for c in cards %}
   <div class="uc {{ 'ready' if c.ready else 'off' }}" data-card="{{ c.id }}"
-       style="--c:{{ c.colour or '#2563EB' }}"
+       style="--c:{{ c.colour or '#2563EB' }};
+              --deep:color-mix(in srgb, {{ c.colour or '#2563EB' }} 84%, #0A1020)"
        {% if c.ready %}role="button" tabindex="0" aria-label="Upload {{ c.title }}"
        onclick='if(!event.target.closest(".hist")) openUpload({{ c|tojson }})'
        onkeydown='if(event.key==="Enter"||event.key===" "){event.preventDefault();openUpload({{ c|tojson }})}'{% endif %}>
@@ -387,7 +431,9 @@
         <h4>{{ c.title }}</h4>
       </div>
     </div>
-    {% if c.ready %}<div class="meta" data-stream="{{ c.stream }}">&nbsp;</div>{% endif %}
+    {% if c.ready %}<div class="meta" data-stream="{{ c.stream }}">&nbsp;</div>
+    <div class="strip" data-stream="{{ c.stream }}" hidden></div>
+    <div class="cap2" data-stream="{{ c.stream }}" hidden></div>{% endif %}
     <div class="row">
       {% if c.ready %}
       <span class="go">{{ icon('upload-arrow') }}Upload</span>
@@ -525,6 +571,58 @@ const POLL_MS = 2000;
 // The same cards the tiles above are drawn from, so a link that names a
 // stream can find its card without scraping the page for a button.
 const CARDS = {{ cards|tojson }};
+/* ---------------- the last fortnight, per card ----------------
+   The same coverage the Status Calendar draws, cut to the two weeks up to
+   today and shown on the card that would fix it. Keyed by the upload card's
+   stream, because that is what the tile knows itself as. */
+const COVER = {{ calendar|tojson }};
+const BY_CARD = {};
+(COVER.streams || []).forEach(s => { if (s.card) BY_CARD[s.card] = s; });
+const TODAY = new Date().toISOString().slice(0,10);
+// Same rule as the calendar: four of these report a finished day and cannot
+// exist until it is over; the stock count is a photograph and arrives the
+// same day.
+function dueOn(key, s){
+  const n = Number(s.due_after || 0);
+  if (!n) return key;
+  const [y,m,d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m-1, d + n)).toISOString().slice(0,10);
+}
+function paintStrips(){
+  const days = [];
+  for (let i = 13; i >= 0; i--){
+    const t = new Date();
+    t.setDate(t.getDate() - i);
+    days.push(new Date(t.getTime() - t.getTimezoneOffset()*60000)
+                .toISOString().slice(0,10));
+  }
+  document.querySelectorAll('.uc .strip[data-stream]').forEach(el => {
+    const s = BY_CARD[el.dataset.stream];
+    const cap = document.querySelector(`.uc .cap2[data-stream="${el.dataset.stream}"]`);
+    // A stream filed by the month has no day-by-day coverage to draw. Say so
+    // rather than leaving a hole where the other five have a fortnight.
+    if (!s){
+      if (cap){ cap.innerHTML = '<span>Filed by month</span>'; cap.hidden = false; }
+      return;
+    }
+    let due = 0, got = 0;
+    el.innerHTML = days.map((k, i) => {
+      const have = (COVER.days[k] || []).includes(s.key);
+      const wait = !have && dueOn(k, s) > TODAY;
+      if (!wait){ due++; if (have) got++; }
+      return `<b class="${have ? '' : wait ? 'wait' : 'off'}" style="--in:${i*16}ms"
+                 title="${k}${have ? '' : wait ? ' — not due yet' : ' — missing'}"></b>`;
+    }).join('');
+    el.hidden = false;
+    if (cap){
+      const short = due - got;
+      cap.innerHTML = `<span>Last 14 days</span>` + (short
+        ? `<span class="miss">${short} missing</span>`
+        : `<span class="all">all in</span>`);
+      cap.hidden = false;
+    }
+  });
+}
 let card = null;
 let historyStream = null;
 let historyCard = null;
@@ -1046,6 +1144,8 @@ function ago(iso){
 
 // A build's state belongs on the card it came from, not in a banner over the
 // whole page. Running, failed or idle — the line under the title says which.
+paintStrips();
+
 function paintCards(jobs){
   const latest = {}, lastOk = {};
   for (const j of jobs){
