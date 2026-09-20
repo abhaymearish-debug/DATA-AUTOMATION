@@ -887,6 +887,16 @@ async def build(
         STORE.persist(job)
 
     except UploadRejected as exc:
+        # A batch is accepted or it is not. Files saved before the rejection
+        # were being left in the live folder owned by no job: invisible to the
+        # operator, impossible to delete through the app, and enough to make
+        # every later build of that stream abort on a file nobody put there.
+        # The ones this request wrote go back out.
+        for path in placed:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
         job.status = JobStatus.FAILED
         job.error = str(exc)
         STORE.persist(job)
@@ -1110,9 +1120,27 @@ def delete_upload_date(request: Request, stream_key: str, day: str = Form(...),
     if not jobs:
         raise HTTPException(404, "Nothing uploaded for that period.")
 
+    # Shop Sales and Shop Sales - Daily share one input folder, so a file this
+    # job named may also be the file another stream's upload put there. Taking
+    # it left that other run reporting success over a raw that no longer
+    # exists, and its report quietly short a day. Files another live run still
+    # claims are left alone and reported.
+    doomed = {j.id for j in jobs}
+    claimed: set[str] = set()
+    for other in STORE.recent(500):
+        if other.id in doomed or other.stream_key not in STREAMS:
+            continue
+        if STREAMS[other.stream_key].input_path() != stream.input_path():
+            continue
+        claimed.update(other.uploaded_names or [])
+
     removed = 0
+    kept_for_others: list[str] = []
     for job in jobs:
         for name in job.uploaded_names:
+            if name in claimed:
+                kept_for_others.append(name)
+                continue
             live = stream.input_path() / name
             try:
                 if live.is_file():
@@ -1128,7 +1156,12 @@ def delete_upload_date(request: Request, stream_key: str, day: str = Form(...),
         # returned "Nothing uploaded for that period", so it could never be
         # deleted at all.
         removed += _purge_filed_period(stream_key, job)
-        shutil.rmtree(STORE.dir_for(job), ignore_errors=True)
+        # The job folder holds this upload's archived raws and the promote
+        # backup of whatever it replaced - the only copies of both. rmtree
+        # destroyed them, while the docstring above promises nothing is
+        # erased and the note the operator gets says the same. Moved aside
+        # instead, beside the retired workbooks.
+        _retire_job_dir(job)
         STORE.forget(job.id)
 
     note = ""
@@ -1149,7 +1182,31 @@ def delete_upload_date(request: Request, stream_key: str, day: str = Form(...),
             note = ("Removed the raw file(s). The reports now show only what is "
                     "still uploaded.")
 
-    return JSONResponse({"ok": True, "runs": len(jobs), "raws": removed, "note": note})
+    if kept_for_others:
+        note += (f" Kept {len(kept_for_others)} file(s) still claimed by another "
+                 f"upload ({', '.join(sorted(set(kept_for_others))[:3])}"
+                 + ("…" if len(set(kept_for_others)) > 3 else "") + ").")
+
+    return JSONResponse({"ok": True, "runs": len(jobs), "raws": removed,
+                         "kept": sorted(set(kept_for_others)), "note": note})
+
+
+def _retire_job_dir(job) -> None:
+    """Move a deleted upload's run folder to _deleted/ rather than erasing it."""
+    src = STORE.dir_for(job)
+    if not src.is_dir():
+        return
+    bin_dir = config.WORKSPACE_ROOT / "_deleted" / "runs"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    dest = bin_dir / f"{job.stream_key}-{job.covers or job.created_at[:10]}-{job.id}"
+    n = 1
+    while dest.exists():
+        dest = bin_dir / f"{dest.name} ({n})"
+        n += 1
+    try:
+        shutil.move(str(src), str(dest))
+    except OSError:
+        shutil.rmtree(src, ignore_errors=True)
 
 
 def _purge_filed_period(stream_key: str, job) -> int:

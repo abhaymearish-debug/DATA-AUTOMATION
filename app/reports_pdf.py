@@ -519,11 +519,29 @@ def build_stock_pdf(data: dict, out_path: Path, *, title_suffix: str = "") -> Pa
     # One page per warehouse, so the count is simply how many there are.
     houses = list(data["warehouses"])
 
+    # The screen and the workbook both end on a network total; the PDF stopped
+    # at the last warehouse, so the one figure a reader most often wants was
+    # the only one they had to add up by hand. A closing page carries each
+    # warehouse's totals and the network total under them - only when there is
+    # more than one warehouse, since for a single warehouse its own total page
+    # already IS the network total.
+    pages = len(houses) + (1 if len(houses) > 1 else 0)
+
     c = pdfcanvas.Canvas(str(out_path), pagesize=(A4_W, A4_H))
     for i, wh in enumerate(houses, start=1):
         draw_stock_page(
             c, warehouse=wh["name"], as_of=as_of, rows=wh["rows"],
-            totals=wh["totals"], page_no=i, pages=len(houses),
+            totals=wh["totals"], page_no=i, pages=pages,
+        )
+    if len(houses) > 1:
+        summary = [{"brand": wh["name"], "pack": "",
+                    "physical": wh["totals"]["physical"],
+                    "allotable": wh["totals"]["allotable"],
+                    "pending": wh["totals"]["pending"]}
+                   for wh in houses]
+        draw_stock_page(
+            c, warehouse="ALL WAREHOUSES", as_of=as_of, rows=summary,
+            totals=data.get("grand"), page_no=pages, pages=pages,
         )
     c.save()
     return out_path
