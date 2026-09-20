@@ -2195,7 +2195,16 @@ def resolve_window(start: date, end: date) -> dict:
     chain = built["chain"]
     source = "stitched" if len(chain) > 1 else chain[0]["kind"]
     return {"period": period, "source": source, "chain": chain,
-            "shops": _shops_from_lines(built["lines"], built["names"])}
+            # built["warehouses"] must be passed: without it _shops_from_lines
+            # falls back to each shop's warehouse in master, while the
+            # exact-cumulative-file path above passes the warehouse the raw
+            # itself names. The two paths then disagree for every shop that has
+            # moved warehouse, and a warehouse whose shops have all moved away
+            # in master vanishes from the report entirely - with the grand
+            # total still correct, because the cases are misattributed rather
+            # than lost.
+            "shops": _shops_from_lines(built["lines"], built["names"],
+                                       built["warehouses"])}
 
 # ---------------------------------------------------------------------------
 # Liquidation: what actually left the trade, this month against last
