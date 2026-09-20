@@ -932,6 +932,12 @@ function tog(btn) {
 (function(){
   function fit(){
     document.querySelectorAll('.wrap, .tablewrap').forEach(wrap => {
+      // Only a box that scrolls may be capped. Two settings pages call their
+      // plain card .wrap as well, and capping one of those did not hide the
+      // overflow - it has none to hide - it simply drew the card short and
+      // left the last rows of Manage Leaves hanging in the air below it.
+      const flow = getComputedStyle(wrap).overflowY;
+      if (flow !== 'auto' && flow !== 'scroll') return;
       const box = wrap.getBoundingClientRect();
       if (!box.height) return;                       // hidden: nothing to size
       // Measured from the table's own bottom edge, so the footnote's margin
