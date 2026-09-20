@@ -183,8 +183,21 @@
      both at 31/31, the two rails were the same green and the legend no longer
      told them apart, and the whole strip changed character from one month to
      the next depending on how many streams happened to be complete. */
-  .kk.done .sc { color:var(--ok); }
-  .kk.done .sc s { color:var(--ok); opacity:.6; }
+  /* Full reads in the stream's OWN colour, not a shared green. The colour is
+     this stream's identity everywhere else on the page - swatch, rail, and
+     the blocks on each day's tile - so a finished row simply goes all the way
+     over to it: swatch, figure and rail agree, and you can still tell it from
+     an unfinished one, whose figure stays ink. */
+  .kk.done .sc { color:var(--c); }
+  .kk.done .sc s { color:var(--c); opacity:.55; }
+  /* On white, the lighter streams - the sky blue, the amber - are too thin
+     for a bold figure at this size. Taken a little way toward ink, which
+     holds the hue and gets the contrast back. Dark ground has the opposite
+     problem and needs no help. */
+  :root:not([data-theme="dark"]) .kk.done .sc {
+      color:color-mix(in srgb, var(--c) 78%, var(--ink)); }
+  :root:not([data-theme="dark"]) .kk.done .sc s {
+      color:color-mix(in srgb, var(--c) 78%, var(--ink)); }
 
   @media (max-width: 1080px) {
     .key { grid-template-columns:repeat(auto-fit, minmax(158px, 1fr)); gap:14px 20px; }
