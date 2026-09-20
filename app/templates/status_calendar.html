@@ -140,13 +140,22 @@
   /* The swatch is the one thing tying this line to its bars in the grid
      below, so it keeps the stream's colour and gains a ring of it - a flat
      chip of colour reads as a bullet, a ringed one reads as a key. */
-  .kk .nm i { flex:none; width:9px; height:11px; border-radius:3px;
-              background:var(--c); margin-left:3px; box-shadow:0 0 0 2.5px
-              color-mix(in srgb, var(--c) 16%, transparent);
+  .kk .nm i { flex:none; width:10px; height:10px; border-radius:50%;
+              margin-left:3px;
+              background:radial-gradient(circle at 34% 28%,
+                         color-mix(in srgb, var(--c) 78%, #fff),
+                         var(--c) 58%,
+                         color-mix(in srgb, var(--c) 86%, #0B1020));
+              box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 14%, transparent),
+                         0 0 6px -1px color-mix(in srgb, var(--c) 40%, transparent);
               transition:box-shadow .18s ease; }
+  :root[data-theme="dark"] .kk .nm i {
+              box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 16%, transparent),
+                         0 0 9px -2px color-mix(in srgb, var(--c) 66%, transparent); }
+  .kk:hover .nm i, :root[data-theme="dark"] .kk:hover .nm i {
+              box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent),
+                         0 0 11px -2px color-mix(in srgb, var(--c) 75%, transparent); }
   .kk:hover .nm { color:var(--ink); }
-  .kk:hover .nm i { box-shadow:0 0 0 3.5px
-                    color-mix(in srgb, var(--c) 22%, transparent); }
   /* The figure is the point of the line, so it is the biggest thing on it;
      the total it is out of sits behind a slash at text weight. */
   .kk .sc { font-size:13.5px; font-weight:820; color:var(--ink); white-space:nowrap;
@@ -363,8 +372,20 @@
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .daypop b u { display:block; text-decoration:none; font-size:10px; font-weight:600;
                 color:var(--muted); letter-spacing:-.1px; margin-top:1px; }
-  .daypop .up i, .daypop .st i { width:9px; height:13px; border-radius:3px; flex:none;
-                  background:var(--c); }
+  /* The same disc as the calendar tile, at the size this row can carry - the
+     panel names the five streams the tile drew, so the two should be the
+     same mark. Halo and radial fill copied from .bars b. */
+  .daypop .up i, .daypop .st i { width:11px; height:11px; border-radius:50%; flex:none;
+                  background:radial-gradient(circle at 34% 28%,
+                             color-mix(in srgb, var(--c) 78%, #fff),
+                             var(--c) 58%,
+                             color-mix(in srgb, var(--c) 86%, #0B1020));
+                  box-shadow:0 0 0 1.5px color-mix(in srgb, var(--c) 10%, transparent),
+                             0 0 5px -1px color-mix(in srgb, var(--c) 34%, transparent); }
+  :root[data-theme="dark"] .daypop .up i,
+  :root[data-theme="dark"] .daypop .st i {
+                  box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 15%, transparent),
+                             0 0 8px -2px color-mix(in srgb, var(--c) 62%, transparent); }
 
   /* Still wanted: the row wears its stream's colour and ends in a button. */
   .daypop .up { cursor:pointer; padding:9px 9px 9px 10px;
@@ -376,7 +397,10 @@
                       box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--c) 34%,
                                  transparent); }
   .daypop .up:active { transform:scale(.99); }
-  .daypop .up i { background:color-mix(in srgb, var(--c) 8%, transparent);
+  /* Wanted, so it is the hollow ring the tile uses for the same state - and
+     a ring gives off no light, there too. */
+  .daypop .up i, :root[data-theme="dark"] .daypop .up i {
+                  background:color-mix(in srgb, var(--c) 8%, transparent);
                   box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--c) 55%,
                              transparent); }
   .daypop .up span { margin-left:auto; flex:none; font-size:11px; font-weight:750;
@@ -396,7 +420,8 @@
                           font-size:9px; font-weight:800; color:#fff;
                           background:var(--ok); }
   .daypop .st.wait { color:var(--muted); }
-  .daypop .st.wait i { background:none;
+  .daypop .st.wait i, :root[data-theme="dark"] .daypop .st.wait i {
+                       background:none;
                        box-shadow:inset 0 0 0 1.6px color-mix(in srgb, var(--line) 90%,
                                   transparent); }
   .daypop .st.wait span { margin-left:auto; flex:none; font-size:10px; font-weight:700;
