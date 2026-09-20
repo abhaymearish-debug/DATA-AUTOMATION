@@ -85,25 +85,23 @@ MAX_UPLOAD_BYTES = 80 * 1024 * 1024
 #
 # colour: the tint the Status Calendar gives this stream. Carrying it onto the
 # card means the colour is learnt once and read in both places.
+#
+# No blurb: the titles are the office's own names for these files, and a line
+# under each one explaining a thing the reader already knows is six lines of
+# nothing between the title and the state.
 UPLOAD_CARDS = [
     {"id": "wh_stock", "title": "Warehouse Physical Stock", "stream": "warehouse_stock",
-     "mode": "files", "icon": "warehouse", "ready": True, "colour": "#F59E0B",
-     "note": "One photograph of the day's stock"},
+     "mode": "files", "icon": "warehouse", "ready": True, "colour": "#F59E0B"},
     {"id": "shop_daily", "title": "Shop Sales - Daily", "stream": "shop_sales_daily",
-     "mode": "day", "icon": "shop", "ready": True, "colour": "#0EA5E9",
-     "note": "One day's shop sales"},
+     "mode": "day", "icon": "shop", "ready": True, "colour": "#0EA5E9"},
     {"id": "shop_cum", "title": "Shop Sales - Cumulative", "stream": "shop_sales_cumulative",
-     "mode": "range", "icon": "calendar", "ready": True, "colour": "#2563EB",
-     "note": "A pull covering a run of days"},
+     "mode": "range", "icon": "calendar", "ready": True, "colour": "#2563EB"},
     {"id": "secondary", "title": "Secondary Sales - Daily", "stream": "secondary_sales",
-     "mode": "day", "icon": "truck", "ready": True, "colour": "#10B981",
-     "note": "One day's issues to shops"},
+     "mode": "day", "icon": "truck", "ready": True, "colour": "#10B981"},
     {"id": "item_issue", "title": "Secondary Sales - Analysis", "stream": "item_issue",
-     "mode": "batch", "icon": "truck", "ready": True, "colour": "#8B5CF6",
-     "note": "Item-wise issue workbooks"},
+     "mode": "batch", "icon": "truck", "ready": True, "colour": "#8B5CF6"},
     {"id": "pi_variance", "title": "Purchase Instruction", "stream": "purchase_instruction",
-     "mode": "batch", "icon": "clipboard", "ready": True, "colour": "#E11D48",
-     "note": "Indents against what arrived"},
+     "mode": "batch", "icon": "clipboard", "ready": True, "colour": "#E11D48"},
 ]
 
 LEAVE_CARDS = [

@@ -97,7 +97,7 @@
                     box-shadow:0 0 0 3px color-mix(in srgb, var(--c, var(--blue)) 18%,
                                transparent); }
 
-  .uc .top { display:flex; align-items:flex-start; gap:13px; }
+  .uc .top { display:flex; align-items:center; gap:13px; }
   .uc .ic { flex:none; width:42px; height:42px; border-radius:13px; display:grid;
             place-items:center; background:var(--chip); color:var(--navy); }
   .uc.ready .ic { color:var(--c, var(--blue));
@@ -385,7 +385,6 @@
       <span class="ic">{{ icon(c.icon) }}</span>
       <div>
         <h4>{{ c.title }}</h4>
-        {% if c.note %}<div class="cap">{{ c.note }}</div>{% endif %}
       </div>
     </div>
     {% if c.ready %}<div class="meta" data-stream="{{ c.stream }}">&nbsp;</div>{% endif %}
