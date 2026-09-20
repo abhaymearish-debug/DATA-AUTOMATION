@@ -99,9 +99,12 @@
   .days > * { min-width:0; }
   .days .c { height:16px; border-radius:4px; background:var(--d);
              transition:transform .14s cubic-bezier(.2,.7,.3,1), opacity .14s ease; }
-  .days .c.off { background:color-mix(in srgb, var(--bad) 55%, var(--row)); }
+  /* Same rule as the tiles: filled means it is here, hollow means it is not. */
+  .days .c.off { background:none;
+                 box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 34%,
+                            var(--line)); }
   .days .c.wait { background:none;
-                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 80%,
+                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 70%,
                              transparent); }
   .days .c:hover { transform:scaleY(1.28); }
   /* The day numbers, thinned out - every fifth, and today. */
@@ -205,24 +208,44 @@
   .cell .n em { font-style:normal; font-size:8px; font-weight:800; letter-spacing:.8px;
                 text-transform:uppercase; color:var(--gold); }
   .cell .n .tick { margin-left:auto; color:var(--ok); font-size:12px; }
-  /* The red bars say which are missing; this says how many, without
-     counting them. Same red, so the two read as one statement. */
-  .cell .n .gap { margin-left:auto; flex:none; font-size:10.5px; font-weight:800;
-                  line-height:1.4; letter-spacing:-.2px; padding:1px 6.5px;
+  /* How many slots are empty, so nobody has to count them - and it carries
+     one of those empty slots with it, so the number needs no caption to say
+     which way round it counts. This is the only red on the tile. */
+  .cell .n .gap { margin-left:auto; flex:none; display:inline-flex;
+                  align-items:center; gap:4px;
+                  font-size:10.5px; font-weight:800; line-height:1.5;
+                  letter-spacing:-.2px; padding:0 6px 0 5px;
                   border-radius:999px; color:var(--bad);
-                  background:color-mix(in srgb, var(--bad) 13%, transparent);
-                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 26%,
+                  background:color-mix(in srgb, var(--bad) 11%, transparent);
+                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 24%,
                              transparent);
                   font-variant-numeric:tabular-nums; }
+  .cell .n .gap i { width:7px; height:7px; border-radius:2.5px; flex:none;
+                    box-shadow:inset 0 0 0 1.4px color-mix(in srgb, var(--bad) 60%,
+                               transparent); }
 
-  /* Five marks, always five, always in the matrix's order. */
-  .meter { margin-top:auto; display:flex; gap:4px; }
-  .meter b { flex:1; height:clamp(6px, calc(var(--tile, 78px) * .075), 8px);
-             border-radius:4px; background:var(--c); }
-  .meter b.off { background:color-mix(in srgb, var(--bad) 78%, var(--row)); }
-  .meter b.wait { background:none;
-                  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--line) 85%,
-                             transparent); }
+  /* Five marks, always five, always in the matrix's order.
+
+     These went through red and back. Red is a HUE, and hue is already spoken
+     for on this row - it is how you know the third mark is Secondary daily.
+     A red bar in the first slot argued with "blue is Shop cumulative" instead
+     of contradicting it, and the row turned into six colours meaning two
+     different things at once.
+
+     Absence is not a colour. A mark that is there is filled; a mark that is
+     missing is an empty slot with a rim - ink against no ink, which the eye
+     settles in one look and never has to decode. A stream not due yet is a
+     fainter, shorter line: the slot has not opened yet.
+
+     That leaves red free to mean one thing on the whole tile - the count in
+     the corner - which is why it now carries. */
+  .meter { margin-top:auto; display:flex; align-items:center; gap:4px;
+           height:clamp(7px, calc(var(--tile, 78px) * .08), 9px); }
+  .meter b { flex:1; height:100%; border-radius:4px; background:var(--c); }
+  .meter b.off { background:none;
+                 box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 40%,
+                            var(--line)); }
+  .meter b.wait { height:2px; border-radius:2px; background:var(--line); }
 
   /* The verdict, carried by the tile rather than written on it. */
   .cell.full { border-color:color-mix(in srgb, var(--ok) 34%, var(--line));
@@ -249,9 +272,10 @@
   :root[data-theme="dark"] .cell.full {
       border-color:color-mix(in srgb, var(--ok) 40%, var(--line)); }
   :root[data-theme="dark"] .meter b.off {
-      background:color-mix(in srgb, var(--bad) 70%, var(--row)); }
+      box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 52%, var(--line)); }
   :root[data-theme="dark"] .days .c.off {
-      background:color-mix(in srgb, var(--bad) 52%, var(--row)); }
+      box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 44%, var(--line)); }
+  :root[data-theme="dark"] .meter b.wait { background:var(--line); }
 
   /* On a phone seven columns have about fifty pixels each, which is room for
      a number and four slots and nothing else. The note goes; the tooltip and
@@ -386,7 +410,8 @@ function draw(){
     html += `<div class="${cls}" data-day="${key}">
         <div class="n">${d}${key === today ? '<em>today</em>' : ''}${
           done ? '<span class="tick">\u2713</span>'
-               : missing.length ? `<span class="gap">${missing.length}</span>` : ''}</div>
+               : missing.length
+                 ? `<span class="gap"><i></i>${missing.length}</span>` : ''}</div>
         <div class="meter">${meter}</div>
       </div>`;
   }
