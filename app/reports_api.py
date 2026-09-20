@@ -2810,6 +2810,24 @@ def _tva_row(label: str, kind: str, cluster: int | None,
     }
 
 
+_MONTH_KEY = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _month_label(month: str) -> str:
+    """'September 2026' for a month key, and the key itself for anything else.
+
+    int(month[5:7]) used to run on whatever arrived in the query string:
+    'garbage' is seven characters, so int('ge') raised ValueError as a bare
+    500. And month '2026-00' indexed _MONTHS_UP[-1], which does not raise at
+    all - it wraps, and the page rendered happily under the title
+    'December 2026'. A wrong title on an otherwise correct report is the worse
+    of the two.
+    """
+    if not _MONTH_KEY.match(month or ""):
+        return month or ""
+    return f"{_MONTHS_UP[int(month[5:7]) - 1].title()} {month[:4]}"
+
+
 def target_vs_achievement(start: date, end: date, cluster: int | None = None,
                           month: str = "", round_off: bool = True) -> dict:
     """The bond x brand grid, in target-and-achieved pairs, by cluster."""
@@ -2821,6 +2839,10 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
     grid = got["grid"]
 
     month = month or start.strftime("%Y-%m")
+    # A month that is not a month cannot name a target sheet, and silently
+    # falling back would present another month's targets under its label.
+    if not _MONTH_KEY.match(month):
+        return {"error": f"{month!r} is not a month (expected YYYY-MM)."}
     tgt = targets_mod.load(month)
 
     # Other earns a column only by selling something. A dead brand that comes
@@ -2861,7 +2883,7 @@ def target_vs_achievement(start: date, end: date, cluster: int | None = None,
                    "short": f"{start.day} {start.strftime('%b')} {start.year} to "
                             f"{end.day} {end.strftime('%b')} {end.year}"},
         "month": month,
-        "month_label": f"{_MONTHS_UP[int(month[5:7]) - 1].title()} {month[:4]}",
+        "month_label": _month_label(month),
         "columns": [{"key": k, "label": targets_mod.FAMILY_LABEL[k]} for k in cols],
         "rows": rows,
         "legs": {k: round(v, 3) for k, v in legs.items()},

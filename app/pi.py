@@ -153,7 +153,9 @@ def month_key(parsed: dict, filename: str = "") -> str:
 
 
 def month_label(key: str) -> str:
-    if not key or len(key) != 7:
+    # The length check let 'garbage' through - seven characters - and int('ge')
+    # then raised ValueError as a 500 rather than a message.
+    if not _MONTH_KEY.match(key or ""):
         return key or ""
     return f"{MONTH_NAMES[int(key[5:7]) - 1]} {key[:4]}"
 
@@ -167,7 +169,18 @@ def root() -> Path:
     return config.CLAUDE_ROOT / "PURCHASE INSTRUCTION" / "_months"
 
 
+_MONTH_KEY = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
 def month_dir(key: str) -> Path:
+    """The folder for one month, for a key that is really a month.
+
+    This value arrives from a query string and is joined straight onto a path,
+    so '../..' or an absolute path would walk out of the store. A month key has
+    exactly one shape; anything else is not a month.
+    """
+    if not _MONTH_KEY.match(key or ""):
+        raise ValueError(f"{key!r} is not a month (expected YYYY-MM).")
     return root() / key
 
 
@@ -292,7 +305,10 @@ def months() -> list[dict]:
 
 def load(key: str) -> list[dict]:
     """Every shop's parsed PI for a month. Cached on the folder's mtime."""
-    folder = month_dir(key)
+    try:
+        folder = month_dir(key)
+    except ValueError:
+        return []          # not a month, so nothing is stored for it
     if not folder.is_dir():
         return []
     stamp = folder.stat().st_mtime_ns
@@ -393,7 +409,7 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
         if view == "bond" and cluster in (1, 2, 3) and of_cluster.get(key) != cluster:
             continue
         if view == "warehouse" and cluster in (1, 2, 3) \
-           and reports_api.CLUSTER_OF_WAREHOUSE.get(key) != cluster:
+           and reports_api.cluster_of_warehouse(key) != cluster:
             continue
 
         cells = _blank_cells()
@@ -432,6 +448,32 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
         g["shops"] += 1
         g["blank"] += 1 if blank else 0
         g["prior_mq"] += was
+
+    # A shop that filed last month and not this one never enters the loop
+    # above, so its prior MQ reached no group, no cluster and no GRAND TOTAL -
+    # and the fall it represents printed as delta 0, or the group vanished
+    # from both sides entirely. The variance is a comparison: last month's
+    # side has to carry every shop last month had.
+    seen_now = {d["shop_code"] for d in current}
+    gone: list[dict] = []
+    for d in prior_rows:
+        code = d["shop_code"]
+        was = prior_mq.get(code, 0)
+        if code in seen_now or not was:
+            continue
+        key = group_of(d)
+        if view == "bond" and cluster in (1, 2, 3) and of_cluster.get(key) != cluster:
+            continue
+        if view == "warehouse" and cluster in (1, 2, 3) \
+           and reports_api.cluster_of_warehouse(key) != cluster:
+            continue
+        g = groups.setdefault(key, {"cells": _blank_cells(), "shops": 0,
+                                    "blank": 0, "prior_mq": 0})
+        g["prior_mq"] += was
+        gone.append({"group": key, "code": code,
+                     "name": f'{code}-{d["shop_name"]}' if d.get("shop_name") else code,
+                     "bond": master.get(code, {}).get("bond", ""),
+                     "prior_mq": was})
 
     for key in shops:
         shops[key].sort(key=lambda s: (-s["total"]["mq"], s["name"]))
@@ -475,8 +517,14 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
     for key in loose:
         rows.append(row(key, "group", [key], None))
     shown += loose
-    if cluster in (None, 0) or view == "warehouse":
+    # A cluster filter means the rows above are one cluster, so a row labelled
+    # GRAND TOTAL would present that cluster's figure as the network's. The
+    # bond view already knew this; the warehouse view was exempted and printed
+    # the misleading label. Same rule for both, and the label says which.
+    if cluster in (None, 0):
         rows.append(row("GRAND TOTAL", "grand", shown, None))
+    else:
+        rows.append(row(f"CLUSTER {cluster} TOTAL", "grand", shown, cluster))
 
     return {
         "month": month, "month_label": month_label(month),
@@ -488,6 +536,10 @@ def variance(month: str, view: str = "bond", cluster: int | None = None,
         "rows": rows,
         "shops": {k: v for k, v in shops.items()},
         "blanks": sorted(blanks, key=lambda b: -b["prior_mq"]),
+        # Shops that had an instruction last month and none this month. Their
+        # prior MQ counts in the comparison; the page can name them so a fall
+        # reads as a fall rather than as a shop that quietly left the report.
+        "gone": sorted(gone, key=lambda b: -b["prior_mq"]),
         "unknown_codes": sorted(unknown_codes),
         "months": months(),
         "source_block": source_for(month, prior),
@@ -505,7 +557,10 @@ def source_for(month: str, prior: str = "") -> dict:
     from . import reports_api as _r
 
     def leg(key: str, label: str, tone: str = "") -> dict:
-        folder = month_dir(key) if key else None
+        try:
+            folder = month_dir(key) if key else None
+        except ValueError:
+            return {}
         if not folder or not folder.is_dir():
             return {}
         files = [f for f in folder.glob("*.xls*") if not f.name.startswith("~$")]
@@ -598,7 +653,10 @@ def receipt_for(month: str) -> dict:
     wrote. This reads what is on disk now, so it always answers for filed,
     blank, absent and stray, and says it is a reading rather than a record.
     """
-    folder = month_dir(month)
+    try:
+        folder = month_dir(month)
+    except ValueError as exc:
+        return {"error": str(exc)}
     if not folder.is_dir():
         return {"error": f"Nothing is filed for {month_label(month)}."}
 
