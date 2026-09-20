@@ -30,6 +30,9 @@
 </head>
 <body>
   <form class="card" method="post" action="/login">
+    {# Where the session ran out. Signing in comes back here rather than
+       dropping everybody on the landing page. #}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     <h1>K.S. Distillery</h1>
     <p class="tag">Report Transformer</p>
 

@@ -9,14 +9,14 @@ import shutil
 import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 import subprocess
 import sys
 from pathlib import Path
 
 import openpyxl
 
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, Form, HTTPException, Query, Request, UploadFile, File
 from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
                                FileResponse, PlainTextResponse)
 from fastapi.staticfiles import StaticFiles
@@ -156,6 +156,48 @@ async def page_not_found(request: Request, exc):
     )
 
 
+def _safe_next(target: str) -> str:
+    """A return path this app can actually send somebody back to.
+
+    Only a plain path on this site. "//elsewhere.example" is a path as far as
+    the URL is concerned and a different website as far as the browser is
+    concerned, so anything that is not a single leading slash is dropped.
+    """
+    target = (target or "").strip()
+    if not target.startswith("/") or target.startswith("//") or "\\" in target:
+        return ""
+    return target if target != "/" else ""
+
+
+@app.exception_handler(401)
+async def please_sign_in(request: Request, exc):
+    """A session that has run out belongs on the sign-in page.
+
+    Sessions last twelve hours, and require_user answers an expired one by
+    raising 401 - which FastAPI renders as {"detail":"Sign in first."}. That
+    is right for a fetch and useless in a browser: the next morning's first
+    click on any report answered with one line of JSON on a blank screen, no
+    sign-in box, no way back except retyping the address. A page request now
+    goes to /login and returns to the page it was asking for.
+    """
+    path = request.url.path
+    said = getattr(exc, "detail", None) or "Sign in first."
+    if path.endswith((".pdf", ".xlsx", ".zip", ".csv")):
+        # Same reason as the 404 handler: the browser saves whatever comes
+        # back under the name it asked for, and a sign-in page on disk as a
+        # .xlsx reads as a corrupt export rather than as a finished session.
+        return PlainTextResponse(f"{said}\n", status_code=401)
+    wants_json = (path.startswith(("/api/", "/jobs/"))
+                  or "application/json" in request.headers.get("accept", ""))
+    if wants_json or request.method != "GET":
+        # ksdFetch already turns a 401 on an API call into the banner that
+        # says so, and dims the figures underneath it.
+        return JSONResponse({"detail": said}, status_code=401)
+    back = _safe_next(path + (f"?{request.url.query}" if request.url.query else ""))
+    dest = "/login" + (f"?next={quote(back, safe='')}" if back else "")
+    return RedirectResponse(dest, status_code=303)
+
+
 @app.middleware("http")
 async def no_cache_html(request: Request, call_next):
     """Never let a browser cache a page of this app.
@@ -237,9 +279,12 @@ def require_user(request: Request) -> str:
 
 
 @app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, error: str = ""):
+def login_form(request: Request, error: str = "",
+               nxt: str = Query("", alias="next")):
     return templates.TemplateResponse(
-        request, "login.html", {"error": error, "first_run": not auth.load_users()})
+        request, "login.html",
+        {"error": error, "first_run": not auth.load_users(),
+         "next": _safe_next(nxt)})
 
 
 # A server has no terminal to run bootstrap_user.py in, so the first password
@@ -277,7 +322,8 @@ def first_run(request: Request, email: str = Form(...), password: str = Form(...
 
 
 @app.post("/login")
-def login(request: Request, email: str = Form(...), password: str = Form(...)):
+def login(request: Request, email: str = Form(...), password: str = Form(...),
+          nxt: str = Form("", alias="next")):
     who = auth.authenticate(email, password)
     if not who:
         # first_run belongs on THIS render too. Without it, one failed attempt
@@ -290,10 +336,11 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
                        "set your password first."
                        if not auth.load_users()
                        else "That email and password combination was not accepted."),
-             "first_run": not auth.load_users()},
+             "first_run": not auth.load_users(),
+             "next": _safe_next(nxt)},
             status_code=401,
         )
-    response = RedirectResponse("/", status_code=303)
+    response = RedirectResponse(_safe_next(nxt) or "/", status_code=303)
     response.set_cookie(
         auth.COOKIE_NAME,
         auth.issue_session(who),
