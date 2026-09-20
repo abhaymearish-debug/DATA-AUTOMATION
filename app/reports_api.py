@@ -2546,32 +2546,15 @@ def liquidation(start: date, end: date, prev: tuple | None = None) -> dict:
     divisors = [(open_now, open_was), (wopen_now, wopen_was),
                 (wopen_now, wopen_was), (open_now, open_was)]
 
-    def _said(total, shut, open_, who):
-        if not shut:
-            return str(total)
-        return f"{open_} ({total} less {len(shut)} the {who} were shut)"
-
-    def _side(who, total, shut, open_, p_shut, p_open):
-        out = _said(total, shut, open_, who)
-        if p_start:
-            out += " against " + _said(p_span, p_shut, p_open, who)
-        return out
-
-    note = ("Per-day figures divide by the days the trade was open: shop and "
-            "total by "
-            + _side("shops", span, shut_now, open_now, shut_was, open_was)
-            + "; secondary and fed/bar by "
-            + _side("warehouses", span, wh_now, wopen_now, wh_was, wopen_was)
-            + ".")
-
     rows.append({
         "label": "AVERAGE DAILY SALE", "kind": "average",
         "blocks": [[grand[i][0] / divisors[i][0], grand[i][1] / divisors[i][1]]
                    for i in range(4)],
-        # What each pair of columns was divided by, so the row can say so on
-        # the screen rather than leaving somebody to work it out.
+        # What each pair of columns was divided by. Nothing prints it - the
+        # figure is the answer, and a line of arithmetic under the table was
+        # noise - but a question about one of these numbers is settled by
+        # reading it rather than by working it out again.
         "divisors": [list(d) for d in divisors],
-        "note": note,
     })
 
     return {

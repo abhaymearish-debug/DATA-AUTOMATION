@@ -218,11 +218,6 @@
   </table>
 </div>
 
-{# The per-day row divides by trading days, not calendar days. Say which,
-   so nobody has to reach for a calculator to check it. #}
-{% set avg = data.rows | selectattr('kind', 'equalto', 'average') | first %}
-{% if avg and avg.note %}<div class="status">{{ avg.note }}</div>{% endif %}
-
 <div class="status srcline" id="srcLine" hidden></div>
 {# Server-rendered, so the block travels with the page rather than being fetched. #}
 <script type="application/json" data-source="srcLine">{{ data.source_block|default({})|tojson }}</script>

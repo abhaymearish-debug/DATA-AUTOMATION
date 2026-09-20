@@ -940,17 +940,26 @@ function tog(btn) {
       if (flow !== 'auto' && flow !== 'scroll') return;
       const box = wrap.getBoundingClientRect();
       if (!box.height) return;                       // hidden: nothing to size
-      // Measured from the table's own bottom edge, so the footnote's margin
-      // is counted whatever it is on this page.
-      // Everything under the table, whatever it is: a Source chip, a
-      // footnote, or both. Measuring only .status missed the chip entirely on
-      // the reports that carry no footnote, and left a band of nothing there.
+      // Everything under the table has to fit too: a Source chip, a footnote,
+      // the margins between them and the page's own bottom padding. Ask the
+      // column they all sit in where it ends and the whole tail is measured
+      // at once, whatever a given report puts down there. This used to take
+      // the parent's lastElementChild instead - which on every report is the
+      // <script> carrying the Source data, no box at all - so it reserved
+      // nothing, the table came out some sixty pixels too tall for its
+      // window, and every page carried a scrollbar with nothing under it.
       const par = wrap.parentElement;
-      const last = par ? par.lastElementChild : null;
-      const below = (last && last !== wrap)
-                  ? last.getBoundingClientRect().bottom - box.bottom : 0;
-      const room = innerHeight - box.top - Math.max(0, below) - 8;
-      if (room > 220) wrap.style.maxHeight = Math.round(room) + 'px';
+      const tail = par ? par.getBoundingClientRect().bottom - box.bottom : 0;
+      const room = innerHeight - box.top - Math.max(0, tail) - 8;
+      if (room <= 220) return;
+      // A capped box gets a scrollbar; a scrollbar narrows what is inside it;
+      // a narrower table is a taller table. On a table already sitting at the
+      // edge that is a loop, and a cap recomputed to the pixel flips between
+      // two answers several times a second - the columns visibly shiver. A
+      // few pixels either way is noise, not a resize, so leave it alone.
+      const held = parseFloat(wrap.style.maxHeight) || 0;
+      if (Math.abs(room - held) < 8) return;
+      wrap.style.maxHeight = Math.round(room) + 'px';
     });
   }
   let timer = null;
