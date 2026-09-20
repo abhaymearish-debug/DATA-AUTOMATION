@@ -1292,6 +1292,13 @@ def centre_all(wb) -> None:
     from openpyxl.styles import Alignment
 
     for ws in wb.worksheets:
+        # The outline gutter goes with it. Two of these sheets group their
+        # rows so a warehouse or a bond folds to its total, and Excel answers
+        # that by putting a grey channel of brackets and plus-minus boxes down
+        # the left of the sheet and a "1 2" pair above it - furniture from the
+        # application, in a document people open to read figures. The grouping
+        # stays and still folds from Data > Group; only the channel goes.
+        ws.sheet_view.showOutlineSymbols = False
         for row in ws.iter_rows():
             for c in row:
                 a = c.alignment
