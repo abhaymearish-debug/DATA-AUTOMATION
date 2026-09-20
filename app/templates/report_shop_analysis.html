@@ -55,11 +55,18 @@
   col.avg  { width:74px; }
   col.trend{ width:96px; }
 
-  thead th { position:sticky; top:0; z-index:3; background:var(--navy); color:#fff;
+  thead th { position:sticky; z-index:3; background:var(--navy); color:#fff;
              font-weight:700; font-size:10px; letter-spacing:.4px; text-transform:uppercase;
              padding:7px 6px; text-align:center; line-height:1.28;
              border-bottom:1px solid #22407F; }
   thead th.grp { color:var(--gold); border-bottom:1px solid rgba(255,189,48,.45); }
+  /* Both header rows pinned at top:0 meant the lower one rode up over the
+     upper as soon as the table scrolled: CM, LM and Trend took the top of the
+     header and AVERAGE SALES / DAY, the title that says what they are, was
+     covered by them. The lower row sits under the upper one, at whatever
+     height ksdFit measures the upper one to be. */
+  thead tr:first-child th { top:0; }
+  thead tr:last-child th { top:var(--hrow1, 28px); }
   /* Only the bond column is pinned. Bond spans both header rows, so the
      second row's first child is CM, the first average column - and
      thead th:first-child pinned that to the left edge too, where it sat over

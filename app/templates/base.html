@@ -213,7 +213,7 @@
      ksdFit reserves before it caps the table, and this padding is part of
      it. Sixty pixels of it was a band of nothing under every report that the
      table could have been using. */
-  .content { padding:22px 26px 22px; }
+  .content { padding:22px 26px 16px; }
 
   .btn { border:1px solid var(--line); background:var(--card); color:var(--ink);
          border-radius:8px; padding:8px 14px; font-size:13.5px; cursor:pointer; }
@@ -935,6 +935,17 @@ function tog(btn) {
    full height on the way. */
 (function(){
   function fit(){
+    // A report with a two-row header pins the second row under the first, and
+    // how tall the first row is depends on its own labels - one line on a wide
+    // window, two on a narrow one. Published here rather than guessed in the
+    // stylesheet, where a number that was right the day it was written sends
+    // the lower row up over the group titles the day a heading wraps.
+    const hrow = document.querySelector('.wrap thead tr:first-child,'
+                                      + ' .tablewrap thead tr:first-child');
+    if (hrow) {
+      const h = Math.round(hrow.getBoundingClientRect().height);
+      if (h) document.documentElement.style.setProperty('--hrow1', h + 'px');
+    }
     document.querySelectorAll('.wrap, .tablewrap').forEach(wrap => {
       // Only a box that scrolls may be capped. Two settings pages call their
       // plain card .wrap as well, and capping one of those did not hide the
@@ -954,7 +965,7 @@ function tog(btn) {
       // window, and every page carried a scrollbar with nothing under it.
       const par = wrap.parentElement;
       const tail = par ? par.getBoundingClientRect().bottom - box.bottom : 0;
-      const room = innerHeight - box.top - Math.max(0, tail) - 8;
+      const room = innerHeight - box.top - Math.max(0, tail) - 6;
       if (room <= 220) return;
       // A capped box gets a scrollbar; a scrollbar narrows what is inside it;
       // a narrower table is a taller table. On a table already sitting at the
