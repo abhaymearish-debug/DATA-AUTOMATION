@@ -107,6 +107,16 @@ const Cal = {
     ev.stopPropagation();
     calSeal();
     const pop = this.pop();
+    /* Close any OTHER picker first. The document handler deliberately leaves a
+       popup open when the click is on a .calhost control, so opening the second
+       date picker left the first one on screen - and because Cal is one shared
+       object bound to whichever control was opened last, clicking a day in that
+       still-visible first popup wrote to the OTHER window. Not this.close(),
+       which would shut this popup too and break toggle-to-close on the control
+       being clicked. */
+    document.querySelectorAll('.calpop.on').forEach(el => {
+      if (el !== pop) el.classList.remove('on');
+    });
     if (pop.classList.toggle('on')){
       this.pick = null; this.hover = '';
       this.anchor = this.monthOf(this.from) || this.anchor;
