@@ -55,9 +55,10 @@
   .drop [hidden] { display:none !important; }
 </style>
 <style>
-  .lead { margin:-4px 0 18px; color:var(--muted); font-size:13.5px; }
-  h3.sec { margin:30px 0 6px; font-size:19px; font-weight:650; }
-  h3.sec + .lead { margin-top:0; }
+  /* No standing blurbs. "Select a data type to upload." sat over six cards
+     that each say what they take and carry an Upload button, and the leaves
+     line explained a heading that reads the same without it. */
+  h3.sec { margin:30px 0 14px; font-size:19px; font-weight:650; }
 
   /* ---------- the upload cards ----------
 
@@ -513,8 +514,6 @@
 <svg viewBox="0 0 24 24" aria-hidden="true">{{ paths.get(name, paths["clipboard"]) | safe }}</svg>
 {%- endmacro %}
 
-<p class="lead">Select a data type to upload.</p>
-
 <div class="cards">
   {% for c in cards %}
   <div class="uc {{ 'ready' if c.ready else 'off' }}" data-card="{{ c.id }}"
@@ -544,7 +543,6 @@
 </div>
 
 <h3 class="sec">Manage Leaves</h3>
-<p class="lead">Set warehouse and shop leaves. These would feed the working-days count in summary reports.</p>
 <div class="cards">
   {% for c in leave_cards %}
   <div class="uc {{ 'ready' if c.href else 'off' }}" style="--c:{{ c.colour or '#64748B' }}"
