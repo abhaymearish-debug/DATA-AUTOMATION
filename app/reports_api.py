@@ -1303,7 +1303,14 @@ def _shop_raw_rows(path: Path) -> list:
     """
     try:
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except (OSError, ValueError):
+    except Exception:
+        # Deliberately broad. A corrupt or empty .xlsx raises
+        # zipfile.BadZipFile, which is neither OSError nor ValueError, so the
+        # narrower tuple that used to be here let it escape - and one
+        # unreadable day then returned 500 for the whole report rather than
+        # for that day. A day this cannot read contributes nothing; the gap
+        # shows up in the source panel, which is where an operator can act
+        # on it.
         return []
     try:
         for sheet in wb.worksheets:
