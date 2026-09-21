@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shop Sales - Analysis: the one-page SHOPSALES COMPARATIVE sheet.
+"""Shop Sales - Analysis: the one-page comparative sheet.
 
 Fifteen bonds, grouped into their three clusters, each cluster subtotalled and
 the whole page totalled - built from the same cumulative raw the per-bond PDFs
@@ -73,6 +73,13 @@ UP      = colors.Color(0.247, 0.525, 0.0)
 DOWN    = colors.Color(0.812, 0.075, 0.133)
 UP_C    = colors.Color(0.565, 0.933, 0.565)
 DOWN_C  = colors.Color(1.0, 0.714, 0.757)
+
+# The grid. One line per row in whatever reads as a seam on that row's own
+# colour: a light rule over white is a scratch over navy, and over gold it
+# disappears altogether.
+GRID    = colors.Color(0.855, 0.875, 0.906)    # a bond row
+GRID_C  = colors.Color(0.133, 0.251, 0.498)    # a navy cluster row
+GRID_T  = colors.Color(0.847, 0.573, 0.094)    # the gold total row
 
 HEADINGS = ["BOND", "OPENING", "RECEIPT", "SALES", "CLOSING",
             ["STOCK", "NET"], ["STOCK", "NET %"], ["SELL-", "THROUGH %"]]
@@ -255,7 +262,7 @@ def draw_period(c, y, period) -> float:
     c.setFillColor(GOLD)
     c.rect(0, y - PERIOD_H, PAGE_W, PERIOD_H, stroke=0, fill=1)
     c.setFillColor(NAVY_T); c.setFont(BOLD, F_PERIOD)
-    c.drawString(INSET, y - BASE_PERIOD, "SHOPSALES COMPARATIVE")
+    c.drawString(INSET, y - BASE_PERIOD, "SHOP SALES - ANALYSIS")
     c.drawRightString(PAGE_W - INSET, y - BASE_PERIOD, period)
     return y - PERIOD_H
 
@@ -264,9 +271,12 @@ def draw_columns(c, y) -> float:
     """The two-tier header: eight columns, the last spanning CM / LM / TREND."""
     bottom = y - HEAD_H
     split = y - HEAD_TOP_H
+    # One band, not two. Two navy rectangles meeting at the split left a
+    # hairline seam along their shared edge - the reader saw a thin line ruled
+    # straight through BOND, OPENING, RECEIPT and the rest, because the
+    # single-line headings are centred on the whole header and sit across it.
     c.setFillColor(NAVY)
-    c.rect(0, split, PAGE_W, HEAD_TOP_H, stroke=0, fill=1)
-    c.rect(0, bottom, PAGE_W, HEAD_BOT_H, stroke=0, fill=1)
+    c.rect(0, bottom, PAGE_W, HEAD_H, stroke=0, fill=1)
 
     c.setFont(BOLD, F_HEAD)
     base = y - (HEAD_H / 2 + F_HEAD * 0.35)
@@ -326,6 +336,13 @@ def draw_row(c, y, h, row, stripe):
         c.setFillColor(fill)
         c.rect(left, y - h, right - left, h, stroke=0, fill=1)
 
+    # Ruled both ways, under the figures rather than over them.
+    c.setStrokeColor(GRID_C if cluster else (GRID_T if total else GRID))
+    c.setLineWidth(0.5)
+    for x in EDGES[1:-1]:
+        c.line(x, y - h, x, y)
+    c.line(0, y - h, PAGE_W, y - h)
+
     c.setFillColor(ink)
     size = F_ROW
     while w(row["label"], font, size) > EDGES[1] - INSET - 6 and size > 7:
@@ -367,7 +384,9 @@ def draw_row(c, y, h, row, stripe):
         tint = UP_C if rising else DOWN_C
     else:
         tint = UP if rising else DOWN
-    text = f"{'+' if rising else '-'}{whole(abs(trend))}"
+    # The arrow is the sign. Printing it again as + or - beside the arrow
+    # said the same thing twice.
+    text = f"{whole(abs(trend))}"
     c.setFont(BOLD, F_ROW)
     span = 5.72 + 3.3 + w(text, BOLD, F_ROW)
     left = (EDGES[-2] + EDGES[-1]) / 2 - span / 2
@@ -378,7 +397,7 @@ def draw_row(c, y, h, row, stripe):
 
 def build(rows, period, out: Path) -> None:
     c = pdfcanvas.Canvas(str(out), pagesize=(PAGE_W, PAGE_H))
-    c.setTitle("Shop Sales Analysis - Shopsales Comparative")
+    c.setTitle("Shop Sales - Analysis")
     y = draw_columns(c, draw_period(c, draw_head(c), period))
     h = min(ROW_H, (y - BOTTOM) / max(1, len(rows)))
 

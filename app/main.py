@@ -2594,7 +2594,7 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
     navy, gold = "FF0A294F", "FFFFBD30"
     wb = Workbook()
     ws = wb.active
-    ws.title = "SHOPSALES COMPARATIVE"
+    ws.title = "SHOP SALES - ANALYSIS"
     ws.append(["BOND", "OPENING", "RECEIPT", "SALES", "CLOSING", "STOCK NET",
                "STOCK NET %", "SELL-THROUGH %", "AVG/DAY CM", "AVG/DAY LM", "TREND"])
     for cell in ws[1]:
@@ -2607,8 +2607,10 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
         ws.append([r["label"], *r["cells"], r["net_pct"], r["sell"],
                    r["cm"] if r["cm"] is not None else "-",
                    r["lm"] if r["lm"] is not None else "-",
+                   # The arrow is the sign, the same way the screen and the
+                   # PDF read it. A + or - beside it said it twice.
                    "-" if r["trend"] is None
-                   else ("+" if r["up"] else "-") + str(r["trend"])])
+                   else ("\u25b2 " if r["up"] else "\u25bc ") + str(r["trend"])])
         if r["kind"] != "bond":
             for cell in ws[ws.max_row]:
                 cell.fill = PatternFill("solid", fgColor=navy)
