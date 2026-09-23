@@ -4366,6 +4366,7 @@ fetch('/api/dashboard/warehouse', {credentials: 'same-origin'})
     if (!data || !(data.stock || []).length) throw new Error('No stock history yet.');
     PAYLOAD = data;
     render();
+    settleLayout();
   })
   .catch(err => {
     document.getElementById('content').innerHTML =
@@ -4378,17 +4379,42 @@ requestAnimationFrame(function(){ requestAnimationFrame(equalizeWarehouseRows); 
 setTimeout(equalizeWarehouseRows, 60);
 setTimeout(equalizeWarehouseRows, 300);
 
-// the right panel is the thing being measured, so react to it actually changing
-if (window.ResizeObserver) {
-  var _grid  = document.querySelector('.grid-main');
-  var _right = _grid && _grid.querySelectorAll(':scope > .panel')[1];
-  var _lastRH = 0;
-  if (_right) new ResizeObserver(function (entries) {
+// The right panel is the thing being measured, so react to it actually
+// changing. It is built by render(), and render() now waits on a fetch, so
+// this has to be (re)bound then - bound at parse time it would watch a panel
+// that does not exist yet, which is exactly why the league table sat at its
+// natural height and left a gap under it.
+var _rightRO = null, _lastRH = 0;
+function watchRightPanel() {
+  if (!window.ResizeObserver) return;
+  var grid = document.querySelector('.grid-main');
+  var right = grid && grid.querySelectorAll(':scope > .panel')[1];
+  if (!right) return;
+  if (_rightRO) _rightRO.disconnect();
+  _lastRH = 0;
+  _rightRO = new ResizeObserver(function (entries) {
     // only a REAL height change re-runs the equalizer — transient sub-pixel
     // or readout-driven flaps used to thrash the league row heights
     var h = Math.round(entries[0].contentRect.height);
     if (Math.abs(h - _lastRH) > 1) { _lastRH = h; scheduleEqualize(); }
-  }).observe(_right);
+  });
+  _rightRO.observe(right);
+}
+watchRightPanel();
+
+// Everything that can only be measured once the figures are on the page: the
+// charts have a container to size against, and the league table has a right
+// panel to match. Called after render(), and again as the fonts and charts
+// settle.
+function settleLayout() {
+  watchRightPanel();
+  requestAnimationFrame(function () { requestAnimationFrame(equalizeWarehouseRows); });
+  [120, 400, 900].forEach(function (ms) {
+    setTimeout(function () {
+      equalizeWarehouseRows();
+      if (window.__ksdReflow) window.__ksdReflow();
+    }, ms);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -4414,6 +4440,9 @@ if (window.ResizeObserver) {
     });
   };
   var resizeAll = function () { each(function (ch) { ch.resize(); }); };
+  // Charts are built by render(), after this block has run its own timers, so
+  // the settle pass needs a way back in here.
+  window.__ksdReflow = resizeAll;
 
   requestAnimationFrame(function () { requestAnimationFrame(resizeAll); });
   if (document.readyState === 'complete') setTimeout(resizeAll, 0);
