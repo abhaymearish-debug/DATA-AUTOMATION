@@ -163,7 +163,7 @@
       <div class="menu" id="pdfMenu">
         <button type="button" class="act pdf" onclick="toggleMenu('pdfMenu')">Download PDF &#9662;</button>
         <div class="items">
-          <a onclick="dlPdf('clusters')">All clusters<span class="sub">one PDF, a page per warehouse</span></a>
+          <a onclick="dlPdf('clusters')">All clusters<span class="sub">one folder, a PDF per ASM cluster</span></a>
           <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
         </div>
       </div>
@@ -395,9 +395,9 @@ function dlPdf(scope){
     grab('/reports/brandwise/export.pdf?' + p.toString());
     return;
   }
-  // All clusters: one request, one PDF. Three downloads fired a second
+  // All clusters: one request, one folder. Three downloads fired a second
   // apart got throttled by the browser and scattered through Downloads.
-  foot.textContent = 'Building the cluster PDF…';
+  foot.textContent = 'Building the cluster PDFs…';
   const p = params(); p.set('scope', 'clusters');
   grab('/reports/brandwise/export.pdf?' + p.toString());
   setTimeout(() => foot.textContent = '', 2500);

@@ -228,22 +228,9 @@ from app import reports_pdf as layout  # noqa: E402
 
 
 def build_cluster_pdf(cluster, extracted, outdir):
-    """One cluster, one file - what the CLI has always written."""
-    return build_pdf([cluster], extracted, outdir,
-                     "Secondary Sales - Cumulative (Cluster %d).pdf" % cluster)
-
-
-def build_pdf(clusters, extracted, outdir, filename):
-    """Every warehouse in `clusters`, in order, as ONE document.
-
-    Three clusters used to mean three files, and three files mean an archive
-    to download and unpack before anybody can read a page of it. They are the
-    same report with the same columns; there was never a reason for them to
-    arrive as separate documents.
-    """
+    """One cluster, one file. Each ASM cluster's PDF goes to its own people."""
     data = extracted["data"]
-    warehouses = [(cl, w) for cl in clusters
-                  for w in CLUSTERS[cl] if w in data and data[w]]
+    warehouses = [w for w in CLUSTERS[cluster] if w in data and data[w]]
     if not warehouses:
         return None
 
@@ -252,11 +239,11 @@ def build_pdf(clusters, extracted, outdir, filename):
         period = (extracted["from"].strftime("%-d %B %Y") + " - "
                   + extracted["to"].strftime("%-d %B %Y"))
 
-    out = outdir / filename
+    out = outdir / ("Secondary Sales - Cumulative (Cluster %d).pdf" % cluster)
     c = pdfcanvas.Canvas(str(out))
     total_pages = len(warehouses)
 
-    for page_no, (cl, wh) in enumerate(warehouses, start=1):
+    for page_no, wh in enumerate(warehouses, start=1):
         shops = data[wh]
         # Columns are per page, exactly as in the source report: a warehouse
         # shows only the brands it actually dispatched.
@@ -279,11 +266,7 @@ def build_pdf(clusters, extracted, outdir, filename):
         layout.draw_page(
             c, width=width, height=height, label_w=label_w,
             report_title="SECONDARY SALES - CUMULATIVE",
-            period=period,
-            # The cluster rides along when the document holds more than one,
-            # so a page read on its own still says where it belongs.
-            group_line=(("CLUSTER %d  \u00b7  " % cl) if len(clusters) > 1 else "")
-                       + "WH - " + wh,
+            period=period, group_line="WH - " + wh,
             label_heading="SHOP NAME", columns=brands,
             rows=rows, totals=totals,
             page_no=page_no, pages=total_pages,
@@ -335,10 +318,6 @@ def main() -> int:
     ap.add_argument("--workbook", default=None)
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--cluster", type=int, choices=[1, 2, 3], default=None)
-    ap.add_argument("--clusters", default="",
-                    help="comma-separated, e.g. 1,2,3 - written as ONE document "
-                         "rather than a file per cluster")
-    ap.add_argument("--name", default="", help="filename for --clusters")
     ap.add_argument("--from", dest="date_from", default=None,
                     help="ISO date; only dispatches on or after this are counted")
     ap.add_argument("--to", dest="date_to", default=None,
@@ -363,19 +342,6 @@ def main() -> int:
           f"Warehouses with dispatches: {len(extracted['data'])}")
 
     rc = verify(extracted) if args.verify else 0
-
-    if args.clusters:
-        want = [int(x) for x in args.clusters.split(",") if x.strip()]
-        if any(c not in (1, 2, 3) for c in want):
-            print("--clusters takes 1, 2 and 3 only.")
-            return 2
-        name = args.name or "Secondary Sales - Cumulative.pdf"
-        out = build_pdf(want, extracted, outdir, name)
-        if out is None:
-            print("No dispatches in the period - no PDF written.")
-        else:
-            print(f"{out.name}")
-        return rc
 
     wanted = [args.cluster] if args.cluster else [1, 2, 3]
     for cl in wanted:
