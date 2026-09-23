@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Liquidation Dashboard{% endblock %}
+{% block heading %}Liquidation Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  /* The dashboard is the live artifact, brought in whole and unaltered: its
+     own dark palette, its own gradients, its own fourteen hundred lines of
+     stylesheet. Inside a frame none of that can reach the rest of the app and
+     none of the app's can reach it, which is the only way "exactly as it was"
+     is a promise rather than a hope. It is served from this origin, so it
+     reads the same session cookie every other page does. */
+  .content { padding:0 !important; }
+  /* The dashboard carries its own K.S. DISTILLERY header, so the app's
+     heading row above it says the same thing twice and puts a white band
+     across the top of a dark page. It goes - except on a narrow window,
+     where the burger in it is the only way back to the sidebar. */
+  .topbar { display:none; }
+  @media (max-width:900px) { .topbar { display:flex; } }
+  .frame { display:block; width:100%; border:0; background:#0A0F1E; }
+</style>
+{% endblock %}
+
+{% block content %}
+<iframe class="frame" id="dashFrame" src="/dashboard/liquidation/view"
+        title="Liquidation Dashboard" loading="eager"></iframe>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// The frame takes the window from the bottom of the heading row down. Measured
+// rather than a vh sum, because the heading row's height is its own business.
+(function () {
+  const f = document.getElementById('dashFrame');
+  const set = () => {
+    const top = f.getBoundingClientRect().top;
+    f.style.height = Math.max(320, Math.floor(innerHeight - top) - 1) + 'px';
+  };
+  set();
+  addEventListener('resize', set);
+  addEventListener('load', set);
+  if (window.ResizeObserver) new ResizeObserver(set).observe(document.querySelector('.topbar'));
+})();
+</script>
+{% endblock %}

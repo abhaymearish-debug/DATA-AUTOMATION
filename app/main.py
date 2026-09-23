@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (bootstrap, auth, bondmap, config, itemissue, leaves,
-               pi as pi_mod,
+               liq_live, pi as pi_mod,
                promote as promote_mod, reports_api, reports_pdf,
                targets as targets_mod)
 from .jobs import STORE, Job, JobContext, JobStatus, run_pipeline
@@ -266,7 +266,15 @@ def _startup() -> None:
     # cost. It is paid once per file and then cached, but somebody has to pay
     # it - and it should not be the first person to open a report after a
     # deploy. A thread does the reading while the server is coming up.
-    threading.Thread(target=reports_api.warm_cache, name="warm", daemon=True).start()
+    # The liquidation dashboard reads a month's two analysis workbooks to build
+    # its figures, so it joins the same queue - after the reports, and on the
+    # one thread, because both are openpyxl and the GIL makes racing them
+    # slower than taking turns.
+    def _warm() -> None:
+        reports_api.warm_cache()
+        liq_live.warm()
+
+    threading.Thread(target=_warm, name="warm", daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -2002,6 +2010,44 @@ def dashboard_warehouse_data(request: Request):
         return JSONResponse(
             {"error": "No stock history yet - upload a Bevco stock report first."},
             status_code=404)
+    return JSONResponse(data)
+
+
+@app.get("/dashboard/liquidation", response_class=HTMLResponse)
+def dashboard_liquidation(request: Request):
+    user = require_user(request)
+    return templates.TemplateResponse(
+        request, "dashboard_liquidation.html",
+        {"user": user, "page": "dash_liquidation", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", [])},
+    )
+
+
+@app.get("/dashboard/liquidation/view", response_class=HTMLResponse)
+def dashboard_liquidation_view(request: Request):
+    """The dashboard itself, framed by the page above."""
+    require_user(request)
+    return HTMLResponse(_dash_page("dashboard_liquidation_frame.html"))
+
+
+@app.get("/api/dashboard/liquidation")
+def dashboard_liquidation_data(request: Request):
+    """Every month the workbooks can account for, in one payload - the page's
+    month picker switches between them without asking again.
+
+    Building a month means reading its KSBC and Secondary analysis workbooks,
+    so this is slow the first time and instant afterwards: liq_live keeps a
+    signature-keyed cache and only rebuilds a month whose sources moved.
+    """
+    require_user(request)
+    try:
+        data = liq_live.dashboard_bundle()
+    except (liq_live.Unavailable, FileNotFoundError) as exc:
+        # These name the workbook that is missing, which is the useful half of
+        # the message; the absolute path in front of it is this server's
+        # business, not the reader's.
+        said = str(exc).replace(str(config.CLAUDE_ROOT) + "/", "")
+        return JSONResponse({"error": said}, status_code=404)
     return JSONResponse(data)
 
 
