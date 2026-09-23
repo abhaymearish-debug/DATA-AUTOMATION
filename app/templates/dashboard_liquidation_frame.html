@@ -1003,6 +1003,19 @@
      Ported verbatim from the warehouse live artifact (Abhay: "match the drill
      down system"): a segmented Network/Cluster control on top, and the chosen
      cluster's BONDS appear beneath on one fitted line. */
+  /* What the per-day view cannot account for. Added 23 Sep 2026, when the
+     chart was found plotting 1,377 cs under a 6,200 cs headline because the
+     KSBC leg had arrived as period exports and was drawn as a row of noughts. */
+  /* A panel whose figures are as at a different date from the page header
+     says so on its own heading. The shelf count comes off the newest KSBC
+     period export's closing column, which on 23 Sep 2026 ended six days before
+     the date in the header. */
+  .pnl-asof { font-size:10.4px; font-weight:700; letter-spacing:.03em;
+    color:#8FA2C0; text-transform:none; margin-left:2px; }
+  .trd-note { margin:2px 0 10px; padding:8px 12px; border-radius:9px;
+    background:linear-gradient(135deg,rgba(240,198,116,.13),rgba(240,198,116,.03));
+    border:1px solid rgba(240,198,116,.34); border-left:3px solid #E3A32B;
+    color:#F3D08A; font-size:11.6px; font-weight:600; line-height:1.5; }
   .trd-scope { display:flex; align-items:center; gap:14px; margin:10px 0 4px;
     flex-wrap:wrap; }
   .seg-ctl { display:inline-flex; gap:2px; padding:3px; border-radius:11px;
@@ -1139,6 +1152,7 @@
     <div class="wh-sub-wrap" id="trendBondWrap" hidden>
       <div class="wh-sub" id="trendBondChips"></div>
     </div>
+    <div class="trd-note" id="trendNote" hidden></div>
     <div class="trd-scope">
       <span class="readout" id="trendReadout"></span>
     </div>
@@ -1277,7 +1291,7 @@
 
   <!-- ============ STOCK IN THE SHOPS ============ -->
   <div class="panel" id="stock">
-    <h2><span>Stock in the Shops</span><span class="seg-ctl" id="stockScopeSeg"></span></h2>
+    <h2><span>Stock in the Shops</span><span class="pnl-asof" id="stockAsOf"></span><span class="seg-ctl" id="stockScopeSeg"></span></h2>
     <div class="wh-sub-wrap" id="stockBondWrap" hidden>
       <div class="wh-sub" id="stockBondChips"></div>
     </div>
@@ -1405,6 +1419,22 @@ if (HAS_CHART) {
 const TT = { backgroundColor:'#0B1426', borderColor:'#2A3D5E', borderWidth:1, padding:10 };
 
 // derived series --------------------------------------------------------
+// WHICH LEG THE PER-DAY VIEWS CAN SPEAK FOR.
+// KSBC tertiary leaves the portal as period exports ("1-16", "17-23"), which
+// carry a block total and no daily shape. When only those were uploaded, the
+// per-day series for KSBC is all zeros - and the Daily Trend chart was then
+// plotting 1,377 cs under a KPI tile reading 6,200, with sixteen of the
+// month's bars drawn as bare noughts. The figures were never wrong; the chart
+// was answering a question the data cannot answer, without saying so.
+const BASIS = P.basis || {};
+const KSBC_BY_DAY = BASIS.ksbcDaily !== false;
+const DAILY_NOTE = KSBC_BY_DAY ? '' :
+  'KSBC tertiary is exported in periods (' +
+  (BASIS.ksbcBlocks || []).map(b => b[0] + '\u2013' + b[1]).join(', ') +
+  '), not by day, so its ' + fmt(BASIS.ksbcCases || 0) +
+  ' cs cannot be placed on a date and is not in this chart. What is below is ' +
+  'the CFD + BAR invoice leg, ' + fmt(BASIS.invCases || 0) + ' cs. Upload the ' +
+  'day exports to see the whole month by day.';
 const days = P.daily.map(d=>d.day);
 const ksbcSeries = P.daily.map(d=>d.ksbc);
 const invSeries  = P.daily.map(d=>d.inv);
@@ -1543,7 +1573,9 @@ function renderKpis(){
     {c:'#FFC94A', label:'Total Liquidation', num:GRAND, dec:0, unit:'cs',
      prior: C?C.prior.grand:null,
      foot: C?`${pM} &middot; <b>${fmt(C.prior.grand)}</b>`
-            :`${P.daysElapsed} days &middot; all 3 legs`},
+            : (BASIS.ksbcTo && BASIS.invTo && BASIS.ksbcTo !== BASIS.invTo
+                ? `KSBC 1–${BASIS.ksbcTo} &middot; invoices 1–${BASIS.invTo}`
+                : `${P.daysElapsed} days &middot; all 3 legs`)},
     {c:'#3B82F6', label:'KSBC Tertiary', num:KSBC_T, dec:0, unit:'cs',
      prior: C?C.prior.byType.KSBC:null,
      foot:`${Math.round(pct(KSBC_T,GRAND))}% mix${C?` &middot; ${pM} <b>${fmt(C.prior.byType.KSBC)}</b>`:''}`},
@@ -1553,10 +1585,20 @@ function renderKpis(){
     {c:'#8B5CF6', label:'Avg / day', num:P.runRate, dec:1, unit:'cs',
      prior: C ? C.prior.grand/(C.window||1) : null, dDec:1,
      foot: C?`${pM} &middot; <b>${fmt1(C.prior.grand/(C.window||1))}</b>`
-            :`run-rate across ${P.daysElapsed} days`},
-    {c:'#C084FC', label:'Best day', num:bestDayCs, dec:0, unit:'cs',
-     prior: priorBestCs,
-     foot: priorBestCs!=null?`${bestDayLbl} &middot; ${pM} <b>${fmt(priorBestCs)}</b>`:bestDayLbl},
+            : (BASIS.ksbcTo && BASIS.invTo && BASIS.ksbcTo !== BASIS.invTo
+                ? `KSBC to day ${BASIS.ksbcTo} &middot; invoices to day ${BASIS.invTo}`
+                : `run-rate across ${P.daysElapsed} days`)},
+    // "Best day" is the best day of the legs that ARE dated. With KSBC coming
+    // in blocks that is the invoice leg alone, and a tile called "Best day" on
+    // a page headlining 6,200 cs was quietly reporting a day that excludes 78%
+    // of the business - and then acting as the benchmark the target narrative
+    // calls "steep".
+    {c:'#C084FC', label: KSBC_BY_DAY ? 'Best day' : 'Best invoice day',
+     num:bestDayCs, dec:0, unit:'cs',
+     prior: KSBC_BY_DAY ? priorBestCs : null,
+     foot: (KSBC_BY_DAY && priorBestCs!=null)
+             ? `${bestDayLbl} &middot; ${pM} <b>${fmt(priorBestCs)}</b>`
+             : (KSBC_BY_DAY ? bestDayLbl : `${bestDayLbl} &middot; invoice leg only`)},
     {c:'#F472B6', label:'Outlets Liquidating', num:actKC, dec:0, unit:'/ '+totKC,
      barBase: covPct,
      pill:`<span class="dpill ${covPct>=85?'pos':(covPct>=60?'flat':'neg')}">${covPct.toFixed(0)}% live</span>`,
@@ -1625,7 +1667,7 @@ function renderTargetViews(){
         '<div style="padding:18px 2px;color:#8093AE;font-size:12px;line-height:1.6">'
       + 'No target set for ' + P.month + '. Type one in the box on the right and the '
       + 'pace, the gap and the run-rate needed to hit it appear here. '
-      + '<b style="color:#C4D2E6">Running ' + fmt1(P.runRate) + ' cs/day across '
+      + '<b style="color:#C4D2E6">Running ' + fmt1(P.runRate) + ' cs/day, '
       + P.daysElapsed + ' days, ' + fmt(GRAND) + ' cs banked.</b></div>';
     return;
   }
@@ -1726,6 +1768,7 @@ function renderTargetViews(){
   if(TARGET<=GRAND) att = `<span class="pos">TARGET ALREADY BANKED</span> — everything from here is upside.`;
   else if(need <= P.runRate) att = `cushion of <b>${fmt1(P.runRate-need)} cs/day</b> — <span class="pos">on pace</span>.`;
   else if(need <= P.runRate*1.1) att = `lift needed: <b>+${fmt1(need-P.runRate)} cs/day</b> — <span class="flat">within reach</span>.`;
+  else if(!KSBC_BY_DAY) att = `<span class="flat">no daily benchmark</span> — the KSBC leg arrived in period exports, so this month has no best day to measure a stretch against.`;
   else if(need <= bestDayCs) att = `a real stretch — but you've already hit ${fmt(bestDayCs)} cs in a single day this month, so it's <span class="flat">doable</span>.`;
   else att = `<span class="neg">steep</span> — it exceeds your best day so far (${fmt(bestDayCs)} cs).`;
   const icon = TARGET<=GRAND ? '\u{1F3C1}' : (need<=P.runRate ? '\u{2713}' : (need<=P.runRate*1.1 ? '\u{26A1}' : '\u{26A0}'));
@@ -1733,7 +1776,6 @@ function renderTargetViews(){
   $('reqLine').className = 'reqline' + (tone?' '+tone:'');
   $('reqLine').innerHTML = `<span class="ic">${icon}</span><span>Need <b>${fmt(need)} cs/day</b> across the remaining `
     + `<b>${remDays} days</b> to hit ${fmt(TARGET)} — currently running <b>${fmt(P.runRate)}</b>. ${att}</span>`;
-  renderKpis();
 }
 $('targetInput').addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(v>0) setTarget(Math.round(v)); });
 $('tbPrior').addEventListener('click', ()=> setTarget(T_DEFAULT));
@@ -1861,13 +1903,16 @@ const lineGlow = { id:'lineGlow',
     if(ds && ds.type==='line' && ds._glow){ ch.ctx.restore(); } } };
 function drawTrend(){
   if(trendChart) trendChart.destroy();
+  const _tn = $('trendNote');
+  if(_tn){ if(DAILY_NOTE){ _tn.innerHTML = '\u26a0\ufe0f ' + DAILY_NOTE; _tn.hidden = false; }
+           else { _tn.hidden = true; } }
   const cumMode = trendMode==='cumulative';
   let datasets;
   if(cumMode){
     const goldFill = ctxT.createLinearGradient(0,0,0,270);
     goldFill.addColorStop(0,'rgba(255,215,0,.28)'); goldFill.addColorStop(1,'rgba(255,215,0,.02)');
     datasets = [
-      { type:'line', label:(C?C.curMonth:P.month)+' cumulative', data:tCum,
+      { type:'line', label:(C?C.curMonth:P.month)+' cumulative' + (KSBC_BY_DAY ? '' : ' (invoice leg)'), data:tCum,
         borderColor:'#FFD700', borderWidth:3, tension:.35, pointRadius:0, pointHoverRadius:5,
         borderCapStyle:'round', borderJoinStyle:'round', fill:true, backgroundColor:goldFill,
         _glow:'rgba(255,215,0,.45)',
@@ -1882,17 +1927,20 @@ function drawTrend(){
     const pinkLine = ctxT.createLinearGradient(0,0,(ctxT.canvas.clientWidth||900),0);
     pinkLine.addColorStop(0,'#DB4A9A'); pinkLine.addColorStop(1,'#FBB6D6');
     datasets = [
-      { type:'bar', label:'KSBC tertiary', data:tK, _glowCol:'rgba(96,165,250,.25)',
+      // Only when the KSBC leg is actually dated day by day. A flat zero
+      // series is not "no KSBC sales that day", it is "this export cannot
+      // say" - and drawn as a bar of nought it reads as the former.
+      ...(KSBC_BY_DAY ? [{ type:'bar', label:'KSBC tertiary', data:tK, _glowCol:'rgba(96,165,250,.25)',
         backgroundColor:grad2(ctxT,[[0,'#60A5FA'],[0.55,'#3B82F6'],[1,'rgba(29,78,216,.82)']]),
         borderWidth:0, stack:'s', borderSkipped:false,
         borderRadius: c => tI[c.dataIndex] <= 0.01 ? {topLeft:8,topRight:8} : 0,
-        maxBarThickness:58, barPercentage:.68, categoryPercentage:.8 },
+        maxBarThickness:58, barPercentage:.68, categoryPercentage:.8 }] : []),
       { type:'bar', label:'CFD + BAR invoice', data:tI, _glowCol:'rgba(217,180,91,.24)',
         backgroundColor:grad2(ctxT,[[0,'#F5E3B3'],[0.5,'#D9B45B'],[1,'rgba(166,124,46,.85)']]),
         borderWidth:0, stack:'s', borderSkipped:false,
         borderRadius:{topLeft:8,topRight:8},
         maxBarThickness:58, barPercentage:.68, categoryPercentage:.8 },
-      { type:'line', label:(C?C.curMonth+' ':'')+'cumulative', data:tCum, yAxisID:'y1',
+      { type:'line', label:(C?C.curMonth+' ':'')+'cumulative' + (KSBC_BY_DAY ? '' : ' (invoice leg)'), data:tCum, yAxisID:'y1',
         borderColor:pinkLine, borderWidth:3.4, tension:.38, pointRadius:0,
         borderCapStyle:'round', borderJoinStyle:'round', pointHoverRadius:4,
         fill:true, backgroundColor:(()=>{ const g=ctxT.createLinearGradient(0,0,0,270);
@@ -2196,7 +2244,11 @@ renderBrandTbl();
   const packPri = C ? (C.prior.byPack||{}) : {};
   const packs = Object.keys(packCur).sort((a,b)=>(packCur[b]||0)-(packCur[a]||0));
   if(!packs.length) return;
-  const packTot = packs.reduce((a,p)=>a+(packCur[p]||0),0) || 1;
+  // The same base the Brand Command table uses. These two panels split the
+  // same month and were dividing by two different totals - both summed to
+  // 100%, but a 180ml share here and a brand share there were answers to
+  // slightly different questions.
+  const packTot = GRAND || packs.reduce((a,p)=>a+(packCur[p]||0),0) || 1;
   if(!C) $('packDeltaHdr').textContent='Δ';
   let packRows = packs.map(p=>({ name:p, cases:packCur[p]||0, share:pct(packCur[p]||0,packTot),
     delta: C? growth(packCur[p]||0, packPri[p]||0) : null,
@@ -2434,7 +2486,12 @@ $('channelLegend').innerHTML = chanEntries.map(([k,v])=>`
     const gk   = g===null ? 'fl' : (g>=0 ? 'up' : 'dn');
     const rk   = ranked.indexOf(r.cl.n)+1;
     const covP = r.tot>0 ? r.act/r.tot*100 : 0;
-    const yld  = r.act>0 ? r.cs/r.act : 0;
+    // `r.act` counts KSBC + CFD outlets; `r.cs` used to include BAR cases as
+    // well, so a handful of bar cases were being divided by a population that
+    // does not contain the bars that sold them.
+    const _bck = P.bondCasesKC || null;
+    const yldCs = _bck ? r.cl.bonds.reduce((a,b)=>a+(_bck[b]||0),0) : r.cs;
+    const yld  = r.act>0 ? yldCs/r.act : 0;
     return `<div class="cl" data-cl="${r.cl.n}" role="button" tabindex="0"
       title="Show only Cluster ${r.cl.n} bonds in the table below (click again to clear)"
       style="--cc:${r.cl.c}">
@@ -2463,7 +2520,7 @@ $('channelLegend').innerHTML = chanEntries.map(([k,v])=>`
         <div class="st"><b>${sh.toFixed(1)}%</b><span>share of month</span></div>
         <div class="st"><b>${C&&r.pr!==null?fmt(r.pr):'—'}</b><span>${C?C.priorMonth:'prior'} cases</span></div>
         <div class="st"><b class="${d>=0?'up':'dn'}">${d===null?'—':(d>=0?'+':'')+fmt(d)}</b><span>&Delta; cases</span></div>
-        <div class="st" title="${fmt1(r.cs)} cs across ${r.act} live outlets"><b>${fmt1(yld)}</b><span>cs / live outlet</span></div>
+        <div class="st" title="${fmt1(yldCs)} cs across ${r.act} live KSBC + CFD outlets"><b>${fmt1(yld)}</b><span>cs / live outlet</span></div>
         <div class="st" title="${r.act} of ${r.tot} KSBC + CFD outlets sold this month"><b>${covP.toFixed(0)}%</b><span>outlets live</span></div>
         <div class="st" title="${r.tot-r.act} of ${r.tot} outlets have not sold"><b class="${r.tot-r.act>0?'dn':'up'}">${r.tot-r.act}</b><span>outlets silent</span></div>
       </div>
@@ -2506,10 +2563,14 @@ let bondRows = P.bondSorted.map(([bond,cases,shops],i)=>{
   const dl = (C && pv>0) ? growth(cu,pv) : (C && cu>0 ? 100 : null);
   // KSBC + CFD only -- BAR outlets are an invoice channel and were padding the
   // denominator (47 of them network-wide; KOZHIKODE read 28/42 instead of 27/27)
-  const cov = (P.bondCoverageKC||P.bondCoverage||{})[bond] || [shops, shops];
+  // A bond the coverage table does not know used to fall back to [shops, shops]
+  // - every outlet live, a full green bar - which is the most flattering
+  // possible reading of "no data".
+  const cov = (P.bondCoverageKC||P.bondCoverage||{})[bond] || null;
   return {rank:i+1, bond, staff:(P.bondStaff||{})[bond]||'—', cases, shops, share:pct(cases,GRAND),
           prev: pv, cur: cu, delta:dl,
-          covA:cov[0], covT:cov[1], cov:pct(cov[0],cov[1]), per: cov[0]>0? cases/cov[0] : 0};
+          covA:cov?cov[0]:null, covT:cov?cov[1]:null,
+          cov:cov?pct(cov[0],cov[1]):null, per:(cov&&cov[0]>0)? cases/cov[0] : 0};
 });
 function renderBond(){
   document.querySelector('#bondTbl tbody').innerHTML = bondRows.map((r,i)=>{
@@ -2525,8 +2586,8 @@ function renderBond(){
       <td class="num">${duCell(r.delta)}</td>
       <td class="num sh">${r.share.toFixed(1)}%</td>
       <td class="num"><div class="covbar" style="justify-content:center">
-        <span class="ct" style="color:${COV_TXT[covTone(r.covA,r.covT)]}">${r.covA}/${r.covT}</span>
-        <div class="bar"><span style="width:${r.cov}%;background:linear-gradient(90deg,${COV_BAR[covTone(r.covA,r.covT)]})"></span></div>
+        <span class="ct" style="color:${r.cov===null?'#7E90AD':COV_TXT[covTone(r.covA,r.covT)]}">${r.cov===null?'—':r.covA+'/'+r.covT}</span>
+        <div class="bar">${r.cov===null?'':`<span style="width:${r.cov}%;background:linear-gradient(90deg,${COV_BAR[covTone(r.covA,r.covT)]})"></span>`}</div>
         </div></td>
     </tr>`; }).join('') + bondTotalRow();
 }
@@ -2541,8 +2602,8 @@ function bondTotalRow(){
   const tCases = bondRows.reduce((a,r)=>a+r.cases,0);
   const tPrev  = bondRows.reduce((a,r)=>a+(r.prev||0),0);
   const tCur   = bondRows.reduce((a,r)=>a+(r.cur||0),0);
-  const tA     = bondRows.reduce((a,r)=>a+r.covA,0);
-  const tT     = bondRows.reduce((a,r)=>a+r.covT,0);
+  const tA     = bondRows.reduce((a,r)=>a+(r.covA||0),0);
+  const tT     = bondRows.reduce((a,r)=>a+(r.covT||0),0);
   const tDelta = (C && tPrev>0) ? growth(tCur,tPrev) : null;
   const cv     = pct(tA,tT);
   return `<tr class="totrow">
@@ -2831,6 +2892,17 @@ let stockPie = null;
 (function(){
   const panel=$('stock'), S=P.shopStock;
   if(!S || !S.net || !S.net.closing){ if(panel) panel.style.display='none'; return; }
+  // Closing stock is read off the newest KSBC period export, so it is as at
+  // THAT export's last day - not the page's as-of date, which follows the
+  // invoice leg. The two were six days apart in August 2026 and the panel said
+  // nothing, so a 23 Aug shelf count sat under a header reading 29 Aug.
+  (function(){
+    const el = $('stockAsOf'); if(!el) return;
+    const to = (P.basis||{}).stockTo || 0;
+    if(!to) return;
+    el.textContent = 'as at ' + P.month.slice(0,3) + ' ' + to
+      + (to !== P.daysElapsed ? ' \u00b7 the page is to ' + P.month.slice(0,3) + ' ' + P.daysElapsed : '');
+  })();
   const BRAND_COLORS=['#4FC3F7','#FFD54F','#81C784','#FFB74D','#B39DDB','#E57373','#4DB6AC','#90A4AE'];
   const bCol={}; S.brandOrder.forEach((b,i)=>bCol[b]=BRAND_COLORS[i%BRAND_COLORS.length]);
   const pCol={}; S.packOrder.forEach((p,i)=>pCol[p]=BRAND_COLORS[i%BRAND_COLORS.length]);
@@ -3046,6 +3118,15 @@ let stockPie = null;
 
 
 // initial render of target-dependent views
+// The six headline tiles - Total Liquidation, KSBC Tertiary, CFD + BAR,
+// Avg / day, Best day, Outlets Liquidating - are the top of the page and have
+// nothing to do with the target. They used to be painted by the last line of
+// renderTargetViews(), which returns early when no target is set - so on any
+// month with no target (any month with no prior month to default one from)
+// the whole KPI strip never appeared and the page opened on Pace vs Target
+// with the month's headline figure nowhere on it. Painted here, before the
+// target is considered at all.
+renderKpis();
 renderTargetViews();
 
 // ---------------------------------------------------------------------------

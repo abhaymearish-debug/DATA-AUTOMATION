@@ -379,6 +379,18 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
                 a, b = int(cm.group(1)), int(cm.group(2))
                 if b <= day_max:                      # window fully covers the block
                     cum_blocks.append((a, b, sn))
+        # ... unless the month has no day sheets at all, in which case dropping
+        # the block drops the leg. With block-only exports `day_max` comes off
+        # the last INVOICE, and an invoice dated before the block's end day
+        # made the whole block unusable: at day_max=22 the pack panel lost
+        # 1,670 cs and still sat under a KPI tile carrying it. Nothing can be
+        # sliced out of a block either way, so the choice is the block whole or
+        # the leg missing, and the leg missing is the worse answer.
+        if not cum_blocks:
+            for sn in wb.sheetnames:
+                cm = cum_re.match(sn.strip())
+                if cm:
+                    cum_blocks.append((int(cm.group(1)), int(cm.group(2)), sn))
         # A month workbook's blocks tile the month, but what people upload is
         # cumulative-to-date - 1-8, then 1-16, then 1-22 - and adding those
         # counts the same days several times over. Take the set that overlaps
@@ -663,6 +675,42 @@ def build_payload(root: Path, month=None):
     days_elapsed = win_end or max(all_days + [covered]) if (win_end or all_days or covered) else 0
     if not days_elapsed:
         raise Unavailable(f"{cur} has exports but no day this app can date.")
+
+    # WHICH LEG ANSWERS FOR WHICH DAYS.
+    # The two legs of liquidation do not cover the same window and never have.
+    # KSBC tertiary leaves the portal as PERIOD exports - "1-16", "17-23" - so
+    # it answers to the last day of the last block, and it carries no per-day
+    # breakdown at all unless day sheets were uploaded too. Invoices are dated
+    # one at a time and answer to the last invoice raised.
+    #
+    # On 23 Sep 2026 that was a 23-day leg and a 29-day leg, and one run rate
+    # divided the sum of both by 29: 4,823 cs of tertiary spread over six days
+    # it was never measured across. The rate read 213.78 cs/day against a true
+    # 257.16, and the projection 6,627 cs against 7,972 - a fifth low, on the
+    # figure a board reads as the month's landing point. Each leg now runs at
+    # its own pace and the two are added.
+    ksbc_cases = round(float(agg["byType"].get("KSBC", 0.0)), 2)
+    inv_cases = round(agg["grand"] - ksbc_cases, 2)
+    ksbc_to = covered or (max(kd) if kd else 0)
+    inv_to = max(sd) if sd else 0
+    _kdays, _kblocks = liq_source._ksbc_files(root, cur)
+    stock_to = max([0] + [b for _, b, _ in _kblocks] + list(_kdays))
+    basis = {
+        # False means the KSBC leg is known only in blocks: it has a total and
+        # no daily shape, and any per-day view that plots it as zero is lying
+        # about 78% of the month.
+        "ksbcDaily": bool(kd),
+        "ksbcTo": ksbc_to,
+        "ksbcCases": ksbc_cases,
+        "ksbcBlocks": sorted([[a, b] for a, b, _ in _kblocks]),
+        "ksbcDays": sorted(_kdays),
+        "invTo": inv_to,
+        "invCases": inv_cases,
+        "invDays": sorted(sd),
+        # The shelf count comes off the newest block's closing column, so it is
+        # as at that block's last day - not as at the header date.
+        "stockTo": stock_to,
+    }
     daily = [{'day': d, 'ksbc': kd.get(d, 0.0), 'inv': sd.get(d, 0.0)}
              for d in range(1, days_elapsed + 1)]
     # per-bond daily series for the trend drill-downs (26 Jul 2026, Abhay) —
@@ -773,6 +821,11 @@ def build_payload(root: Path, month=None):
     # coverage (active vs total outlets) by bond / type / staff -------------
     bond_cov = defaultdict(lambda: [0, 0])
     bond_cov_kc = defaultdict(lambda: [0, 0])   # KSBC + CFD only (excludes BAR)
+    # Cases over the SAME outlets the KC coverage counts. The cluster cards
+    # divide a bond's cases by its live KSBC+CFD outlets to get cs per live
+    # outlet, and the numerator was carrying BAR cases that the denominator's
+    # population does not contain.
+    bond_cases_kc = defaultdict(float)
     silent_outlets = defaultdict(list)          # bond -> silent KSBC/CFD outlets
     type_cov = {t: [0, 0] for t in ('KSBC', 'CFD', 'BAR')}
     staff_cov = defaultdict(lambda: [0, 0])
@@ -784,6 +837,8 @@ def build_payload(root: Path, month=None):
             bond_cov_kc[r['bond']][1] += 1
         if r['type'] in type_cov:
             type_cov[r['type']][1] += 1
+        if is_kc:
+            bond_cases_kc[r['bond']] += r['total']
         if r['total'] > 0:
             bond_cov[r['bond']][0] += 1
             staff_cov[r['staff']][0] += 1
@@ -837,8 +892,15 @@ def build_payload(root: Path, month=None):
                               for d in range(1, days_elapsed + 1)]
                    for b in B.BRAND_COLS}
 
-    run_rate = round(agg['grand'] / days_elapsed, 2) if days_elapsed else 0
+    # Per leg, over the days that leg actually covers, then added. Where a leg
+    # has no coverage at all it contributes nothing rather than dragging the
+    # other one down across days it was never measured over.
+    k_rate = (ksbc_cases / ksbc_to) if ksbc_to else 0.0
+    i_rate = (inv_cases / inv_to) if inv_to else 0.0
+    run_rate = round(k_rate + i_rate, 2)
     projected = round(run_rate * days_in_month, 2)
+    basis["ksbcRate"] = round(k_rate, 2)
+    basis["invRate"] = round(i_rate, 2)
 
     return {
         'month': MONTH_TITLE[cur_idx],
@@ -851,6 +913,7 @@ def build_payload(root: Path, month=None):
         'grand': agg['grand'],
         'runRate': run_rate,
         'projected': projected,
+        'basis': basis,
         'byType': agg['byType'],
         'brandSorted': brand_sorted,
         'bondSorted': bond_sorted,
@@ -867,6 +930,7 @@ def build_payload(root: Path, month=None):
         'monthIndex': cur_idx,
         'bondCoverage': dict(bond_cov),
         'bondCoverageKC': dict(bond_cov_kc),
+        'bondCasesKC': {k: round(v, 2) for k, v in bond_cases_kc.items()},
         'silentOutlets': {b: sorted(v, key=lambda o: (o['type'], o['name'])) for b, v in silent_outlets.items()},
         'bondStaff': {b: ' / '.join(sorted(v)) for b, v in bond_staff.items()},
         'typeCoverage': type_cov,
@@ -922,6 +986,13 @@ def available_months(root: Path):
     return out
 
 
+# Bumped whenever build_payload's OUTPUT changes for the same inputs. The month
+# cache is keyed on the FILES, not on the code that read them, so without this a
+# fix ships behind a cache still holding what the old builder said - and the
+# page serves the bug for as long as nobody re-uploads.
+BUILDER_VERSION = "2026-09-23.1"
+
+
 def month_signature(root: Path, month: str) -> str:
     """size+mtime fingerprint of everything build_payload() reads for `month`."""
     idx = MONTHS_UP.index(month)
@@ -940,7 +1011,7 @@ def month_signature(root: Path, month: str) -> str:
             parts.append(f"{Path(p).name}:{st.st_size}:{int(st.st_mtime)}")
         except OSError:
             parts.append("-")
-    return "|".join(parts)
+    return BUILDER_VERSION + "|" + "|".join(parts)
 
 
 def build_bundle(root: Path, months=None, current=None, use_cache=True):
@@ -959,7 +1030,7 @@ def build_bundle(root: Path, months=None, current=None, use_cache=True):
             print(f"  cache unreadable ({e}) -- rebuilding all months.")
             cache = {}
 
-    data, meta, fresh = {}, [], {}
+    data, meta, fresh, failed = {}, [], {}, {}
     for m in months:
         sig = month_signature(root, m)
         hit = cache.get(m)
@@ -975,14 +1046,22 @@ def build_bundle(root: Path, months=None, current=None, use_cache=True):
                 # about today's data -- e.g. MARCH's Secondary workbook predates
                 # the COMBINED DISPATCHES sheet. Drop it from the filter and
                 # carry on; only the month the artifact OPENS on is fatal.
-                if m == cur:
-                    raise
+                # Even the month the page opens on. It used to re-raise here,
+                # so the day a September secondary export landed beside a
+                # September KSBC workbook that has no COMBINED sheet, the whole
+                # dashboard would have gone to "Could not load" - taking August,
+                # which builds perfectly, down with it. Fall back to the newest
+                # month that does build and say which one could not.
                 print(f"  {m:<10} SKIPPED — {type(e).__name__}: {e}")
+                failed[m] = f"{type(e).__name__}: {e}"
                 continue
         fresh[m] = {"sig": sig, "payload": data[m]}
 
     if not data:
-        raise Unavailable("No month could be built.")
+        raise Unavailable(
+            "No month could be built. "
+            + "; ".join(f"{m}: {why}" for m, why in failed.items())
+            if failed else "No month could be built.")
     if cur not in data:
         cur = max(data, key=MONTHS_UP.index)
 
@@ -1007,7 +1086,11 @@ def build_bundle(root: Path, months=None, current=None, use_cache=True):
             "partial": p["daysElapsed"] < p["daysInMonth"],
             "live": m == cur,
         })
-    return {"current": cur, "months": meta, "data": data}
+    # Months the page could not build, so it can say so instead of simply not
+    # offering them. A month that quietly disappears from the picker looks like
+    # a month with no sales.
+    return {"current": cur, "months": meta, "data": data,
+            "unbuildable": [{"month": m, "why": why} for m, why in sorted(failed.items())]}
 
 
 

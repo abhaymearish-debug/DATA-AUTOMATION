@@ -127,6 +127,98 @@ def ksbc_cases(root: Path, month: str, brands: set) -> tuple:
     return total, last
 
 
+# Bottles in a case, by pack. A physical fact about the bottling line, not a
+# rule of the app's - written out again here so the verifier folds loose
+# bottles into cases the same way without importing the code it is checking.
+_BPC = {"1000 ML": 9, "750 ML": 12, "500 ML": 18, "375 ML": 24, "180 ML": 48}
+
+_WH_ALIAS = {"PATHANAMTHITA": "PATHANAMTHITTA"}
+
+
+def wh_name(raw) -> str:
+    """'WH-KOLLAM FL9-KLM-01/2026-27' -> 'KOLLAM'.
+
+    Written out here rather than imported, so a bug in the app's canonicaliser
+    cannot hide behind itself. The licence code is spelt a dozen ways -
+    'FL9-KLM-03', 'RFL9/PTA-02', 'FL09 NO 4/2026-27' - so rather than trying to
+    match each of them, stop at the first token that has a digit or a slash in
+    it or begins FL/RFL, which no warehouse name does.
+    """
+    txt = re.sub(r"\s+", " ", str(raw or "").strip().upper())
+    if txt.startswith("WH-") or txt.startswith("WH "):
+        txt = txt[3:].lstrip()
+    keep = []
+    for tok in txt.split():
+        if any(c.isdigit() for c in tok) or "/" in tok \
+                or tok.startswith("FL") or tok.startswith("RFL"):
+            break
+        keep.append(tok)
+    nm = " ".join(keep).strip().rstrip(".") or txt
+    return _WH_ALIAS.get(nm, nm)
+
+
+def warehouse_invoices(root: Path, month: str, month_no: int) -> tuple:
+    """{warehouse: cases} for a month, invoice-dated, straight off the exports.
+
+    The month's ANALYSIS workbook where there is one, and the days it does not
+    answer for filled from the raws - the same precedence the app uses, written
+    again here so the two can disagree.
+    """
+    from openpyxl import load_workbook
+    folder = root / "Secondary sales"
+    if not folder.is_dir():
+        return {}, 0
+    files, claimed = [], set()
+    full = sorted(folder.glob(f"{month} *SECONDARY SALES ANALYSIS.xlsx")) \
+        + sorted(folder.glob(f"{month} SECONDARY SALES ANALYSIS.xlsx"))
+    files += [(f, True) for f in full[-1:]]
+    files += [(f, False) for f in sorted(folder.glob("RAW DATA*SECONDARY SALES.xlsx"))
+              if _SEC.match(f.name) and _SEC.match(f.name).group(1).upper() == month]
+
+    out: dict = defaultdict(float)
+    last = 0
+    for path, _is_book in files:
+        wb = load_workbook(path, read_only=True, data_only=True)
+        try:
+            ws = None
+            for nm in wb.sheetnames:
+                if "COMBINED DISPATCH" in nm.upper():
+                    ws = wb[nm]
+                    break
+            ws = ws or wb[wb.sheetnames[0]]
+            got: dict = defaultdict(float)
+            days = set()
+            for r in ws.iter_rows(min_row=2, values_only=True):
+                if not r or len(r) <= 12 or r[1] is None:
+                    continue
+                v = r[11]
+                day = mon = None
+                if hasattr(v, "day"):
+                    day, mon = v.day, v.month
+                else:
+                    mm = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$", str(v or "").strip())
+                    if mm:
+                        day, mon = int(mm.group(1)), int(mm.group(2))
+                if day is None or (mon and mon != month_no):
+                    continue
+                if day in claimed:
+                    continue
+                days.add(day)
+                pack = re.sub(r"\s+", " ", str(r[5] or "").strip().upper())
+                cases = num(r[12])
+                bottles = num(r[13]) if len(r) > 13 else 0.0
+                if bottles:
+                    cases += bottles / _BPC.get(pack, 1)
+                got[wh_name(r[1])] += cases
+            for w, v in got.items():
+                out[w] += v
+            claimed |= days
+            last = max([last] + list(days))
+        finally:
+            wb.close()
+    return dict(out), last
+
+
 def invoice_cases(root: Path, month: str, month_no: int, codes: set) -> tuple:
     """(cases, last invoice day) for a month's CFD/BAR exports."""
     from openpyxl import load_workbook
@@ -185,7 +277,6 @@ def warehouse(root: Path) -> None:
         return
 
     stock = read_history(root / "Warehouse stock" / "_history" / "stock_history.csv")
-    inbound = read_history(root / "Warehouse stock" / "_history" / "inbound_history.csv")
     bp = read_history(root / "Warehouse stock" / "_history" / "brand_pack_history.csv")
 
     latest = max(r["date"] for r in stock)
@@ -207,64 +298,89 @@ def warehouse(root: Path) -> None:
                   sum(num(r["physical"]) for r in rows), tol=len(rows),
                   note="two files, same total")
 
-    # The flow columns have to account for the stock itself: warehouse by
-    # warehouse, everything that came in less everything that went out is the
-    # movement in physical stock. Exact on sound data; a gap means one of those
-    # columns is not the window's figure, and the sales and inbound tiles are
-    # reading it.
-    per: dict = defaultdict(lambda: defaultdict(
-        lambda: {"in": 0.0, "out": 0.0, "first": None, "start": 0.0, "last": None, "end": 0.0}))
-    for r in inbound:
-        mon = r["date"][:7]
-        w = per[mon][r["warehouse"].strip().upper()]
-        w["in"] += num(r["inbound_cases"])
-        w["out"] += num(r["dispatched_cases"])
-        if w["first"] is None or r["date"] < w["first"]:
-            w["first"], w["start"] = r["date"], num(r["phys_start"])
-        if w["last"] is None or r["date"] > w["last"]:
-            w["last"], w["end"] = r["date"], num(r["phys_end"])
-    for mon in sorted(per)[-4:]:
-        whs = per[mon]
-        net = sum(w["in"] - w["out"] for w in whs.values())
-        moved = sum(w["end"] - w["start"] for w in whs.values())
-        check(f"{mon}: flows account for the stock movement", net, moved,
-              tol=max(2.0 * len(whs), 1.0),
-              note=f"{sum(w['in'] for w in whs.values()):,.0f} in, "
-                   f"{sum(w['out'] for w in whs.values()):,.0f} out")
+    # A warehouse under two spellings is a whole warehouse missing from one
+    # half of the page. Every key the page joins on has to exist on both sides.
+    stock_whs = {r["w"] for r in data["stock"] if r["d"] == latest}
+    sales_whs = set(data["sales"]["byWarehouse"])
+    orphans = sorted(sales_whs - stock_whs)
+    check("every warehouse with sales has a stock row", len(orphans), 0,
+          note=("no stock row for: " + ", ".join(orphans[:4])) if orphans else
+               f"{len(sales_whs)} of {len(stock_whs)} warehouses sold this window")
 
-    # the same row twice under two spellings of one warehouse doubles a month
-    seen = defaultdict(set)
-    clashes = []
-    for r in inbound:
-        canon = re.sub(r"[^A-Z]", "", r["warehouse"].upper())
-        key = (r["date"], canon)
-        if r["warehouse"] in seen[key]:
-            continue
-        seen[key].add(r["warehouse"])
-        if len(seen[key]) > 1:
-            clashes.append(f"{r['date']} {sorted(seen[key])}")
-    check("one row per warehouse per day", len(clashes), 0,
-          note=("; ".join(clashes[:3])) if clashes else "no repeated days")
+    clusters = data.get("clusters") or {}
+    unmapped = sorted(w for w in stock_whs if w not in clusters)
+    check("every warehouse belongs to a cluster", len(unmapped), 0,
+          note=("unmapped: " + ", ".join(unmapped[:4])) if unmapped else "")
+    if clusters:
+        cl_phys = defaultdict(float)
+        for r in data["stock"]:
+            if r["d"] == latest:
+                cl_phys[clusters.get(r["w"], 0)] += r["p"]
+        check("the three clusters add to the network",
+              sum(v for k, v in cl_phys.items() if k in (1, 2, 3)),
+              sum(r["p"] for r in data["stock"] if r["d"] == latest), tol=0.5,
+              note="a warehouse outside all three is a hole in every cluster card")
 
-    # monthly dispatch, and the average behind every months-of-cover figure
-    sales = data["sales"]
-    months = {m: defaultdict(float) for m in sales["monthsUsed"]}
+    # ---- dispatch, read back out of the invoices themselves ----------------
+    # The dashboard's sales feed is the Secondary uploads, dated by Inv/GTN
+    # date. inbound_history.csv is NOT checked here and must not be: the page
+    # stopped reading it on 23 Sep 2026, and a check against a file nothing
+    # serves can only ever produce a red line about a figure nobody sees.
     name = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY",
             "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"]
-    for r in inbound:
-        mon = name[int(r["date"][5:7]) - 1]
-        if mon in months:
-            months[mon][r["warehouse"].strip().upper()] += num(r["dispatched_cases"])
+    sales = data["sales"]
     for mon in sales["monthsUsed"]:
+        month_no = name.index(mon) + 1
+        mine, _last = warehouse_invoices(root, mon, month_no)
         served = sum(v["months"].get(mon, 0) for v in sales["byWarehouse"].values())
-        check(f"{mon.title()} dispatch across the network", served,
-              sum(months[mon].values()), tol=len(sales["byWarehouse"]))
+        check(f"{mon.title()} dispatch across the network", served, sum(mine.values()),
+              tol=1.0, note="invoice-dated, read independently")
+        drift = sorted(
+            (abs(sales["byWarehouse"].get(w, {}).get("months", {}).get(mon, 0) - v), w)
+            for w, v in mine.items())
+        check(f"{mon.title()} dispatch warehouse by warehouse",
+              drift[-1][0] if drift else 0, 0, tol=1.0,
+              note=(f"worst: {drift[-1][1]}") if drift else "")
 
-    bad = [w for w, v in sales["byWarehouse"].items()
-           if v["avg"] != round(v["total"] / max(1, sum(
-               1 for mm in sales["monthsUsed"] if v["months"].get(mm, 0) > 0) or len(months)))]
-    check("monthly average divides by months with sales", len(bad), 0,
-          note=("offenders: " + ", ".join(bad[:4])) if bad else "")
+    # The demand each months-of-cover figure divides by: cases per uploaded
+    # day, over a month of average length. A window with every day uploaded
+    # must give back exactly the mean monthly total.
+    cov = sales.get("coverage") or {}
+    days_cov = sum(c["days"] for c in cov.values())
+    days_win = sum(c["inMonth"] for c in cov.values())
+    check("demand covers the window it names", days_cov, sales.get("daysCovered", 0), tol=0)
+    if days_cov:
+        mean_len = days_win / max(1, len(cov))
+        bad = [w for w, v in sales["byWarehouse"].items()
+               if abs(v["avg"] - round(v["total"] / days_cov * mean_len)) > 1]
+        check("monthly demand is the uploaded-day rate over an average month",
+              len(bad), 0,
+              note=("offenders: " + ", ".join(bad[:4])) if bad else
+                   f"{days_cov} of {days_win} days uploaded")
+
+    # Three panels print a month-to-date sales figure. They are one number.
+    dd = data.get("dailyDispatch") or {}
+    cur = dd.get("cur")
+    if cur:
+        by_day = sum(cur["days"].values())
+        by_wh = sum(sum(v.values()) for v in cur["byWh"].values())
+        check("per-warehouse dispatch adds to the network", by_wh, by_day, tol=0.5,
+              note="the header tile, the cluster cards and the daily panel read these")
+        ch = sum(cur["ksbc"].values()) + sum(cur["inv"].values())
+        check("the KSBC / invoice split adds to the month", ch, by_day, tol=0.5)
+        if clusters:
+            per_cl = defaultdict(float)
+            for w, days in cur["byWh"].items():
+                per_cl[clusters.get(w, 0)] += sum(days.values())
+            check("the three clusters add to month-to-date sales",
+                  sum(v for k, v in per_cl.items() if k in (1, 2, 3)), by_day, tol=0.5)
+        gap = sorted(set(range(1, max(cur["covered"] or [0]) + 1)) - set(cur["covered"] or []))
+        if gap:
+            print(f"[ note ] {cur['m'].title()} has no upload for day(s) "
+                  f"{', '.join(map(str, gap[:8]))} - the page says so on its face")
+    else:
+        print("[ note ] no Secondary Sales upload for the current month; the page "
+              "says 'not uploaded' rather than showing a zero")
 
     cover_den = [w for w, v in sales["byWarehouse"].items() if v["avg"] <= 0]
     if cover_den:
@@ -309,9 +425,25 @@ def liquidation(root: Path) -> None:
         check(f"{key.title()}: day N of the month covers the exports",
               p["daysElapsed"] >= covered, True,
               note=f"says day {p['daysElapsed']}, exports reach day {covered}")
-        check(f"{key.title()}: run-rate is the total over those days",
-              p["runRate"], round(p["grand"] / p["daysElapsed"], 2) if p["daysElapsed"] else 0,
-              tol=0.02)
+        # Each leg over the days that leg answers for, then added. The two do
+        # not cover the same window: KSBC arrives in period exports and stops
+        # at the last block's end, invoices at the last invoice raised. One
+        # divisor over both spreads a 23-day leg across 29 days.
+        bs = p.get("basis") or {}
+        want = 0.0
+        if bs.get("ksbcTo"):
+            want += bs["ksbcCases"] / bs["ksbcTo"]
+        if bs.get("invTo"):
+            want += bs["invCases"] / bs["invTo"]
+        check(f"{key.title()}: run-rate is each leg over its own days",
+              p["runRate"], round(want, 2), tol=0.02,
+              note=f"KSBC to {bs.get('ksbcTo')}, invoices to {bs.get('invTo')}")
+        check(f"{key.title()}: projection is that rate over the month",
+              p["projected"], round(p["runRate"] * p["daysInMonth"], 2), tol=0.02)
+        if not bs.get("ksbcDaily", True):
+            print(f"[ note ] {key.title()}: the KSBC leg came in period exports "
+                  f"({', '.join(f'{a}-{b}' for a, b in bs.get('ksbcBlocks', []))}), so it has "
+                  f"no daily shape - the trend chart says so and plots the invoice leg alone")
         daily = sum(d["ksbc"] + d["inv"] for d in p["daily"])
         if daily > p["grand"] + 1:
             check(f"{key.title()}: daily trend does not exceed the total", daily, p["grand"], tol=1.0)

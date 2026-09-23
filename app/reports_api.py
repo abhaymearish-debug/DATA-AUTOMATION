@@ -499,6 +499,15 @@ def _master_stamp() -> str:
         return "0"
 
 
+# Bumped whenever a parser's OUTPUT changes for the same input file. The disk
+# cache is keyed on the file, not on the code that read it, so without this a
+# fix to a reader ships behind a cache that still holds what the old reader
+# said - which is how the PATHANAMTHITA canonicalisation fix looked like it had
+# not worked at all until the cache was cleared by hand. Bump it in the same
+# commit as any change to _dispatch_lines_read or its helpers.
+_PARSER_VERSION = "2026-09-23.1"
+
+
 def _parsed(kind: str, path: Path, build, *, uses_master: bool = True):
     """`build()`'s result for this file, from disk if it has been built before.
 
@@ -512,7 +521,7 @@ def _parsed(kind: str, path: Path, build, *, uses_master: bool = True):
         st = path.stat()
     except OSError:
         return build()
-    stamp = f"{kind}|{path.name}|{st.st_mtime_ns}|{st.st_size}"
+    stamp = f"{kind}|{_PARSER_VERSION}|{path.name}|{st.st_mtime_ns}|{st.st_size}"
     if uses_master:
         stamp += "|" + _master_stamp()
     name = hashlib.sha1(stamp.encode("utf-8")).hexdigest()[:24] + ".json"
@@ -581,7 +590,20 @@ def warm_cache() -> None:
 
 
 def canonical_warehouse(raw) -> str:
-    """'WH-KOLLAM FL9-KLM-01/2026-27' -> 'KOLLAM'. Handles FL9 and RFL9."""
+    """'WH-KOLLAM FL9-KLM-01/2026-27' -> 'KOLLAM'. Handles FL9 and RFL9.
+
+    Ends on canon_warehouse, so a dispatch line and a stock row for the same
+    warehouse carry the same key. They did not until 23 Sep 2026: Bevco writes
+    PATHANAMTHITA on the dispatch side and the stock build canonicalised it to
+    PATHANAMTHITTA, so the warehouse had a stock row under one spelling and a
+    sales row under the other and the two never met. Its 58 cs sat outside
+    every cluster card (the three added to 10,238 against a network of 10,296),
+    its league Status read "No sales" on a month it invoiced 23 cs, and the
+    page printed two different network demand figures - 8,416 where a panel
+    joined on the sales key and 8,439 where it summed the sales feed directly.
+    One canonicaliser now, at the end of the other, so a new alias cannot fix
+    half the page.
+    """
     if not raw:
         return ""
     txt = str(raw).strip().upper()
@@ -591,7 +613,7 @@ def canonical_warehouse(raw) -> str:
     m = re.match(r"^WH[-\s]+([A-Z .]+?)\s*[A-Z]{0,2}FL\d?[-/].*$", txt) \
         or re.match(r"^WH[-\s]+([A-Z .]+?)(?:\s+R?FL.*)?$", txt)
     name = (m.group(1) if m else txt).strip().rstrip(".")
-    return re.sub(r"\s+", " ", name)
+    return canon_warehouse(re.sub(r"\s+", " ", name))
 
 
 def _cases(c, b, pack) -> float:
@@ -731,7 +753,7 @@ def load_dispatch_lines(workbook: Path) -> list[dict]:
     Cached on the workbook's mtime, because a build replaces the file and the
     page must never serve figures from the version before it.
     """
-    key = f"lines:{workbook}:{workbook.stat().st_mtime_ns}:{_master_stamp()}"
+    key = f"lines:{_PARSER_VERSION}:{workbook}:{workbook.stat().st_mtime_ns}:{_master_stamp()}"
     with _CACHE_LOCK:
         hit = _CACHE.get(key)
     if hit:
@@ -3126,46 +3148,6 @@ def _ii_day_sale(period: str, prior: str) -> dict:
 # already makes: one thing to deploy, and it is never out of date.
 
 
-def _flow_integrity(rows: list) -> dict:
-    """Per month: what the flow columns claim, against what the stock did.
-
-    Warehouse by warehouse, because the set reporting on the first day of a
-    month is not always the set reporting on the last, and an edge summed over
-    two different sets is not an edge.
-    """
-    per: dict = {}
-    for r in rows:
-        day = _parse_date(r.get("date") or r.get("Date"))
-        wh = str(r.get("warehouse") or "").strip().upper()
-        if not day or not wh:
-            continue
-        m = per.setdefault(day.isoformat()[:7], {})
-        w = m.setdefault(wh, {"in": 0.0, "out": 0.0,
-                              "first": None, "start": 0.0, "last": None, "end": 0.0})
-        w["in"] += _num(r.get("inbound_cases"))
-        w["out"] += _num(r.get("dispatched_cases"))
-        iso = day.isoformat()
-        if w["first"] is None or iso < w["first"]:
-            w["first"], w["start"] = iso, _num(r.get("phys_start"))
-        if w["last"] is None or iso > w["last"]:
-            w["last"], w["end"] = iso, _num(r.get("phys_end"))
-
-    out = {}
-    for key, whs in per.items():
-        tin = sum(w["in"] for w in whs.values())
-        tout = sum(w["out"] for w in whs.values())
-        moved = sum(w["end"] - w["start"] for w in whs.values())
-        net = tin - tout
-        gap = net - moved
-        # a case or two per warehouse is rounding; anything that scales with
-        # the month is a column meaning something other than this window
-        tol = max(2.0 * len(whs), abs(tout) * 0.02)
-        out[key] = {"in": round(tin), "out": round(tout), "net": round(net),
-                    "moved": round(moved), "gap": round(gap),
-                    "ok": abs(gap) <= tol, "warehouses": len(whs)}
-    return out
-
-
 def _history_csv(name: str) -> Path:
     return config.CLAUDE_ROOT / "Warehouse stock" / "_history" / name
 
@@ -3178,12 +3160,26 @@ def _num(value) -> float:
 
 
 def warehouse_dashboard() -> dict:
-    """Every stock snapshot and every day's movement, as the dashboard reads them.
+    """Every stock snapshot, and the dispatch that draws it down.
 
-    Both files are appended to by the daily build, so this is the whole history
-    rather than a window: the trend chart offers month-by-month and the league
-    table's sparklines want a fortnight, and which of those is on screen is the
-    page's business, not this function's.
+    Two feeds, and only two, both rebuilt from raw uploads this app holds:
+
+      * stock_history.csv - physical / allotable / pending per warehouse per
+        snapshot, written by the warehouse stock build out of Bevco's own
+        stock exports.
+      * the Secondary sales uploads, read line by line and dated by the
+        invoice. These are the same lines the Secondary Sales reports total,
+        so a sales figure here and a sales figure there cannot disagree.
+
+    inbound_history.csv is deliberately NOT read, and nothing on this page may
+    depend on it. Its two flow columns are a reconstruction - a warehouse's
+    change in physical stock plus its dispatch, bucketed by the gap between two
+    snapshots - and on 23 Sep 2026 the live install's copy had September at
+    17,312 cs dispatched against 6,227 cs of invoices actually raised: the same
+    cases counted again at every snapshot. A figure on a director's screen has
+    to be traceable to a file somebody uploaded, so the dispatch feed now comes
+    from the invoices and the inbound half, which this app has no raw source
+    for at all, is not shown.
     """
     stock: list[dict] = []
     path = _history_csv("stock_history.csv")
@@ -3202,61 +3198,43 @@ def warehouse_dashboard() -> dict:
         except (OSError, csv.Error):
             pass
 
-    inbound: list[dict] = []
-    inbound_raw: list[dict] = []
-    path = _history_csv("inbound_history.csv")
-    if path.is_file():
-        try:
-            with path.open(newline="", encoding="utf-8-sig") as fh:
-                for row in csv.DictReader(fh):
-                    day = _parse_date(row.get("date") or row.get("Date"))
-                    wh = canon_warehouse(str(row.get("warehouse") or "").strip())
-                    if not day or not wh:
-                        continue
-                    inbound_raw.append(row)
-                    inbound.append({"d": day.isoformat(), "w": wh,
-                                    "in": round(_num(row.get("inbound_cases"))),
-                                    "out": round(_num(row.get("dispatched_cases")))})
-        except (OSError, csv.Error):
-            pass
-
     stock.sort(key=lambda r: (r["d"], r["w"]))
-    inbound.sort(key=lambda r: (r["d"], r["w"]))
-
-    # A self-check the data itself provides. Every inbound row carries the
-    # physical stock at both ends of the window it covers, so across a month
-    # the flows and the movement have to agree:
-    #
-    #     Σ(inbound − dispatched)  ==  phys_end(last row) − phys_start(first)
-    #
-    # It holds to the case on sound data. When it does not, one of the two
-    # columns is not what the dashboard thinks it is - a report that carries
-    # month-to-date figures instead of the window's, say - and the sales and
-    # inbound tiles would be adding the same cases several times over. The
-    # page is told, so it can say so instead of showing them.
-    flows = _flow_integrity(inbound_raw)
     as_of = stock[-1]["d"] if stock else ""
-    out = {"stock": stock, "inbound": inbound, "asOf": as_of,
+    out = {"stock": stock, "asOf": as_of,
            "days": sorted({r["d"] for r in stock}),
            "warehouses": sorted({r["w"] for r in stock})}
-    out["flows"] = flows
-    out["sales"] = _warehouse_demand(inbound, as_of)
+    # The cluster map travels with the figures. The page used to carry its own
+    # copy, and on 23 Sep 2026 that copy still spelled one warehouse the way
+    # Bevco does (PATHANAMTHITA) while the payload had been canonicalised to
+    # PATHANAMTHITTA - so the warehouse belonged to no cluster at all and the
+    # three cluster cards added to less than the network they are a partition
+    # of. One map, served with the data it describes.
+    out["clusters"] = dict(CLUSTER_OF_WAREHOUSE)
+    out["sales"] = _warehouse_demand(as_of)
     out.update(_warehouse_mix(as_of))
     out["dailyDispatch"] = _daily_dispatch(as_of)
     return out
 
 
 def _daily_dispatch(as_of: str) -> dict:
-    """This month's dispatch day by day, and last month's beside it.
+    """This month's dispatch day by day and warehouse by warehouse, and last
+    month's beside it.
 
     Split the way the trade is: what went to a KSBC shop and what went out on
     an invoice. Same lines the Secondary Sales - Daily report totals, so the
     race chart on the dashboard and that report cannot tell different stories.
+
+    `covered` is the part that keeps the page honest about itself: the days of
+    that month this app can answer for at all. A day inside it with no line is
+    a day nothing moved; a day outside it is a day nobody has uploaded, and a
+    month-to-date total that is missing six of its days must not be presented
+    as though it were the month.
     """
     if not as_of:
         return {}
     lines, _sources = secondary_lines()
-    if not lines:
+    covered_days = secondary_covered_days()
+    if not lines and not covered_days:
         return {}
 
     y, m = int(as_of[:4]), int(as_of[5:7])
@@ -3266,6 +3244,7 @@ def _daily_dispatch(as_of: str) -> dict:
         days: dict = {}
         ksbc: dict = {}
         inv: dict = {}
+        bywh: dict = {}
         for line in lines:
             d = line.get("date")
             if not d or d.year != yy or d.month != mm:
@@ -3275,11 +3254,21 @@ def _daily_dispatch(as_of: str) -> dict:
             days[key] = days.get(key, 0.0) + cases
             side = ksbc if str(line.get("cat") or "").upper() == "KSBC" else inv
             side[key] = side.get(key, 0.0) + cases
-        if not days:
+            wh = line.get("warehouse") or ""
+            if wh:
+                seen = bywh.setdefault(wh, {})
+                seen[key] = seen.get(key, 0.0) + cases
+        # A day with a line is answered for whether or not the file that
+        # carried it is still on disk.
+        cov = sorted({d.day for d in covered_days if d.year == yy and d.month == mm}
+                     | {int(k) for k in days})
+        if not days and not cov:
             return {}
         rnd = lambda got: {k: round(v, 2) for k, v in sorted(got.items(), key=lambda kv: int(kv[0]))}
         return {"m": _MONTH_NAME[mm - 1], "y": yy, "mi": mm,
-                "days": rnd(days), "ksbc": rnd(ksbc), "inv": rnd(inv)}
+                "days": rnd(days), "ksbc": rnd(ksbc), "inv": rnd(inv),
+                "byWh": {w: rnd(v) for w, v in sorted(bywh.items())},
+                "covered": cov, "inMonth": calendar.monthrange(yy, mm)[1]}
 
     # 'pri' for the prior month, which is the name the dashboard reads it by.
     out = {}
@@ -3296,60 +3285,112 @@ _MONTH_NAME = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY",
                "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"]
 
 
-def _warehouse_demand(inbound: list[dict], as_of: str) -> dict:
-    """What each warehouse ships in a month, averaged over the last three whole ones.
+def _warehouse_demand(as_of: str) -> dict:
+    """What each warehouse ships in a month, over the last three whole ones.
 
-    This is the divisor behind every "months of cover" figure on the dashboard,
-    so it has to be demand the warehouse actually saw, not a target. It is the
-    dispatch column of the same inbound history the Inbound KPI reads, which
-    means the two halves of the page cannot disagree with each other.
+    This is the divisor behind every "months of cover" figure on the page, so
+    it has to be demand the warehouse actually saw. It reads the dispatch lines
+    themselves, dated by their Inv/GTN date - the same lines the Sales tiles
+    and the Secondary Sales reports read - so no two figures on the page can be
+    built on different definitions of a sale.
 
     The current month is left out on purpose: a month that is four days old
     would drag the average down and read as a network that has stopped selling.
+
+    Where a month is only partly uploaded, the figure is a RATE and not a guess
+    at the days nobody sent: cases per uploaded day, times the length of an
+    average month in the window. A fully uploaded window gives back exactly the
+    mean monthly total; a partly uploaded one says so through `coverage`, and
+    the page prints that beside the number rather than letting a half month
+    read as a whole one.
     """
-    if not as_of or not inbound:
-        return {"byWarehouse": {}, "monthsUsed": [], "periodLabel": ""}
-    cur = as_of[:7]
-    months: list[str] = []
-    y, m = int(cur[:4]), int(cur[5:7])
+    empty = {"byWarehouse": {}, "monthsUsed": [], "periodLabel": "",
+             "coverage": {}, "complete": True, "thin": False, "scaleUp": 0,
+             "daysCovered": 0, "daysInWindow": 0}
+    if not as_of:
+        return empty
+    lines, _sources = secondary_lines()
+    covered_days = secondary_covered_days()
+
+    y, m = int(as_of[:4]), int(as_of[5:7])
+    keys: list = []
     for _ in range(3):
         m -= 1
         if m == 0:
             y, m = y - 1, 12
-        months.append(f"{y:04d}-{m:02d}")
-    months.reverse()
+        keys.append((y, m))
+    keys.reverse()
+    wanted = set(keys)
 
+    # Days answered for, per month: what the uploads cover, plus any day a line
+    # is dated to (a raw since cleared off disk is still a day this app knows).
+    cov: dict = {k: set() for k in keys}
+    for d in covered_days:
+        if (d.year, d.month) in wanted:
+            cov[(d.year, d.month)].add(d.day)
     per: dict = {}
-    for row in inbound:
-        key = row["d"][:7]
-        if key not in months:
+    for line in lines:
+        d = line.get("date")
+        wh = line.get("warehouse")
+        if not d or not wh:
             continue
-        seen = per.setdefault(row["w"], {})
-        seen[key] = seen.get(key, 0) + row["out"]
+        k = (d.year, d.month)
+        if k not in wanted:
+            continue
+        cov[k].add(d.day)
+        seen = per.setdefault(wh, {})
+        seen[k] = seen.get(k, 0.0) + float(line.get("cases") or 0)
 
-    names = [_MONTH_NAME[int(k[5:7]) - 1] for k in months]
+    used = [k for k in keys if cov[k]]
+    if not used:
+        return empty
+
+    days_cov = sum(len(cov[k]) for k in used)
+    days_win = sum(calendar.monthrange(k[0], k[1])[1] for k in used)
+    mean_len = days_win / len(used)
+    names = [_MONTH_NAME[k[1] - 1] for k in used]
+
     by: dict = {}
     for wh, seen in per.items():
-        got = [seen.get(k, 0) for k in months]
+        got = [seen.get(k, 0.0) for k in used]
         total = sum(got)
-        # Divide by the months this warehouse actually traded in, not by three.
-        # A warehouse that opened in August was having two empty months
-        # averaged into its demand, which cut its monthly rate to a third and
-        # so multiplied its months-of-cover by three - enough to move it from
-        # Critical to Overstocked on the strength of not existing yet.
-        live = sum(1 for v in got if v > 0) or len(months)
-        by[wh] = {"avg": round(total / live), "total": round(total),
-                  "monthsWithSales": live,
-                  "months": {n: round(v) for n, v in zip(names, got)}}
+        avg = (total / days_cov * mean_len) if days_cov else 0.0
+        # `months` is what the invoices actually say for each month. `rate` is
+        # the same month at the pace of its uploaded days, which is what the
+        # average is built from - carried separately so the page can show one
+        # and name the other rather than printing an average its own month bars
+        # do not add up to.
+        by[wh] = {"avg": round(avg), "total": round(total),
+                  "monthsWithSales": sum(1 for v in got if v > 0) or len(used),
+                  "months": {n: round(v) for n, v in zip(names, got)},
+                  "rate": {n: round(v / len(cov[k]) * calendar.monthrange(k[0], k[1])[1])
+                           for n, k, v in zip(names, used, got)}}
 
+    coverage = {n: {"days": len(cov[k]), "inMonth": calendar.monthrange(k[0], k[1])[1]}
+                for n, k in zip(names, used)}
+    complete = days_cov >= days_win
     short = [n.title()[:3] for n in names]
     # The year belongs to the month it is written beside: Nov-Dec 2026 with a
     # January window is not "Nov-Jan 2027".
-    span = (f"{short[0]} {months[0][:4]}\u2013{short[-1]} {months[-1][:4]}"
-            if months[0][:4] != months[-1][:4]
-            else f"{short[0]}\u2013{short[-1]} {months[-1][:4]}")
+    if len(used) == 1:
+        span = f"{short[0]} {used[0][0]}"
+    elif used[0][0] != used[-1][0]:
+        span = f"{short[0]} {used[0][0]}\u2013{short[-1]} {used[-1][0]}"
+    else:
+        span = f"{short[0]}\u2013{short[-1]} {used[-1][0]}"
     label = f"{span} avg"
-    return {"byWarehouse": by, "monthsUsed": names, "periodLabel": label}
+    if not complete:
+        label += f" \u00b7 {days_cov} of {days_win} days uploaded"
+    # How far the rate has to be stretched to fill the window. At 22 of 31 days
+    # that is a +41% scale-up, and it decides the Status pill on every row of
+    # the league table - so the page says so rather than letting a Healthy pill
+    # stand on three weeks of data. 15% is the line: below it the stretch moves
+    # nobody between tiers, above it it moves warehouses in and out of Critical.
+    return {"byWarehouse": by, "monthsUsed": names, "periodLabel": label,
+            "coverage": coverage, "complete": complete,
+            "thin": days_cov < 0.85 * days_win,
+            "scaleUp": round((days_win / days_cov - 1) * 100) if days_cov else 0,
+            "daysCovered": days_cov, "daysInWindow": days_win}
 
 
 # The brand and pack feeds all come off one file, so they are read once.

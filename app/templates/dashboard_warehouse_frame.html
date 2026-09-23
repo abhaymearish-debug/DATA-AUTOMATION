@@ -62,14 +62,22 @@
   @keyframes ksdpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   .grid-kpi {
     display: grid; width: 100%;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
     gap: 10px; margin-bottom: 14px;
   }
-  /* 6 → 3 → 2 rather than auto-fit: six divides evenly into all three, so no
-     row ever leaves one tile orphaned. Explicit fr tracks, not repeat() —
+  /* Five tiles since Inbound went (23 Sep 2026). Five divides into neither
+     three nor two, so the tile that would otherwise sit alone beside an empty
+     cell is stretched across it instead. Explicit fr tracks, not repeat() —
      see the .sstrip note; the embedded webview dropped the repeat() form. */
-  @media (max-width: 1240px) { .grid-kpi { grid-template-columns: 1fr 1fr 1fr; } }
-  @media (max-width: 720px)  { .grid-kpi { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 1240px) {
+    .grid-kpi { grid-template-columns: 1fr 1fr 1fr; }
+    .grid-kpi .kpi:nth-child(4) { grid-column: 1 / 3; }
+  }
+  @media (max-width: 720px)  {
+    .grid-kpi { grid-template-columns: 1fr 1fr; }
+    .grid-kpi .kpi:nth-child(4) { grid-column: auto; }
+    .grid-kpi .kpi:nth-child(5) { grid-column: 1 / -1; }
+  }
   .grid-kpi .kpi { min-width: 0; }
   /* KPI card ported from the Total Liquidation artifact so the two dashboards
      read as one family: accent edge, dotted label, value + unit + pill, a
@@ -1274,7 +1282,9 @@
   .cl-sl { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 4px;
     font-size: 9.4px; color: #7E90AD; font-weight: 600; position: relative; z-index: 1; }
   .cl-sl b { font-weight: 800; color: #C6D4E8; }
-  .cl-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: 11px;
+  .moc-hint { font-size: 10px; font-weight: 700; letter-spacing: .04em;
+               color: #8FA2C0; text-transform: none; }
+  .cl-stats { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; margin-top: 11px;
     padding-top: 10px; border-top: 1px solid rgba(255,255,255,.06);
     grid-auto-rows: 1fr; position: relative; z-index: 1; }
   .cl-stats .st { display: flex; flex-direction: column; justify-content: center;
@@ -1373,6 +1383,61 @@ const fmt = n => (n==null||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-
 const fmt1 = n => (n==null||isNaN(n)) ? '—' : (Math.round(n*10)/10).toFixed(1);
 const pct = n => (n==null||isNaN(n)) ? '—' : (Math.round(n*10)/10).toFixed(1) + '%';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ---- THE dispRows()ATCH FEED ------------------------------------------------------
+// Every sales figure on this page - the header tile, the cluster cards, the
+// drill-down strip, the insights board - reads these rows and nothing else.
+// They are the Secondary uploads themselves, one line per invoice, dated by
+// the Inv/GTN date on the invoice, so they are the same cases the Secondary
+// Sales reports total.
+//
+// What they replaced (23 Sep 2026): inbound_history.csv, whose dispatch column
+// is a reconstruction bucketed by the gap between two Bevco snapshots. On the
+// live install it had September at 17,312 cs against 6,227 cs of invoices -
+// the same cases counted again at every snapshot - and the page had no way to
+// know. A figure a director acts on has to come from a file somebody uploaded.
+// PAYLOAD arrives from a fetch, so every one of these is a function: read at
+// call time, never captured while the page is still empty.
+function ddCur() { return (PAYLOAD && PAYLOAD.dailyDispatch && PAYLOAD.dailyDispatch.cur) || null; }
+function ddPri() { return (PAYLOAD && PAYLOAD.dailyDispatch && PAYLOAD.dailyDispatch.pri) || null; }
+// The last day of a month this app can answer for: the last day a file covers,
+// not the last day something happened to move. A quiet 23rd that was uploaded
+// is still part of the month to date, and ending the window on the 18th
+// because the 19th to 23rd were nil would shorten the month and flatter the
+// run rate that divides by it.
+function ddLastDay(b) {
+  if (!b) return 0;
+  return Math.max(0, ...Object.keys(b.days || {}).map(Number), ...(b.covered || []));
+}
+function ddFirstDay(b) {
+  if (!b) return 0;
+  const all = Object.keys(b.days || {}).map(Number).concat(b.covered || []);
+  return all.length ? Math.min.apply(null, all) : 0;
+}
+function ddPrefix(b) { return b ? (b.y + '-' + String(b.mi).padStart(2, '0')) : null; }
+function ddPre()  { return ddPrefix(ddCur()); }
+function ddLast() { return ddLastDay(ddCur()); }
+// Flat rows, the shape the panels below iterate: { d, w, out }. Memoised on
+// the payload object itself, so a re-render costs nothing and a reload cannot
+// serve the previous payload's rows.
+let _dispRows = null, _dispFor = null;
+function dispRows() {
+  if (_dispFor === PAYLOAD && _dispRows) return _dispRows;
+  const out = [];
+  [ddPri(), ddCur()].forEach(b => {
+    if (!b) return;
+    const pre = ddPrefix(b) + '-';
+    Object.keys(b.byWh || {}).forEach(w => {
+      const days = b.byWh[w];
+      Object.keys(days).forEach(day => {
+        out.push({ d: pre + String(day).padStart(2, '0'), w: w, out: days[day] });
+      });
+    });
+  });
+  out.sort((a, b) => a.d < b.d ? -1 : (a.d > b.d ? 1 : 0));
+  _dispFor = PAYLOAD; _dispRows = out;
+  return out;
+}
 function ord(n) {
   const s = ['th','st','nd','rd'];
   const v = n % 100;
@@ -1534,7 +1599,18 @@ function renderSvs(latestRows) {
     + card('#A78BFA', 'Overstocked', nOver, 'WH', overPct, false,
            'above 3 months of cover', '<b>' + fmt(overExcess) + '</b> cs excess', 'flat')
     + card('#FFD86B', 'Monthly Demand', fmt(totalAvg), 'cs/mo', 100, false,
-           '<b>' + fmt(totalAvg * (monthsUsed.length || 3)) + '</b> cs across ' + (monthsUsed.length || 3) + ' months',
+           // What the invoices ACTUALLY say for the window, never the rate
+           // multiplied back out: "8,416 cs across 1 months" was a scaled
+           // figure wearing the word "across", and the demand table three
+           // inches below it printed the real 5,971 for the same month.
+           (function () {
+             const sal = PAYLOAD.sales || {};
+             const real = Object.values(sal.byWarehouse || {})
+               .reduce((a, w) => a + Object.values(w.months || {}).reduce((x, y) => x + y, 0), 0);
+             const n = monthsUsed.length || 0;
+             const mon = n === 1 ? '1 month' : n + ' months';
+             return n ? '<b>' + fmt(Math.round(real)) + '</b> cs invoiced over ' + mon : '';
+           })(),
            periodLabel, 'flat');
 
   // --- Cover by warehouse (horizontal bars, worst first) -------------------
@@ -1578,73 +1654,28 @@ function renderSvs(latestRows) {
     + '<td class="avg">' + fmt(sr.reduce((s, r) => s + r.avg, 0)) + '</td></tr>';
 }
 
-// ---- Factory truck-load cross-check (22 Jul 2026, Abhay's design) --------
-// The factory's Load Dispatch Tracker is the base figure; the Bevco-derived
-// inbound referees. A big gap between the two flags.
-//
-// WINDOWED BY GRS BOOKING DATE, NOT UNLOAD DATE (Abhay, 10 Aug 2026).
-// Bevco's GRS books a receipt on its own clock — a truck unloaded at the yard
-// on Friday appears in the export at the next snapshot, 0-4 days later. Within
-// a month that is invisible, but a truck unloaded near month-end books in the
-// FOLLOWING month and the two sides then disagree in BOTH months (KOTTAYAM
-// 700 cs, unloaded 31 Jul, booked 4 Aug). The rule Abhay set: take the
-// QUANTITY from the truck log, take the TIMING from the raw data. The refresh
-// script matches each load to its Bevco booking and stamps `l.g`; this windows
-// on that. A load the books have not picked up yet is deliberately held OUT of
-// inbound and reported as `awaiting` so it is visible rather than silently
-// inflating one month and starving the next.
-//
-// `transit` and `awaiting` are LIVE states, so unlike `cs` they are NOT month
-// filtered — a truck dispatched 28 Jul and still on the road on 10 Aug is on
-// the road today, and month-filtering it was the same blind spot in miniature.
-function factoryLoadStats(pre, dayCap, whTest) {
-  const L = PAYLOAD.factoryLoads || [];
-  if (!L.length || !pre) return null;
-  let cs = 0, loads = 0, transit = 0, awaiting = 0, awaitLoads = 0, stale = 0;
-  L.forEach(l => {
-    if (whTest && !whTest(l.w)) return;
-    if (l.g) {                                  // booked by Bevco
-      if (!l.g.startsWith(pre)) return;
-      if (parseInt(l.g.slice(8, 10), 10) > dayCap) return;
-      cs += l.cs; loads++;
-    } else if (l.u) {                           // unloaded, books not caught up
-      awaiting += l.cs; awaitLoads++;
-      if (l.stale) stale += l.cs;
-    } else {                                    // despatched, not yet unloaded
-      transit += l.cs;
-    }
-  });
-  return { cs: cs, loads: loads, transit: transit,
-           awaiting: awaiting, awaitLoads: awaitLoads, stale: stale };
-}
-function factoryFlag(fac, derived) {
-  if (!fac || (!fac.loads && !fac.transit)) return '';
-  const bits = [];
-  if (fac.loads) {
-    const diff = Math.abs(derived - fac.cs);
-    const tol = Math.max(25, 0.08 * Math.max(fac.cs, derived));
-    if (diff > tol) {
-      bits.push('<b style="color:#F09A93">\u26A0 truck log ' + fmt(fac.cs)
-        + ' vs booked ' + fmt(derived) + '</b>');
-    } else {
-      bits.push('<b style="color:#7BD8AA">\u2713 truck log \u00B7 ' + fac.loads
-        + ' load' + (fac.loads > 1 ? 's' : '') + '</b>');
-    }
-  }
-  if (fac.transit > 0) bits.push('\uD83D\uDE9A ' + fmt(fac.transit) + ' cs in transit');
-  return bits.length ? ' \u00B7 ' + bits.join(' \u00B7 ') : '';
-}
+// The factory truck-load cross-check that used to sit here read
+// PAYLOAD.factoryLoads, which is the Load Dispatch Tracker on Abhay's own
+// machine. This app has never had that file - the payload builder does not
+// emit the key - so the check had been dark since the dashboard moved onto the
+// server, and every tile it refereed silently fell through to inbound_history.
+// It is removed with the Inbound tile (23 Sep 2026). If the truck log is ever
+// uploaded here, it comes back as a feed of its own, not as a fallback.
 
 function renderSalesInsights() {
   const board = document.getElementById('siBoard');
   if (!board) return;
-  const inb = PAYLOAD.inbound || [];
-  if (!inb.length) { board.innerHTML = '<div class="empty-note">No dispatch history yet.</div>'; return; }
-  let last = null; inb.forEach(r => { if (!last || r.d > last) last = r.d; });
-  const curPre = last.slice(0, 7);
-  const dayCap = parseInt(last.slice(8, 10), 10);
-  const y = +curPre.slice(0, 4), m = +curPre.slice(5, 7);
-  const priorPre = (m === 1 ? y - 1 : y) + '-' + String(m === 1 ? 12 : m - 1).padStart(2, '0');
+  const inb = dispRows();
+  if (!inb.length || !ddPre()) {
+    board.innerHTML = '<div class="empty-note">No dispatch uploaded yet — add a Secondary Sales export on the Raw Data Upload page.</div>';
+    return;
+  }
+  const curPre = ddPre();
+  const dayCap = ddLast();
+  const last = curPre + '-' + String(dayCap).padStart(2, '0');
+  const priorPre = ddPri() ? ddPrefix(ddPri())
+    : ((+curPre.slice(5, 7) === 1 ? +curPre.slice(0, 4) - 1 : +curPre.slice(0, 4))
+       + '-' + String(+curPre.slice(5, 7) === 1 ? 12 : +curPre.slice(5, 7) - 1).padStart(2, '0'));
   const cur = {}, prv = {};
   inb.forEach(r => {
     const dd = parseInt(r.d.slice(8, 10), 10);
@@ -1658,9 +1689,17 @@ function renderSalesInsights() {
     return { w: w, c: c, p: p, g: p > 0 ? (c / p - 1) * 100 : (c > 0 ? null : 0) };
   }).sort((a, b) => b.c - a.c);
   const maxC = Math.max(1, ...rows.map(r => Math.max(r.c, r.p)));
+  // Both windows whole, or no comparison at all. Without this the board read
+  // a prior month nobody had uploaded as a zero baseline and painted every
+  // warehouse "new" on a full-width green waterfall - an absent file
+  // presented as the best month on record.
+  const _cc = ddCur(), _pp = ddPri();
+  const _covUpTo = (b) => (b && b.covered) ? b.covered.filter(d => d <= dayCap).length : 0;
+  const bothWhole = !!(_cc && _pp && _covUpTo(_cc) >= dayCap && _covUpTo(_pp) >= dayCap);
   const gTxtOf = (r) => {
     // Δ in CASES (22 Jul 2026, Abhay: "cases instead of %") — matches the
     // waterfall beside it; 'new' only when there was no prior month at all
+    if (!bothWhole) return '';
     const d = r.c - r.p;
     if (r.g == null && !r.p) return 'new';
     return (d > 0 ? '\u25B2 +' : (d < 0 ? '\u25BC \u2212' : '\u25AC ')) + fmt(Math.abs(d));
@@ -1676,16 +1715,16 @@ function renderSalesInsights() {
   };
   const totC = rows.reduce((s, r) => s + r.c, 0);
   const totPr = rows.reduce((s, r) => s + r.p, 0);
-  const gAll = totPr > 0 ? (totC / totPr - 1) * 100 : null;
+  const gAll = (bothWhole && totPr > 0) ? (totC / totPr - 1) * 100 : null;
   board.innerHTML = '<div class="si-plot"><div class="si-gridlines">'
     + [25, 50, 75].map(v => '<div class="si-gl" style="left:' + v + '%"></div>').join('') + '</div>'
     + rows.map(r => {
       const cw = (r.c / maxC * 100), pw = (r.p / maxC * 100);
-      return '<div class="si-r" title="' + r.w + ' \u00B7 ' + winLbl + ' ' + fmt(r.c)
-        + ' cs \u00B7 ' + priLbl + ' ' + fmt(r.p) + ' cs">'
+      return '<div class="si-r" title="' + r.w + ' \u00B7 ' + winLbl + ' ' + fmt(r.c) + ' cs'
+        + (bothWhole ? ' \u00B7 ' + priLbl + ' ' + fmt(r.p) + ' cs' : '') + '">'
         + '<span class="si-nm">' + r.w + '</span>'
         + '<span class="si-track">'
-        +   (r.p > 0 ? '<i class="si-ghost" style="width:' + Math.min(100, pw).toFixed(1) + '%"></i>' : '')
+        +   (bothWhole && r.p > 0 ? '<i class="si-ghost" style="width:' + Math.min(100, pw).toFixed(1) + '%"></i>' : '')
         +   '<i class="si-bar ' + (r.g != null && r.g > 2 ? 'up' : (r.g != null && r.g < -2 ? 'dn' : 'nu'))
         +   '" style="width:' + cw.toFixed(1) + '%"></i></span>'
         + '<span class="si-val">' + fmt(r.c) + '</span>'
@@ -1695,12 +1734,15 @@ function renderSalesInsights() {
     }).join('') + '</div>';
   const totEl = document.getElementById('siTotal');
   if (totEl) totEl.innerHTML = '<div class="si-total"><span>TOTAL<b>' + fmt(totC) + '</b></span>'
-    + '<span class="r"><span>' + priLbl + ' \u00B7 ' + fmt(totPr) + ' cs</span>'
+    + (!bothWhole
+      ? '<span class="r"><span>' + priLbl + ' not fully uploaded \u2014 no comparison</span></span>'
+      : '<span class="r"><span>' + priLbl + ' \u00B7 ' + fmt(totPr) + ' cs</span>'
     + '<span class="d2 ' + (totC - totPr >= 0 ? 'pos' : 'neg') + '">'
     +   (totC - totPr >= 0 ? '+' : '\u2212') + fmt(Math.abs(totC - totPr)) + ' cs</span>'
     + (gAll == null ? '' : '<span class="si-g ' + (gAll > 2 ? 'pos' : gAll < -2 ? 'neg' : 'flat') + '">'
         + (gAll >= 0 ? '\u25B2 +' : '\u25BC \u2212') + Math.abs(gAll).toFixed(0) + '%</span>')
-    + '</span></div>';
+    + '</span>')
+    + '</div>';
   // Contribution waterfall — ported faithfully from the liquidation live
   // artifact (22 Jul 2026, Abhay): top-18 warehouses by |Δ| sorted best→worst,
   // the tail folded into "All other", signed labels painted just past each
@@ -1727,6 +1769,16 @@ function renderSalesInsights() {
     ctx.restore(); } };
   if (window.siWfChart) { try { window.siWfChart.destroy(); } catch (e) {} }
   const wfCv = document.getElementById('siWaterfall');
+  // The waterfall is the same month-on-month claim as the board beside it: if
+  // the app does not hold both windows whole there is nothing to attribute,
+  // and eighteen bars of "+0" or "+everything" is not a finding.
+  if (wfWrap && !bothWhole) {
+    wfWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;'
+      + 'height:100%;min-height:120px;padding:14px;text-align:center;color:#7E90AE;'
+      + 'font-size:11.5px;line-height:1.55">Month-on-month contribution needs both months '
+      + 'uploaded in full.<br>' + priLbl + ' is not, so there is nothing to compare against.</div>';
+    return;
+  }
   if (wfCv) window.siWfChart = new Chart(wfCv, {
     type: 'bar',
     data: { labels: wfL, datasets: [{ data: wfD,
@@ -1875,11 +1927,18 @@ function attachWhDrilldown() {
 }
 
 // Geographic clusters. Module scope so the trend renderer, the sales strip and
-// the league-table chips all read one map.
-const WH_CLUSTER = {
+// the league-table chips all read one map — and `let`, not `const`, because
+// the payload carries the server's own map and overwrites this one on load.
+// This literal is only the fallback for a payload built before that key
+// existed. Keeping a second copy here is what let the page and the figures
+// disagree about which cluster a warehouse was in: the copy said
+// PATHANAMTHITA, the data said PATHANAMTHITTA, and the warehouse fell out of
+// all three cluster cards, which then summed to 10,238 against a network of
+// 10,296 and printed 99.5% of the network stock as 100%.
+let WH_CLUSTER = {
   // Cluster 1 — South
   ALAPPUZHA: 1, ATTINGAL: 1, NEDUMANGAD: 1, KOLLAM: 1, KOTTARAKARA: 1,
-  PATHANAMTHITA: 1, KARUNAGAPPALLY: 1, BALARAMAPURAM: 1, MENAMKULAM: 1, THIRUVALLA: 1,
+  PATHANAMTHITTA: 1, KARUNAGAPPALLY: 1, BALARAMAPURAM: 1, MENAMKULAM: 1, THIRUVALLA: 1,
   // Cluster 2 — Central
   THRISSUR: 2, TRIPUNITHURA: 2, THODUPUZHA: 2, KOTTAYAM: 2, ALUVA: 2,
   PERUMBAVOOR: 2, KOTHAMANGALAM: 2, AYARKKUNNAM: 2, CHALAKUDY: 2, KADAVANTHRA: 2,
@@ -1888,6 +1947,10 @@ const WH_CLUSTER = {
   MENONPARA: 3, BATTATHUR: 3, KALPETTA: 3, NADUVANNUR: 3,
 };
 const cluNumOf = k => { const m = /^__C(\d)__$/.exec(k || ''); return m ? +m[1] : 0; };
+// A month, in days, for turning months of cover into days of cover. The
+// demand basis is built on whole calendar months, so 30.4 is the honest
+// conversion; a flat 30 quietly added most of a day of cover to every row.
+const MO_DAYS = 30.4;
 
 // Keeps a chip row on ONE line. Chip counts and name lengths vary by cluster
 // (Cluster 1 carries KARUNAGAPPALLY and BALARAMAPURAM; Cluster 3 is short), and
@@ -2209,16 +2272,15 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
     const salesLbl = ((PAYLOAD.sales && PAYLOAD.sales.periodLabel) || '')
                        .replace(/\s*avg$/i, '');
     const monthsUsed = (PAYLOAD.sales && PAYLOAD.sales.monthsUsed) || [];
-    const inb = PAYLOAD.inbound || [];
-    let lastInb = null;
-    inb.forEach(r => { if (!lastInb || r.d > lastInb) lastInb = r.d; });
-    const mtdPre = lastInb ? lastInb.slice(0, 7) : null;
+    const inb = dispRows();
+    const mtdPre = ddPre();
+    const lastInb = mtdPre ? (mtdPre + '-' + String(ddLast()).padStart(2, '0')) : null;
     const inScopeRow = r => isAll ? true
       : (cluNum > 0 ? (WH_CLUSTER[r.w] || 0) === cluNum : r.w === selected);
     // Same window one month back, so the tiles can carry a like-for-like
     // comparison instead of a bare number: Jul 1-21 against Jun 1-21, never
     // against a full prior month that had nine more days to accumulate in.
-    const lastDay = lastInb ? parseInt(lastInb.slice(8, 10), 10) : 0;
+    const lastDay = ddLast();
     const priorPre = (function () {
       if (!mtdPre) return null;
       const y = +mtdPre.slice(0, 4), m = +mtdPre.slice(5, 7);
@@ -2226,44 +2288,48 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
       return py + '-' + String(pm).padStart(2, '0');
     })();
     const win = (pre) => {
-      let o = 0, n = 0, adj = 0, days = 0; const seen = new Set();
-      if (!pre) return { out: 0, in: 0, adj: 0, days: 0 };
+      let o = 0; const seen = new Set();
+      if (!pre) return { out: 0, days: 0 };
       inb.forEach(r => {
         if (!r.d.startsWith(pre)) return;
         if (parseInt(r.d.slice(8, 10), 10) > lastDay) return;
         if (!inScopeRow(r)) return;
         o += (r.out || 0);
-        const iv = (r.in || 0);
-        if (iv > 0) n += iv; else adj += iv;
         seen.add(r.d);
       });
-      days = seen.size;
-      return { out: o, in: n, adj: adj, days: days };
+      return { out: o, days: seen.size };
     };
     const curW = win(mtdPre), prvW = win(priorPre);
-    const mtd = curW.out, inbMtd = curW.in;
-    // ONE BASIS AT EVERY SCOPE (21 Jul). Network used to swap in
-    // mtdDispatchedSecondary -- the Secondary workbook's calendar-month total --
-    // while clusters and warehouses summed inbound_history's window-bucketed
-    // 'out'. Same underlying dispatches, bucketed differently, so the three
-    // clusters added to 7,288 while Network reported 7,045: two answers for one
-    // month depending on which chip you had selected.
-    //
-    // mtdDispatchedSecondary exists only as a network total, so it cannot be the
-    // shared basis. inbound_history can, and it is the same Secondary dispatch
-    // data -- the ~3% gap is the window boundary, since a snapshot dated the 1st
-    // carries dispatches from the closing days of the prior month. Consistency
-    // across scopes is worth more here than that boundary.
-    let avg = 0; const mvals = {};
+    const mtd = curW.out;
+    // Same rule as the header tile: a percentage is only drawn when the app
+    // holds both windows whole. Scope does not change that - a cluster read
+    // against a month with six days missing is as misleading as the network.
+    const noteWhole = (ddCur() && ddPri()
+      && (ddCur().covered || []).filter(d => d <= lastDay).length >= lastDay
+      && (ddPri().covered || []).filter(d => d <= lastDay).length >= lastDay);
+    // ONE BASIS AT EVERY SCOPE. Network, cluster and warehouse all sum the
+    // same invoice lines over the same window, so the three clusters add to
+    // the network total exactly - which is the whole reason the per-warehouse
+    // split is carried in the payload rather than being reconstructed here.
+    let avg = 0; const mvals = {}, mrate = {};
     if (agg) {
       Object.entries(salesBy).forEach(([w, s]) => {
         if (!isAll && (WH_CLUSTER[w] || 0) !== cluNum) return;
         avg += (s.avg || 0);
-        monthsUsed.forEach(m => { mvals[m] = (mvals[m] || 0) + ((s.months && s.months[m]) || 0); });
+        monthsUsed.forEach(m => {
+          mvals[m] = (mvals[m] || 0) + ((s.months && s.months[m]) || 0);
+          mrate[m] = (mrate[m] || 0) + ((s.rate && s.rate[m]) || 0);
+        });
       });
     } else {
       const s = salesBy[selected];
-      if (s) { avg = s.avg || 0; monthsUsed.forEach(m => { mvals[m] = (s.months && s.months[m]) || 0; }); }
+      if (s) {
+        avg = s.avg || 0;
+        monthsUsed.forEach(m => {
+          mvals[m] = (s.months && s.months[m]) || 0;
+          mrate[m] = (s.rate && s.rate[m]) || 0;
+        });
+      }
     }
     const mtdLbl = lastInb
       ? (new Date(lastInb + 'T00:00:00').toLocaleString('en-US', { month: 'short' }) + ' 1–' + parseInt(lastInb.slice(8, 10), 10))
@@ -2272,10 +2338,9 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
     // strip and the Total Liquidation artifact all read as one family. Each
     // carries a like-for-like comparison against the same window last month.
     const dayNum  = lastDay;
-    const inbDays = curW.days;
 
     const pillOf = (cur, prv) => {
-      if (!prv) return '';
+      if (!prv || !noteWhole) return '';
       const g = (cur / prv - 1) * 100;
       const cls = g > 0.05 ? 'pos' : (g < -0.05 ? 'neg' : 'flat');
       const arr = g > 0.05 ? '▲ +' : (g < -0.05 ? '▼ −' : '▬ ');
@@ -2306,22 +2371,38 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
       : 'prior';
 
     // months the average is built from, inline on the value row
+    // A month the app holds only part of is drawn AT THE PACE OF THE DAYS IT
+    // HOLDS, marked with a dot, because that is the figure the average above is
+    // built from: printing a raw part-month total beside an average computed
+    // from the rate gives a tile whose own bars do not add up to its headline.
+    // The tooltip carries both figures either way, and says which is which.
+    const salesCov = (PAYLOAD.sales && PAYLOAD.sales.coverage) || {};
     const moKeys = monthsUsed.filter(m => mvals[m] != null);
-    const moMax  = moKeys.reduce((a, m) => Math.max(a, mvals[m] || 0), 0);
+    const moShown = m => {
+      const c = salesCov[m], raw = mvals[m] || 0;
+      if (!c || !c.days || c.days >= c.inMonth) return { v: raw, part: false, raw: raw, c: c };
+      return { v: (mrate[m] != null ? mrate[m] : raw), part: true, raw: raw, c: c };
+    };
+    const moMax  = moKeys.reduce((a, m) => Math.max(a, moShown(m).v), 0);
     const moHtml = moKeys.length
       ? '<div class="mos">' + moKeys.map(m => {
-          const v = mvals[m] || 0;
-          const w = moMax > 0 ? (v / moMax * 100) : 0;
-          return '<span class="' + (moMax > 0 && v === moMax ? 'hi' : '') + '" title="'
-            + m.charAt(0) + m.slice(1).toLowerCase() + ' · ' + fmt(v) + ' cs dispatched">'
-            + '<em>' + m.slice(0, 3) + '</em><b>' + fmt(v) + '</b>'
+          const g = moShown(m);
+          const w = moMax > 0 ? (g.v / moMax * 100) : 0;
+          const cap = m.charAt(0) + m.slice(1).toLowerCase();
+          const tip = g.part
+            ? cap + ' · ' + fmt(g.raw) + ' cs dispatched over the ' + g.c.days + ' of '
+              + g.c.inMonth + ' days uploaded · ' + fmt(g.v)
+              + ' cs at that pace over a whole month, which is what the average uses'
+            : cap + ' · ' + fmt(g.v) + ' cs dispatched';
+          return '<span class="' + (moMax > 0 && g.v === moMax ? 'hi' : '') + '" title="' + tip + '">'
+            + '<em>' + m.slice(0, 3) + (g.part ? ' ·' : '') + '</em><b>' + fmt(g.v) + '</b>'
             + '<i><s style="width:' + w.toFixed(1) + '%"></s></i></span>';
         }).join('') + '</div>'
       : '';
     // the average hides direction, so the pill states it: first month to last
     let moPill = '', moFoot = '<div class="sub"><span>' + (salesLbl || '3-month average') + '</span></div>';
     if (moKeys.length >= 2) {
-      const f0 = mvals[moKeys[0]] || 0, l0 = mvals[moKeys[moKeys.length - 1]] || 0;
+      const f0 = moShown(moKeys[0]).v, l0 = moShown(moKeys[moKeys.length - 1]).v;
       if (f0 > 0) {
         const g = (l0 / f0 - 1) * 100;
         const cls = g > 0.05 ? 'pos' : (g < -0.05 ? 'neg' : 'flat');
@@ -2374,10 +2455,13 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
             + '</div>';   // <-- close the Physical .kpi (was missing: nested the rest inside it)
         })()
       + '<div class="kpi" style="--cc:#60A5FA">'
-      +   '<div class="label"><i></i>MTD Sales &middot; ' + mtdLbl + pillOf(mtd, prvW.out) + '</div>'
-      +   '<div class="value"><span class="n">' + fmt(mtd) + '</span><span class="u">cs</span></div>'
-      +   barOf(mtd, prvW.out)
-      +   footOf(mtd, prvW.out, 'vs ' + priorMoLbl)
+      +   '<div class="label"><i></i>MTD Sales &middot; ' + (mtdPre ? mtdLbl : 'not uploaded')
+      +     (mtdPre ? pillOf(mtd, prvW.out) : '') + '</div>'
+      +   '<div class="value"><span class="n">' + (mtdPre ? fmt(mtd) : '\u2014')
+      +     '</span><span class="u">cs</span></div>'
+      +   (mtdPre ? barOf(mtd, prvW.out) : '<div class="cbar"><i class="rest" style="width:100%"></i></div>')
+      +   (mtdPre ? footOf(mtd, prvW.out, 'vs ' + priorMoLbl)
+                  : '<div class="sub"><span>no Secondary Sales export for this month</span></div>')
       + '</div>'
       + '<div class="kpi" style="--cc:#FFD86B">'
       +   '<div class="label"><i></i>Avg Monthly Sales' + moPill + '</div>'
@@ -2392,48 +2476,8 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
       +   '<div class="cbar"><i class="base" style="width:' + covBar.toFixed(1) + '%"></i>'
       +     '<i class="rest" style="width:' + (100 - covBar).toFixed(1) + '%"></i></div>'
       +   '<div class="sub"><span>demand &middot; <b>' + fmt(Math.round(scopeDemand)) + '</b> cs/mo</span>'
-      +     '<span class="dd flat">' + (scopeCover == null ? '—' : Math.round(scopeCover * 30) + ' days') + '</span></div>'
-      + '</div>'
-      + (function () {
-          // TRUCK LOG IS THE BASE (22 Jul 2026 PM, Abhay): the tile shows the
-          // factory's landed loads for this scope+window; the Bevco-derived
-          // figure referees from the footer — a big gap, or arrivals with no
-          // log entry at all, flags red.
-          const scopeW = w => inScopeRow({ w: w });
-          const fac = factoryLoadStats(mtdPre, lastDay, scopeW);
-          const facPrv = factoryLoadStats(priorPre, lastDay, scopeW);
-          const haveFac = fac && fac.loads > 0;
-          const shown = haveFac ? fac.cs : inbMtd;
-          const prevShown = (facPrv && facPrv.loads > 0) ? facPrv.cs : prvW.in;
-          let ref = '';
-          if (haveFac) {
-            const tol = Math.max(25, 0.08 * Math.max(shown, inbMtd));
-            ref = Math.abs(inbMtd - fac.cs) > tol
-              ? ' &middot; <b style="color:#F09A93">\u26A0 booked ' + fmt(inbMtd) + '</b>'
-              : ' &middot; <b style="color:#7BD8AA">\u2713 booked</b>';
-          } else if ((PAYLOAD.factoryLoads || []).length && inbMtd > 25) {
-            ref = ' &middot; <b style="color:#F09A93">\u26A0 no truck log</b>';
-          }
-          // awaiting-GRS reads ahead of on-the-road: it is the one that moves
-          // a figure between two months once the books catch up
-          const transitNote = (fac && fac.awaiting > 0)
-            ? ' &middot; <span style="color:' + (fac.stale > 0 ? '#F09A93' : '#F0C674') + '">'
-              + (fac.stale > 0 ? '\u26A0 ' : '\u23F3 ') + fmt(fac.awaiting) + ' cs at GRS</span>'
-            : ((fac && fac.transit > 0)
-                ? ' &middot; \uD83D\uDE9A ' + fmt(fac.transit) + ' cs' : '');
-          const dd = shown - prevShown;
-          const cls = dd > 0 ? 'pos' : (dd < 0 ? 'neg' : 'flat');
-          const left = haveFac
-            ? '<b>' + fac.loads + '</b> load' + (fac.loads > 1 ? 's' : '') + ' booked'
-            : '<b>' + inbDays + '</b> snapshot days';
-          return '<div class="kpi" style="--cc:#2DD4BF">'
-            + '<div class="label"><i></i>Inbound &middot; ' + mtdLbl + pillOf(shown, prevShown) + '</div>'
-            + '<div class="value"><span class="n">' + fmt(shown) + '</span><span class="u">cs</span></div>'
-            +   barOf(shown, prevShown)
-            + '<div class="sub"><span>' + left + ref + transitNote + '</span>'
-            + '<span class="dd ' + cls + '">' + (dd >= 0 ? '+' : '−') + fmt(Math.abs(dd)) + ' cs</span></div>'
-            + '</div>';
-        })();
+      +     '<span class="dd flat">' + (scopeCover == null ? '—' : Math.round(scopeCover * MO_DAYS) + ' days') + '</span></div>'
+      + '</div>';
   }
 }
 
@@ -2859,7 +2903,7 @@ function renderBrandPanel() {
 // painted totals + ★ BEST + DRY DAY, gold Sunday wash, gold cumulative
 // pace line vs prior-month dashed on the right axis, pill end-labels, and a
 // Daily | Cumulative race toggle. Data: PAYLOAD.dailyDispatch (exact
-// per-date COMBINED DISPATCHES sums — never the windowed inbound 'out').
+// per-date COMBINED dispRows()ATCHES sums — never the windowed inbound 'out').
 let wdsChart = null, wdsMode = 'daily';
 function renderWds() {
   const panel = document.getElementById('wdsPanel');
@@ -2877,15 +2921,26 @@ function renderWds() {
     if (seg) seg.style.display = 'none';
     if (chips) chips.innerHTML =
       '<div style="padding:18px 2px 8px;color:#7E90AE;font-size:12px;line-height:1.6">'
-      + 'No invoice-dated dispatch for this month yet. This panel fills in once a '
-      + 'day\u2019s Secondary Sales export is uploaded; until then the Sales tile above '
-      + 'reads the stock report\u2019s own dispatch column instead.</div>';
+      + '<b style="color:#F3D08A">No Secondary Sales export has been uploaded for this month.</b><br>'
+      + 'Every sales figure on this page comes from those invoices, so until one is '
+      + 'uploaded there is no month-to-date sales figure to show \u2014 the tiles above read '
+      + '\u201cnot uploaded\u201d rather than nought. The stock figures are unaffected.</div>';
     return;
   }
   const cur = DD.cur, pri = DD.pri || null;
-  const lastDay = Math.max.apply(null, Object.keys(cur.days).map(Number));
+  // The same window every other panel uses: the last day an upload ANSWERS
+  // for, not the last day something moved. Taking the last day with a figure
+  // shortened the month whenever it ended quietly, and this panel then
+  // labelled itself "August 1-29" beside a header tile reading "Aug 1-30".
+  const lastDay = ddLastDay(cur);
   const days = []; for (let d = 1; d <= lastDay; d++) days.push(d);
+  // A day nobody uploaded is NOT a day nothing moved. Both used to draw as a
+  // bare zero column, so eight missing August exports looked exactly like
+  // eight dry days - and they sat in the per-day divisor as if they were.
+  const covSet = new Set(cur.covered || []);
+  const known = d => !cur.covered || covSet.has(d);
   const daily = days.map(d => Math.round((cur.days[String(d)] || 0) * 100) / 100);
+  const gapDays = days.filter(d => !known(d));
   // channel split (24 Jul 2026, Abhay: "mix of KSBC and Cfed, just like the
   // liquidation artifact") — royal-blue KSBC + champagne CFD/BAR stack
   const haveSplit = !!(cur.ksbc && cur.inv);
@@ -2893,6 +2948,9 @@ function renderWds() {
   const iArr = haveSplit ? days.map(d => Math.round((cur.inv[String(d)] || 0) * 100) / 100) : days.map(() => 0);
   const cum = a => { let s = 0; return a.map(v => { s += v; return Math.round(s * 100) / 100; }); };
   const cumC = cum(daily);
+  const priCov = pri ? new Set(pri.covered || []) : null;
+  const priWhole = !!(pri && days.every(d => !priCov || !pri.covered || priCov.has(d)));
+  const curWhole = gapDays.length === 0;
   const priDaily = pri && pri.days ? days.map(d => Math.round((pri.days[String(d)] || 0) * 100) / 100) : null;
   const priCum = priDaily ? cum(priDaily) : null;
   const monN = cur.m.charAt(0) + cur.m.slice(1).toLowerCase();
@@ -2905,20 +2963,29 @@ function renderWds() {
   const mtd = cumC[cumC.length - 1] || 0;
   // Days something actually moved. This used to be the day of the month less
   // one for a dry 1st, which counted every Sunday and every holiday as a
-  // trading day and so understated cs/day by about a day in seven.
-  const tradeDays = Math.max(1, daily.filter(v => v > 0.01).length);
-  let bi = 0; daily.forEach((v, i) => { if (v > daily[bi]) bi = i; });
+  // trading day and so understated cs/day by about a day in seven. A day with
+  // no upload behind it is not a trading day either - it is a day we cannot
+  // speak for - so it stays out of the divisor and out of the best-day race.
+  const tradeDays = Math.max(1, days.filter((d, i) => known(d) && daily[i] > 0.01).length);
+  let bi = 0; days.forEach((d, i) => { if (known(d) && daily[i] > daily[bi]) bi = i; });
   const priPace = priCum ? priCum[priCum.length - 1] : null;
   const dPace = priPace != null ? Math.round((mtd - priPace) * 100) / 100 : null;
   const chips = document.getElementById('wdsChips');
   if (chips) chips.innerHTML =
-      '<span class="wds-chip" style="--tc:#FFD86B"><i class="dt"></i><em>MTD dispatched</em><b>' + fmt(mtd) + '</b><u>cs · ' + monN + ' 1–' + lastDay + '</u></span>'
+      '<span class="wds-chip" style="--tc:#FFD86B"><i class="dt"></i><em>MTD dispatched</em><b>' + fmt(mtd) + '</b><u>cs · ' + monN + ' 1–' + lastDay
+        + (curWhole ? '' : ' · ' + (lastDay - gapDays.length) + ' of ' + lastDay + ' days uploaded') + '</u></span>'
     + '<span class="wds-chip" style="--tc:#60A5FA"><i class="dt"></i><em>Avg / day</em><b>' + fmt(Math.round(mtd / tradeDays)) + '</b><u>cs · ' + tradeDays + ' trading days</u></span>'
     + '<span class="wds-chip" style="--tc:#FFD700"><i class="dt"></i><em>Best day ★</em><b>' + fmt(daily[bi]) + '</b><u>' + mo3 + ' ' + days[bi] + ' · ' + WD3[wdOf(days[bi])] + '</u></span>'
+    // A month-on-month move is drawn only where the app holds BOTH windows
+    // whole. It used to print "+5,987 cs" against a prior month that had never
+    // been uploaded - an absent month read as a zero baseline and a record rise.
     + (dPace == null ? ''
-      : '<span class="wds-chip ' + (dPace >= 0 ? 'pos' : 'neg') + '" style="--tc:' + (dPace >= 0 ? '#43C08A' : '#E06A62') + '"><i class="dt"></i><em>vs ' + pri3 + ' 1–' + lastDay + '</em><b>'
-        + (dPace >= 0 ? '▲ +' : '▼ −') + fmt(Math.abs(dPace)) + '</b><u>cs'
-        + (priPace ? ' · ' + (dPace >= 0 ? '+' : '−') + Math.abs(dPace / priPace * 100).toFixed(1) + '%' : '') + '</u></span>');
+      : (curWhole && priWhole)
+        ? '<span class="wds-chip ' + (dPace >= 0 ? 'pos' : 'neg') + '" style="--tc:' + (dPace >= 0 ? '#43C08A' : '#E06A62') + '"><i class="dt"></i><em>vs ' + pri3 + ' 1–' + lastDay + '</em><b>'
+          + (dPace >= 0 ? '▲ +' : '▼ −') + fmt(Math.abs(dPace)) + '</b><u>cs'
+          + (priPace ? ' · ' + (dPace >= 0 ? '+' : '−') + Math.abs(dPace / priPace * 100).toFixed(1) + '%' : '') + '</u></span>'
+        : '<span class="wds-chip" style="--tc:#7E90AE"><i class="dt"></i><em>vs ' + pri3 + ' 1–' + lastDay + '</em><b>—</b><u>'
+          + (curWhole ? pri3 + ' part-uploaded' : 'this month part-uploaded') + '</u></span>');
 
   // channel-mix ribbon: the month's KSBC / invoice split with each leg's own
   // pace against the same window last month (24 Jul 2026)
@@ -2933,7 +3000,9 @@ function renderWds() {
         if (!pri || !pri[which]) return null;
         return Object.keys(pri[which]).reduce((a, k) => a + (Number(k) <= lastDay ? pri[which][k] : 0), 0);
       };
-      const dOf = (cur, prv) => (prv == null || prv <= 0) ? ''
+      // the same rule as the chips above: no percentage unless the app holds
+      // both windows whole
+      const dOf = (cur, prv) => (prv == null || prv <= 0 || !(curWhole && priWhole)) ? ''
         : ' <s>' + (cur - prv >= 0 ? '▲ +' : '▼ −') + Math.abs((cur / prv - 1) * 100).toFixed(0) + '% vs ' + pri3 + '</s>';
       mixEl.innerHTML =
           '<span class="lg k"><b>' + fmt(kT) + '</b> KSBC · ' + pk.toFixed(0) + '%' + dOf(kT, legPri('ksbc')) + '</span>'
@@ -2948,6 +3017,16 @@ function renderWds() {
   const ctxW = cv.getContext('2d');
   const grad2 = stops => { const g = ctxW.createLinearGradient(0, 0, 0, 300);
     stops.forEach(s => g.addColorStop(s[0], s[1])); return g; };
+
+  const gapBand = { id: 'wdsGap', beforeDatasetsDraw(ch) {
+    const xs = ch.scales.x, a = ch.chartArea; if (!xs || !a || !gapDays.length) return;
+    const bw = (a.right - a.left) / Math.max(1, days.length);
+    ch.ctx.save();
+    days.forEach((d, i) => { if (known(d)) return;
+      const x = xs.getPixelForValue(i) - bw / 2;
+      ch.ctx.fillStyle = 'rgba(240,198,116,.06)';
+      ch.ctx.fillRect(x, a.top, bw, a.bottom - a.top); });
+    ch.ctx.restore(); } };
 
   const sundayBand = { id: 'wdsSunday', beforeDatasetsDraw(ch) {
     const xs = ch.scales.x, a = ch.chartArea; if (!xs || !a) return;
@@ -2987,6 +3066,12 @@ function renderWds() {
     ctx.save(); ctx.textAlign = 'center';
     daily.forEach((v, i) => {
       if (v <= 0.01) {
+        // "no export uploaded" and "nothing moved" are different statements
+        // and used to draw as the same empty column.
+        if (!known(days[i])) { ctx.font = '700 8px -apple-system,sans-serif';
+          ctx.fillStyle = 'rgba(240,198,116,.8)';
+          ctx.fillText('NO DATA', xs.getPixelForValue(i), ys.getPixelForValue(0) - 9);
+          return; }
         if (days[i] === 1) { ctx.font = '700 8px -apple-system,sans-serif';
           ctx.fillStyle = 'rgba(126,144,173,.6)';
           ctx.fillText('DRY DAY', xs.getPixelForValue(i), ys.getPixelForValue(0) - 9); }
@@ -3179,7 +3264,7 @@ function renderWds() {
               ticks: { color: 'rgba(255,216,107,.72)', callback: v => fmt(v) },
               title: { display: true, text: 'cumulative cs', color: '#A8935C', font: { size: 10 } } } })
         } },
-      plugins: [sundayBand, avgRule, hoverGlow, barGlow, lineGlow, barTotals, topCap, endLabels]
+      plugins: [gapBand, sundayBand, avgRule, hoverGlow, barGlow, lineGlow, barTotals, topCap, endLabels]
     });
   };
   drawWds();
@@ -3196,7 +3281,7 @@ function renderWds() {
 
 function render() {
   const stockRaw = PAYLOAD.stock || [];
-  const inboundRaw = PAYLOAD.inbound || [];
+  const dispRaw = dispRows();
 
   const byDate = new Map();
   stockRaw.forEach(r => {
@@ -3282,17 +3367,12 @@ function render() {
   const _latestSet = new Set(latestRows.map(r => r.warehouse));
   const missingToday = [..._recentWh].filter(w => !_latestSet.has(w)).sort();
 
-  // Does the month's paperwork balance? Every inbound row carries the physical
-  // stock at both ends of the window it covers, so across a month
-  //     Σ(inbound − dispatched) == the movement in physical stock
-  // and on sound data it holds to the case. When it does not, one of those two
-  // columns is not the window's figure - a report carrying month-to-date
-  // totals, the same cases counted at every snapshot - and the Sales and
-  // Inbound tiles are the ones that would be wrong. Say so on the face of the
-  // page rather than presenting them.
-  const _flows = PAYLOAD.flows || {};
-  const _flowKey = (latest || '').slice(0, 7);
-  const flowBad = _flows[_flowKey] && _flows[_flowKey].ok === false ? _flows[_flowKey] : null;
+  // The flow-balance banner that used to sit here policed inbound_history's two
+  // columns. Nothing on the page reads them any more, so there is nothing left
+  // to police: the sales figures come from the invoices and the stock figures
+  // from the stock reports, and each is checked against its own raw file by
+  // tools/verify_dashboards.py. What DOES need saying is when the app is
+  // holding only part of a month - see covGap below.
 
   // Months-of-cover tier counts — feed the tier-filter chips above the league
   // table (same classification as the Dispatch Priority section below).
@@ -3355,74 +3435,36 @@ function render() {
     </tr>`;
   }).join('');
 
-  // INBOUND TILE — month-to-date.
-  // Daily inbound is noisy (invoice-date vs physical-movement timing, Sundays
-  // with 0 invoices but physical leaks, snapshot time-of-day jitter). Summing
-  // across the month-to-date window cancels the noise and shows the real
-  // factory→network flow. Window = (1st of latest-inbound-month) → latest-inbound-date.
-  const inboundDates = Array.from(new Set(inboundRaw.map(r => r.d))).sort();
-  const inboundDate  = inboundDates.length ? inboundDates[inboundDates.length-1] : null;
-  const mtdPrefix    = inboundDate ? inboundDate.slice(0, 7) : null;  // "YYYY-MM"
-  const inboundMTD   = mtdPrefix ? inboundRaw.filter(r => r.d.startsWith(mtdPrefix)) : [];
-  // Label range — first and last inbound date within the month.
-  // MTD label: in Kerala, the 1st of every month is a dry day (no liquor activity),
-  // so the first "real" activity day is the 2nd. Skip showing day 1 in the label —
-  // "May 2–18" is more accurate than "May 1–18" because nothing happens on May 1.
-  // The underlying number is the same either way (April 30 baseline equates to start
-  // of May 2 since May 1 has zero net activity).
-  const mtdDates = Array.from(new Set(inboundMTD.map(r=>r.d))).sort();
-  // ACTUAL first inbound day present (was hardcoded 2 on the dry-day assumption,
-  // which under-labelled the window since dispatch activity occurs on the 1st).
-  const mtdFirstDay = mtdDates.length ? parseInt(mtdDates[0].slice(8,10), 10) : null;
-  const mtdLastDay  = mtdDates.length ? parseInt(mtdDates[mtdDates.length-1].slice(8,10), 10) : null;
-  const monthName   = inboundDate ? new Date(inboundDate + 'T00:00:00').toLocaleString('en-US',{month:'short'}) : '';
-  const mtdLabel    = inboundDate ? (mtdFirstDay === mtdLastDay
-                                       ? `${monthName} ${mtdLastDay}`
-                                       : `${monthName} ${mtdFirstDay}–${mtdLastDay}`) : '—';
-  const inboundStale  = inboundDate && inboundDate !== latest;
-
-  // WEEKLY FLOW — inbound vs dispatched per week (Mon–Sun). Daily inbound is
-  // noisy (invoice-date vs physical-movement timing, Sundays, snapshot jitter);
-  // weekly buckets cancel the noise but keep the build/drain rhythm visible.
-  const weekStartOf = iso => {
-    const dt = new Date(iso + 'T00:00:00');
-    dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
-    return isoOf(dt);
-  };
-  const weekAgg = new Map();
-  inboundRaw.forEach(r => {
-    const wk = weekStartOf(r.d);
-    if (!weekAgg.has(wk)) weekAgg.set(wk, { in: 0, out: 0 });
-    const w = weekAgg.get(wk); w.in += (r.in || 0); w.out += (r.out || 0);
-  });
-  const lastInboundISO = inboundDate || '';
-  const weekRows = Array.from(weekAgg.keys()).sort().slice(-12).map(k => {
-    const st = new Date(k + 'T00:00:00');
-    const en = new Date(st); en.setDate(en.getDate() + 6);
-    const label = (st.getMonth() === en.getMonth())
-      ? st.getDate() + '–' + en.getDate() + ' ' + MONTHS[st.getMonth()]
-      : st.getDate() + ' ' + MONTHS[st.getMonth()] + '–' + en.getDate() + ' ' + MONTHS[en.getMonth()];
-    const a = weekAgg.get(k);
-    const partial = lastInboundISO && isoOf(en) > lastInboundISO;
-    return { k, label: label + (partial ? ' *' : ''), in: a.in, out: a.out, net: a.in - a.out, partial };
-  });
+  // THE MONTH-TO-DATE WINDOW, for every panel that carries one.
+  // It runs to the last day the dispatch uploads ANSWER FOR, not the last day
+  // something moved: a quiet 23rd somebody uploaded is still part of the month
+  // to date, and stopping the window at the 18th because the 19th to 23rd were
+  // nil would quietly shorten the month and flatter the run rate.
+  const mtdPrefix   = ddPre();
+  const dispMTD     = mtdPrefix ? dispRaw.filter(r => r.d.startsWith(mtdPrefix)) : [];
+  const mtdFirstDay = ddFirstDay(ddCur());
+  const mtdLastDay  = ddLast();
+  const monthName   = ddCur() ? MONTHS[ddCur().mi - 1] : '';
+  const mtdLabel    = ddCur() ? (mtdFirstDay === mtdLastDay
+                                  ? `${monthName} ${mtdLastDay}`
+                                  : `${monthName} ${mtdFirstDay}–${mtdLastDay}`) : '—';
 
   // Series for the network trend chart + KPI-tile sparklines (computed up
   // front so the tiles can embed sparklines in the initial HTML).
+  // `n` is how many warehouses reported that day. A short Bevco export is a
+  // hole in the network, not a crash in it: 4 May 2026 reads as a 2,539-case
+  // fall, of which 1,915 is three warehouses simply absent from the file. The
+  // header's day-on-day tile has compared matched sets since 10 Jul; the chart,
+  // which is where a trend is actually read, had no such guard and showed the
+  // cliff to anyone who clicked 90D or All.
   const trendData = dates.map(d => {
     const rs = byDate.get(d);
-    return { d, phys: sum(rs.map(r=>r.physical)),
+    return { d, n: rs.length,
+             phys: sum(rs.map(r=>r.physical)),
              allot: sum(rs.map(r=>r.allotable)),
              pend: sum(rs.map(r=>r.pending)) };
   });
-  const kWin = trendData.slice(-14);
-  const kSpark = {
-    phys:  kWin.map(r => r.phys),
-    allot: kWin.map(r => r.allot),
-    pend:  kWin.map(r => r.pend),
-    inbound: weekRows.slice(-8).map(w => w.in),
-  };
-  const salesPeriodLabel = (PAYLOAD.sales && PAYLOAD.sales.periodLabel) || '3-mo avg';
+  const trendFullN = trendData.reduce((a, r) => Math.max(a, r.n), 0);
 
   // Format the as-of date as e.g. '19 May 2026' for the header.
   const _hdrDt = new Date(latest + 'T00:00:00');
@@ -3454,66 +3496,45 @@ function render() {
     : kCover <= 3 ? { c: 'flat', t: 'Watch' }
     :               { c: 'gold', t: 'Overstocked' };
 
-  // network sales, same window one month back for a like-for-like delta
-  const kInbDates = Array.from(new Set(inboundRaw.map(r => r.d))).sort();
-  const kLastInb  = kInbDates.length ? kInbDates[kInbDates.length - 1] : null;
-  const kMtdPre   = kLastInb ? kLastInb.slice(0, 7) : null;
-  const kLastDay  = kLastInb ? parseInt(kLastInb.slice(8, 10), 10) : 0;
-  const kPriorPre = (function () {
-    if (!kMtdPre) return null;
-    const y = +kMtdPre.slice(0, 4), m = +kMtdPre.slice(5, 7);
-    return (m === 1 ? y - 1 : y) + '-' + String(m === 1 ? 12 : m - 1).padStart(2, '0');
-  })();
-  const kSalesWin = pre => {
-    // "in" = GROSS deliveries (positive inbound events only) — a −1 book
-    // adjustment must not make a 450-case truck read as 449 (22 Jul 2026,
-    // MENAMKULAM). Adjustments are carried separately and footnoted.
-    let o = 0, n = 0, adj = 0; if (!pre) return { out: 0, in: 0, adj: 0 };
-    inboundRaw.forEach(r => {
-      if (!r.d.startsWith(pre)) return;
-      if (parseInt(r.d.slice(8, 10), 10) > kLastDay) return;
-      o += (r.out || 0);
-      const iv = (r.in || 0);
-      if (iv > 0) n += iv; else adj += iv;
-    });
-    return { out: o, in: n, adj: adj };
-  };
-  const kCur = kSalesWin(kMtdPre), kPrv = kSalesWin(kPriorPre);
-  const kSalesPct = kPrv.out > 0 ? (kCur.out / kPrv.out - 1) * 100 : null;
-  // Sales tile rides the INVOICE-DATED basis when available (24 Jul 2026,
-  // Abhay: "why are there different values") — the Bevco snapshot windows
-  // sweep the prior month's last trading day into MTD (a row stamped D holds
-  // dispatches made after the D−1 morning snapshot) and label a day ahead,
-  // so the tile read 8,155 · Jul 1–24 while the Daily Sales section's exact
-  // Inv/GTN-dated sum read 7,914 · Jul 1–23. One basis now; the windowed
-  // flow stays as the fallback when dailyDispatch is absent. Net-flow and
-  // reconciliation figures elsewhere remain book-true (kCur/kPrv untouched).
-  const kPriorLbl = kPriorPre
-    ? new Date(kPriorPre + '-01T00:00:00').toLocaleString('en-US', { month: 'short' }) + ' 1–' + kLastDay
-    : 'prior';
-  const sDD = PAYLOAD.dailyDispatch;
-  const sHave = !!(sDD && sDD.cur && sDD.cur.days && Object.keys(sDD.cur.days).length);
-  const sLastDay = sHave ? Math.max.apply(null, Object.keys(sDD.cur.days).map(Number)) : kLastDay;
-  const sMtd = sHave ? Object.values(sDD.cur.days).reduce((a, b) => a + b, 0) : kCur.out;
-  // Both sides must come from the same source. Invoice-dated dispatch and the
-  // stock report's own dispatch column differ by a few percent by nature, so
-  // one over the other is not a growth rate, it is the gap between two
-  // definitions. When only one side has invoice data, there is no comparison.
-  const sSameBasis = sHave ? !!(sDD.pri && sDD.pri.days) : true;
-  const sPrv = (sHave && sDD.pri && sDD.pri.days)
-    ? Object.keys(sDD.pri.days).reduce((a, k) => a + (Number(k) <= sLastDay ? sDD.pri.days[k] : 0), 0)
-    : kPrv.out;
-  const sPct = (sSameBasis && sPrv > 0) ? (sMtd / sPrv - 1) * 100 : null;
-  const sLbl = sHave
-    ? sDD.cur.m.charAt(0) + sDD.cur.m.slice(1, 3).toLowerCase() + ' 1–' + sLastDay
-    : null;
-  const sPriorMo = (sHave && sDD.pri)
-    ? sDD.pri.m.charAt(0) + sDD.pri.m.slice(1, 3).toLowerCase()
-    : kPriorLbl.split(' ')[0];
-  const sPerDay = sHave
-    ? sMtd / Math.max(1, Object.values(sDD.cur.days).filter(v => v > 0.01).length)
-    : sMtd / Math.max(1, sLastDay - ((kCur.dry || 0) > 0 ? 1 : 0));
-  const kNet      = (kCur.in + (kCur.adj || 0)) - kCur.out;
+  // ---- NETWORK SALES, month to date --------------------------------------
+  // One basis, one source: the invoices, dated by their own Inv/GTN date. The
+  // same sum the Secondary Sales - Daily report prints, so the two cannot
+  // disagree, and the same rows every other sales panel on this page reads.
+  const sCur = ddCur(), sPri = ddPri();
+  const sHave    = !!sCur;
+  const sLastDay = ddLast();
+  const sMtd     = sHave ? Object.values(sCur.days).reduce((a, b) => a + b, 0) : 0;
+  const sPrv     = sPri
+    ? Object.keys(sPri.days).reduce((a, k) => a + (Number(k) <= sLastDay ? sPri.days[k] : 0), 0)
+    : 0;
+  // LIKE-FOR-LIKE OR NOTHING. A percentage against a month the app holds fewer
+  // days of is not a growth rate, and a director reading it as one is the
+  // exact failure this page exists to prevent. Both windows have to be whole
+  // up to the day cap before a pill is drawn; otherwise the prior figure is
+  // still shown, marked as the part month it is, with no percentage on it.
+  const sCovCur = sHave ? (sCur.covered || []).filter(d => d <= sLastDay).length : 0;
+  const sCovPri = sPri  ? (sPri.covered  || []).filter(d => d <= sLastDay).length : 0;
+  const sWhole  = sHave && sCovCur >= sLastDay && sCovPri >= sLastDay;
+  const sPct    = (sWhole && sPrv > 0) ? (sMtd / sPrv - 1) * 100 : null;
+  const sLbl    = sHave ? MONTHS[sCur.mi - 1] + ' 1–' + sLastDay : null;
+  const sPriorMo = sPri ? MONTHS[sPri.mi - 1] : 'prior';
+  // Per day over the days that TRADED, not the days on the calendar: a run
+  // rate divided by Sundays and dry days is not a run rate.
+  const sTrade  = sHave ? Object.values(sCur.days).filter(v => v > 0.01).length : 0;
+  const sPerDay = sTrade ? sMtd / sTrade : 0;
+  // Days inside the window that nobody has uploaded. The figures are right for
+  // the days the app holds; this is how many days they are missing.
+  const covGap  = sHave ? Math.max(0, sLastDay - sCovCur) : 0;
+  // ... and the case it used to be switched off for. `covGap` needs a current
+  // month to have a gap at all, so a month with no Secondary Sales export
+  // whatsoever produced no banner, no gap and three panels quietly reading 0.
+  const noDispatch = !sHave;
+  const dispMonthLbl = latest
+    ? new Date(latest.slice(0, 7) + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    : 'this month';
+  const demandThin  = !!(PAYLOAD.sales && PAYLOAD.sales.thin);
+  const demandScale = (PAYLOAD.sales && PAYLOAD.sales.scaleUp) || 0;
+  const demandLbl  = (PAYLOAD.sales && PAYLOAD.sales.periodLabel) || '';
   // shared bar: base = the portion NOT moving, delta = the move against it
   const kMoveBar = (cur, prv, goodUp) => {
     const hi = Math.max(cur, prv, 1);
@@ -3526,7 +3547,9 @@ function render() {
   };
 
   document.getElementById('content').innerHTML = `
-    ${flowBad ? `<div style="background:linear-gradient(135deg,rgba(240,198,116,.14),rgba(240,198,116,.03));border:1px solid rgba(240,198,116,.4);border-left:3px solid #E3A32B;color:#F3D08A;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.5">&#9888;&#65039; This month's inbound and dispatch columns do not balance against the stock itself &mdash; ${fmt(flowBad.in)} cs in and ${fmt(flowBad.out)} cs out is a net ${flowBad.net>=0?'+':'&minus;'}${fmt(Math.abs(flowBad.net))} cs, while physical stock moved ${flowBad.moved>=0?'+':'&minus;'}${fmt(Math.abs(flowBad.moved))} cs (a gap of ${fmt(Math.abs(flowBad.gap))} cs). The stock figures are sound; the <b>Sales</b> and <b>Inbound</b> tiles read those two columns, so treat them as unverified until the uploads for this month are rebuilt.</div>` : ''}
+    ${covGap ? `<div style="background:linear-gradient(135deg,rgba(240,198,116,.14),rgba(240,198,116,.03));border:1px solid rgba(240,198,116,.4);border-left:3px solid #E3A32B;color:#F3D08A;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.5">&#9888;&#65039; Part month &mdash; dispatch has been uploaded for <b>${sCovCur}</b> of the <b>${sLastDay}</b> days to ${monthName} ${sLastDay}, so ${covGap} day${covGap>1?'s are':' is'} missing. Every sales figure below is the true total for the days the app holds and understates the month by whatever moved on the ${covGap>1?'others':'other'}. Upload the missing Secondary Sales exports to close it.</div>` : ''}
+    ${noDispatch ? `<div style="background:linear-gradient(135deg,rgba(224,106,98,.14),rgba(224,106,98,.03));border:1px solid rgba(224,106,98,.35);border-left:3px solid #C6403A;color:#FFB4AC;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.45">&#9888;&#65039; No Secondary Sales export has been uploaded for ${dispMonthLbl}. Every sales figure on this page is built from those invoices, so there is no month-to-date sales figure to show &mdash; the sales tiles read &ldquo;not uploaded&rdquo; rather than nought, and the months-of-cover tiers are running on the demand basis named below. The stock figures are unaffected.</div>` : ''}
+    ${demandThin ? `<div style="background:linear-gradient(135deg,rgba(240,198,116,.14),rgba(240,198,116,.03));border:1px solid rgba(240,198,116,.4);border-left:3px solid #E3A32B;color:#F3D08A;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.5">&#9888;&#65039; Thin demand basis &mdash; months of cover, the Status column and the cluster health pills all divide stock by <b>${demandLbl}</b>, which is built on ${(PAYLOAD.sales||{}).daysCovered} of the ${(PAYLOAD.sales||{}).daysInWindow} days in its window and scaled up ${demandScale}% to cover the rest. Read the tiers as indicative until the back months are uploaded.</div>` : ''}
     ${missingToday.length ? `<div style="background:linear-gradient(135deg,rgba(224,106,98,.14),rgba(224,106,98,.03));border:1px solid rgba(224,106,98,.35);border-left:3px solid #C6403A;color:#FFB4AC;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.45">&#9888;&#65039; Partial Bevco export &mdash; ${missingToday.length} warehouse${missingToday.length>1?'s':''} missing from today's snapshot (${missingToday.join(', ')}). Network totals below undercount by ${missingToday.length>1?'these warehouses':'this warehouse'}; re-export the missing stock report${missingToday.length>1?'s':''} and refresh to correct.</div>` : ''}
     <div class="grid-kpi">
       <div class="kpi" style="--cc:#FFD86B">
@@ -3565,7 +3588,7 @@ function render() {
           <span class="dd flat">in-process</span></div>
       </div>
 
-      <div class="kpi" style="--cc:#E06A62">
+      <div class="kpi" style="--cc:#E06A62" title="Months of cover = physical stock ÷ monthly demand. Demand basis: ${demandLbl || 'no dispatch uploaded'}${demandScale ? ' (a +' + demandScale + '% scale-up from the days uploaded)' : ''}">
         <div class="label"><i></i>Below 1-Mo Cover</div>
         <div class="value"><span class="n">${kBelow1}</span><span class="u">/ ${kWhTotal} WH</span>
           <span class="dpill ${kBelowPct<=15?'pos':(kBelowPct<=35?'flat':'neg')}">${kBelowPct.toFixed(0)}%</span></div>
@@ -3582,77 +3605,14 @@ function render() {
           <span class="dd flat"><b>${kOver3}</b> over 3-mo</span></div>
       </div>
 
-      <div class="kpi" style="--cc:#60A5FA">
-        <div class="label"><i></i>Sales &middot; ${sLbl || mtdLabel}</div>
-        <div class="value"><span class="n">${fmt(sMtd)}</span><span class="u">cs</span>
+      <div class="kpi" style="--cc:#60A5FA"${sHave ? ` title="Invoiced dispatch, dated by Inv/GTN date, from the Secondary Sales uploads · ${sCovCur} of ${sLastDay} days uploaded · ${sTrade} day${sTrade===1?'':'s'} with dispatch"` : ''}>
+        <div class="label"><i></i>Sales &middot; ${sHave ? sLbl : 'no dispatch uploaded'}</div>
+        <div class="value"><span class="n">${sHave ? fmt(sMtd) : '—'}</span><span class="u">cs</span>
           ${sPct==null?'':`<span class="dpill ${sPct>=0?'pos':'neg'}">${sPct>=0?'▲ +':'▼ −'}${Math.abs(sPct).toFixed(1)}%</span>`}</div>
         ${kMoveBar(sMtd, sPrv, true)}
-        <div class="sub"><span>vs ${sPriorMo} &middot; <b>${fmt(Math.round(sPrv))}</b> cs</span>
-          <span class="dd flat">${fmt(Math.round(sPerDay))} cs/day</span></div>
+        <div class="sub"><span>${sPrv ? `vs ${sPriorMo} &middot; <b>${fmt(Math.round(sPrv))}</b> cs${sWhole ? '' : ' &middot; part month'}` : (sHave ? 'no prior month uploaded' : 'upload a Secondary Sales export')}</span>
+          <span class="dd flat">${sTrade ? fmt(Math.round(sPerDay)) + ' cs/day' : '—'}</span></div>
       </div>
-
-      ${(() => {
-        // INBOUND tile — truck log is the base (Abhay, 22 Jul 2026); the
-        // Bevco-derived booked figure referees from the footer.
-        const fac    = factoryLoadStats(kMtdPre, kLastDay, null);
-        const facPrv = factoryLoadStats(kPriorPre, kLastDay, null);
-        const have   = fac && fac.loads > 0;
-        const shown  = have ? fac.cs : kCur.in;
-        const prevShown = (have && facPrv && facPrv.loads > 0) ? facPrv.cs : kPrv.in;
-        const pct = prevShown > 0 ? (shown / prevShown - 1) * 100 : null;
-        // FOOTER FIT (30 Jul 2026, Abhay: "fix this tile, better it") — with a
-        // truck note on the right the left half ellipsized mid-word ("✓ book…").
-        // The reconciliation mark is now ADAPTIVE: it spells out "booked" only
-        // when the right half is the short net figure, and collapses to the bare
-        // ✓ glyph when the truck note is present. Nothing is lost — the whole
-        // story (loads, truck cases, Bevco booked, net flow) reads on hover.
-        const inTransit = !!(fac && fac.transit > 0);
-        const awaiting  = fac ? fac.awaiting : 0;
-        const isStale   = !!(fac && fac.stale > 0);
-        const tol = Math.max(25, 0.08 * Math.max(shown, kCur.in));
-        const agrees = have && Math.abs(kCur.in - fac.cs) <= tol;
-        let left;
-        if (have) {
-          const loads = '<b>' + fac.loads + '</b> load' + (fac.loads > 1 ? 's' : '');
-          left = agrees
-            ? loads + ' · <b style="color:#7BD8AA">✓' + (inTransit || awaiting ? '' : ' booked') + '</b>'
-            : loads + ' · <b style="color:#F09A93">⚠ ' + fmt(kCur.in) + '</b>';
-        } else if ((PAYLOAD.factoryLoads || []).length && kCur.in > 25) {
-          left = '<b style="color:#F09A93">⚠ no truck log</b>';
-        } else {
-          left = 'booked · <b>' + fmt(kCur.in) + '</b> cs';
-        }
-        // Right slot priority: awaiting-GRS (newest, most actionable, and the
-        // whole point of the 10 Aug change) > on the road > net flow.
-        let right;
-        if (awaiting > 0) {
-          right = '<span class="dd flat" style="color:' + (isStale ? '#F09A93' : '#F0C674') + '">'
-            + (isStale ? '⚠ ' : '⏳ ') + fmt(awaiting) + ' cs at GRS</span>';
-        } else if (inTransit) {
-          right = '<span class="dd flat">🚚 ' + fmt(fac.transit) + ' cs</span>';
-        } else {
-          right = '<span class="dd ' + (kNet >= 0 ? 'pos' : 'neg') + '">net ' + (kNet >= 0 ? '+' : '−') + fmt(Math.abs(kNet)) + '</span>';
-        }
-        // the full reconciliation story, always available even when the footer
-        // is showing its short form
-        const tipParts = [];
-        if (have) tipParts.push(fac.loads + ' load' + (fac.loads > 1 ? 's' : '')
-          + ' booked = ' + fmt(fac.cs) + ' cs (factory gate log, dated by Bevco GRS)');
-        tipParts.push('Bevco booked ' + fmt(kCur.in) + ' cs'
-          + (have ? (agrees ? ' — agrees within tolerance' : ' — MISMATCH, check the gate log') : ''));
-        if (awaiting > 0) tipParts.push(fmt(awaiting) + ' cs unloaded at the yard, not yet in GRS'
-          + (isStale ? ' — ' + fmt(fac.stale) + ' cs OVERDUE, chase the booking' : ' (normally 1–4 days)'));
-        if (inTransit) tipParts.push(fmt(fac.transit) + ' cs despatched, not yet unloaded');
-        tipParts.push('net flow ' + (kNet >= 0 ? '+' : '−') + fmt(Math.abs(kNet)) + ' cs vs dispatch');
-        return `
-      <div class="kpi" style="--cc:#2DD4BF" title="${tipParts.join(' \u00B7 ')}">
-        <div class="label"><i></i>Inbound &middot; ${mtdLabel}</div>
-        <div class="value"><span class="n">${fmt(shown)}</span><span class="u">cs</span>
-          ${pct == null ? '' : `<span class="dpill ${pct >= 0 ? 'pos' : 'neg'}">${pct >= 0 ? '▲ +' : '▼ −'}${Math.abs(pct).toFixed(1)}%</span>`}</div>
-        ${kMoveBar(shown, prevShown, true)}
-        <div class="sub"><span>${left}</span>${right}</div>
-      </div>`;
-      })()}
     </div>
     </div>
 
@@ -3677,7 +3637,7 @@ function render() {
                  four-day change and "14-Day" was three weeks. -->
             <th title="Against each warehouse's previous stock report">Δ vs prev</th>
             <th title="The last 14 stock reports">Recent trend</th>
-            <th class="col-status">Status</th>
+            <th class="col-status" title="Months of cover — physical stock ÷ monthly demand. Demand basis: ${demandLbl || 'no dispatch uploaded'}${demandScale ? ' (a +' + demandScale + '% scale-up from the days uploaded)' : ''}">Status</th>
           </tr></thead>
           <tbody>${tableHtml}</tbody>
         </table>
@@ -3754,7 +3714,7 @@ function render() {
     </div>
 
     <div class="panel svs-wrap" id="mocPanel">
-      <h2 class="moc-h2"><span>Months of Cover — Stock vs Sales Demand</span></h2>
+      <h2 class="moc-h2"><span>Months of Cover — Stock vs Sales Demand</span><span id="svsHint" class="moc-hint"></span></h2>
       <div class="moc-kpis" id="svsKpis"></div>
       <div class="moc-grid">
         <div>
@@ -3849,10 +3809,13 @@ function render() {
         return;
       }
       const r = data[i];
+      const short = trendFullN && r.n < trendFullN;
       hov.innerHTML = '<span class="rd-h live">' + fmtDateLabel(r.d) + '</span>'
         + ntSpan('Physical', '#60A5FA', fmt(r.phys))
         + ntSpan('Allotable', '#81C784', fmt(r.allot))
-        + ntSpan('Pending', '#FFB74D', fmt(r.pend));
+        + ntSpan('Pending', '#FFB74D', fmt(r.pend))
+        + (short ? '<span class="rd-s" style="--c:#E3A32B;cursor:default"><i class="dot"></i><em>Short export</em><b>'
+            + r.n + '</b><u>of ' + trendFullN + ' WH</u></span>' : '');
     }
     paintNtHov(null);
     if (netTrendChart) { netTrendChart.destroy(); netTrendChart = null; }
@@ -3912,6 +3875,22 @@ function render() {
         }
       },
       plugins: [
+        { // days the Bevco export was short: shaded, so the dip reads as a
+          // missing file rather than as stock that left the network
+          id: 'nt-short',
+          beforeDatasetsDraw(ch) {
+            if (!trendFullN) return;
+            const xs = ch.scales.x, a = ch.chartArea; if (!xs || !a) return;
+            const bw = (a.right - a.left) / Math.max(1, data.length);
+            ch.ctx.save();
+            data.forEach((r, i) => {
+              if (r.n >= trendFullN) return;
+              ch.ctx.fillStyle = 'rgba(227,163,43,.10)';
+              ch.ctx.fillRect(xs.getPixelForValue(i) - bw / 2, a.top, bw, a.bottom - a.top);
+            });
+            ch.ctx.restore();
+          }
+        },
         { // soft glow under each line (the liquidation line treatment)
           id: 'nt-glow',
           beforeDatasetDraw(chart, args) {
@@ -3976,8 +3955,6 @@ function render() {
     renderNetworkTrend(cur);
   })();
 
-  // (Removed 9 Jul 2026, Abhay) The weekly inbound-vs-dispatch flow chart was
-  // built and same-day removed. weekRows survives only for the Inbound KPI sparkline.
 
 
   // Bar chart sorted by total physical stock ASCENDING (low to high). Smallest at top, largest at bottom.
@@ -4063,7 +4040,7 @@ function render() {
     const lbl = document.getElementById('whTrendScopeLbl');
     if (lbl) {
       const cn = cluNumOf(wh);
-      const scopeTxt = wh === '__ALL__' ? 'All 28 warehouses'
+      const scopeTxt = wh === '__ALL__' ? ('All ' + latestRows.length + ' warehouses')
                      : (cn ? 'Cluster ' + cn : wh);
       lbl.innerHTML = '<b>' + scopeTxt + '</b> &middot; '
         + ((mk === '__ALLM__') ? allRangeLbl : monthLabelOf(mk));
@@ -4215,15 +4192,17 @@ function render() {
     function renderCluCards() {
       if (!cardsBox) return;
       const netP = latestRows.reduce((s, r) => s + (r.physical || 0), 0) || 1;
-      // prior month, same day-window — real pace context for dispatched MTD
-      const inbAll = PAYLOAD.inbound || [];
-      let lastD2 = null; inbAll.forEach(r => { if (!lastD2 || r.d > lastD2) lastD2 = r.d; });
-      const dayCap = lastD2 ? parseInt(lastD2.slice(8, 10), 10) : 31;
-      const priorPre2 = (function () {
-        if (!lastD2) return null;
-        const y = +lastD2.slice(0, 4), m2 = +lastD2.slice(5, 7);
-        return (m2 === 1 ? y - 1 : y) + '-' + String(m2 === 1 ? 12 : m2 - 1).padStart(2, '0');
-      })();
+      // prior month, same day-window — real pace context for sales MTD
+      const inbAll = dispRows();
+      // No current month means no day cap, not a full 31-day window: capping
+      // at 31 turned "nothing uploaded" into "a whole month of nothing".
+      const haveMtd = !!ddCur();
+      const dayCap = haveMtd ? ddLast() : 0;
+      const priorPre2 = ddPri() ? ddPrefix(ddPri()) : null;
+      // a growth figure only where the app holds both windows whole
+      const cluWhole = (ddCur() && ddPri()
+        && (ddCur().covered || []).filter(d => d <= dayCap).length >= dayCap
+        && (ddPri().covered || []).filter(d => d <= dayCap).length >= dayCap);
       cardsBox.innerHTML = [1, 2, 3].map(cl => {
         const rows = latestRows.filter(r => (WH_CLUSTER[r.warehouse] || 0) === cl);
         if (!rows.length) return '';
@@ -4237,17 +4216,10 @@ function render() {
           const t = shortCoverTier(r.physical, sv ? (sv.avg || 0) : 0).tier;
           if (t === 'critical') crit++; if (t === 'overstock') over++;
         });
-        const inC = {}, outC = {}, adjC = {};
-        inboundMTD.forEach(r => { if ((WH_CLUSTER[r.w] || 0) !== cl) return;
-          const iv = (r.in || 0);
-          if (iv > 0) inC[r.w] = (inC[r.w] || 0) + iv;
-          else if (iv < 0) adjC[r.w] = (adjC[r.w] || 0) + iv;
+        const outC = {};
+        dispMTD.forEach(r => { if ((WH_CLUSTER[r.w] || 0) !== cl) return;
           outC[r.w] = (outC[r.w] || 0) + (r.out || 0); });
-        const inMtd = Object.values(inC).reduce((s, v) => s + v, 0);
         const outMtd = Object.values(outC).reduce((s, v) => s + v, 0);
-        const adjMtd = Object.values(adjC).reduce((s, v) => s + v, 0);
-        const drainers = rows.filter(r =>
-          ((inC[r.warehouse] || 0) + (adjC[r.warehouse] || 0) - (outC[r.warehouse] || 0)) < 0).length;
         const share = p / netP * 100;
         const T = shortTier(cov);
         const onCls = cluSel === cl ? ' on' : (cluSel ? ' dim' : '');
@@ -4273,13 +4245,7 @@ function render() {
               if ((WH_CLUSTER[r.w] || 0) !== cl) return;
               prevOut += (r.out || 0);
             });
-            const outG = prevOut > 0 ? (outMtd / prevOut - 1) * 100 : null;
-            const net = (inMtd + adjMtd) - outMtd;
-            let worstW = null, worstN = 0;
-            rows.forEach(r => {
-              const n2 = (inC[r.warehouse] || 0) + (adjC[r.warehouse] || 0) - (outC[r.warehouse] || 0);
-              if (n2 < worstN) { worstN = n2; worstW = r.warehouse; }
-            });
+            const outG = (cluWhole && prevOut > 0) ? (outMtd / prevOut - 1) * 100 : null;
             return '<div class="cl-stats">'
               + '<div class="st"><b>' + fmt(a)
                 + (allotPct == null ? '' : '<u>' + allotPct + '%</u>') + '</b><span>allotable cs</span></div>'
@@ -4287,39 +4253,22 @@ function render() {
                 + '<u>of ' + rows.length + ' WH</u></b><span>below 1-mo</span></div>'
               + (function () {
                   // TOP SELLER (22 Jul 2026, Abhay's pick) — the cluster's best
-                  // warehouse by sales MTD; the positive counterpart to the
-                  // worst-drainer tile.
+                  // warehouse by sales MTD.
                   let topW = null, topN = 0;
                   rows.forEach(r => {
                     const o = outC[r.warehouse] || 0;
                     if (o > topN) { topN = o; topW = r.warehouse; }
                   });
                   return '<div class="st"><b class="up">' + (topW ? fmt(topN) : '\u2014')
-                    + (topW ? '<u>cs MTD</u>' : '') + '</b><span>top seller</span>'
+                    + (topW ? '<u>cs MTD</u>' : (haveMtd ? '' : '<u>not uploaded</u>')) + '</b><span>top seller</span>'
                     + (topW ? '<em class="x">' + topW + '</em>' : '')
                     + '</div>';
                 })()
-              + '<div class="st"><b>' + fmt(outMtd)
-                + (outG == null ? '' : '<u class="' + (outG >= 0 ? 'pos' : 'neg') + '">'
+              + '<div class="st"><b>' + (haveMtd ? fmt(outMtd) : '\u2014')
+                + (!haveMtd ? '<u>not uploaded</u>'
+                   : outG == null ? '' : '<u class="' + (outG >= 0 ? 'pos' : 'neg') + '">'
                     + (outG >= 0 ? '\u25B2 +' : '\u25BC \u2212') + Math.abs(outG).toFixed(0) + '%</u>')
                 + '</b><span>sales MTD</span></div>'
-              + (function () {
-                  const fac = factoryLoadStats(lastD2 ? lastD2.slice(0, 7) : null, dayCap,
-                    w => (WH_CLUSTER[w] || 0) === cl);
-                  const have = fac && fac.loads > 0;
-                  const shown = have ? fac.cs : inMtd;
-                  let warn = '';
-                  if (have) {
-                    if (Math.abs(inMtd - fac.cs) > Math.max(25, 0.08 * Math.max(fac.cs, inMtd))) warn = ' \u26A0';
-                  } else if ((PAYLOAD.factoryLoads || []).length && inMtd > 25) { warn = ' \u26A0'; }
-                  return '<div class="st"><b class="' + (shown >= outMtd ? 'up' : 'dn') + '">' + fmt(shown)
-                    + '<u class="' + (net >= 0 ? 'pos' : 'neg') + '">net ' + (net >= 0 ? '+' : '\u2212')
-                    + fmt(Math.abs(net)) + warn + '</u></b><span>inbound MTD</span></div>';
-                })()
-              + '<div class="st"><b' + (drainers > rows.length / 2 ? ' class="dn"' : '') + '>'
-                + drainers + '<u>of ' + rows.length + ' WH</u></b><span>draining</span>'
-                + (worstW ? '<em class="x dn2">' + worstW + ' ' + fmt(worstN) + '</em>' : '')
-                + '</div>'
               + '</div>';
           })()
           + '</div>';
@@ -4420,6 +4369,7 @@ fetch('/api/dashboard/warehouse', {credentials: 'same-origin'})
     if (data && data.error) throw new Error(data.error);
     if (!data || !(data.stock || []).length) throw new Error('No stock history yet.');
     PAYLOAD = data;
+    if (data.clusters && Object.keys(data.clusters).length) WH_CLUSTER = data.clusters;
     render();
     settleLayout();
   })
