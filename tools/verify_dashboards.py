@@ -132,6 +132,11 @@ def invoice_cases(root: Path, month: str, month_no: int, codes: set) -> tuple:
     from openpyxl import load_workbook
     folder = root / "Secondary sales"
     total, last = 0.0, 0
+    # Whole cases are the whole story today. If an invoice ever carries loose
+    # bottles they are NOT counted - the KSBC leg folds bottles in at the case
+    # rate and this one does not - so the check below says so rather than
+    # letting the difference ride.
+    loose = [0.0]
     for f in sorted(folder.glob("*.xlsx")):
         m = _SEC.match(f.name)
         if not m or m.group(1).upper() != month:
@@ -159,9 +164,11 @@ def invoice_cases(root: Path, month: str, month_no: int, codes: set) -> tuple:
                 if day is None or (mon and mon != month_no):
                     continue
                 total += num(r[12])
+                loose[0] += num(r[13]) if len(r) > 13 else 0.0
                 last = max(last, day)
         finally:
             wb.close()
+    invoice_cases.loose = loose[0]
     return total, last
 
 
@@ -254,6 +261,9 @@ def liquidation(root: Path) -> None:
               note="period-true, bottles folded at BPC")
         check(f"{key.title()}: CFD + BAR invoice",
               p["byType"].get("CFD", 0) + p["byType"].get("BAR", 0), inv, tol=1.0)
+        check(f"{key.title()}: no loose bottles going uncounted",
+              getattr(invoice_cases, "loose", 0), 0, tol=0.5,
+              note="invoices are whole cases; bottles would be dropped")
         check(f"{key.title()}: total liquidation", p["grand"], ks + inv, tol=2.0)
 
         covered = max(ks_last, inv_last)
