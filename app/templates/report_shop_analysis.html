@@ -78,7 +78,7 @@
      column passes beneath it rather than printing its digits down the middle. */
   thead th + th { border-left:1px solid rgba(255,255,255,.12); }
   thead tr:first-child th:first-child { box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
-  tbody td { padding:0 6px; height:36px; text-align:center; white-space:nowrap;
+  tbody td { padding:0 6px; height:var(--rowh, 36px); text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line);
              border-left:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;

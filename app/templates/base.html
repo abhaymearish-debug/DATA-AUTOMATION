@@ -950,6 +950,37 @@ function tog(btn) {
    The CSS figures remain as the answer before this runs, so nothing flashes
    full height on the way. */
 (function(){
+  /* A report that is four rows too tall for the window is not a report you
+     scroll, it is a report whose rows are four pixels too deep. The row
+     height is squeezed to make the whole table fit - never past ROW_MIN,
+     where the figures stop being comfortable to read, and never beyond the
+     height the report asked for in its own stylesheet. A table that already
+     fits is left exactly as it is.
+
+     The report's side of this is one declaration: height:var(--rowh, 34px)
+     on its body cells. The 34 is still what it looks like with scripting
+     off, or on a window too small to help. */
+  const ROW_MIN = 26;
+  function rows(wrap, room){
+    const table = wrap.querySelector('table');
+    const body = table && table.tBodies[0];
+    if (!body || !body.rows.length) return;
+    // The height this report chose for itself, read once, before anything
+    // here has had a chance to change it.
+    if (!wrap.dataset.rowh) {
+      const h = body.rows[0].getBoundingClientRect().height;
+      if (!h) return;
+      wrap.dataset.rowh = Math.round(h);
+    }
+    const asked = Number(wrap.dataset.rowh);
+    const head = table.tHead ? table.tHead.getBoundingClientRect().height : 0;
+    const foot = table.tFoot ? table.tFoot.getBoundingClientRect().height : 0;
+    const per = Math.floor((room - head - foot - 7) / body.rows.length);
+    const use = Math.max(ROW_MIN, Math.min(asked, per));
+    const now = parseFloat(wrap.style.getPropertyValue('--rowh')) || asked;
+    if (Math.abs(use - now) >= 1) wrap.style.setProperty('--rowh', use + 'px');
+  }
+
   function fit(){
     // A report with a two-row header pins the second row under the first, and
     // how tall the first row is depends on its own labels - one line on a wide
@@ -989,8 +1020,12 @@ function tog(btn) {
       // two answers several times a second - the columns visibly shiver. A
       // few pixels either way is noise, not a resize, so leave it alone.
       const held = parseFloat(wrap.style.maxHeight) || 0;
-      if (Math.abs(room - held) < 8) return;
+      if (Math.abs(room - held) < 8) {
+        rows(wrap, room);
+        return;
+      }
       wrap.style.maxHeight = Math.round(room) + 'px';
+      rows(wrap, room);
     });
   }
   let timer = null;

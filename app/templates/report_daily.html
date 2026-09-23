@@ -56,7 +56,7 @@
   /* Ruled both ways, the way the other reports read, and the name column
      casts an edge so a half-scrolled day passes under it rather than
      printing its digits down the middle. */
-  tbody td { padding:0 8px; height:34px; text-align:center; white-space:nowrap;
+  tbody td { padding:0 8px; height:var(--rowh, 34px); text-align:center; white-space:nowrap;
              font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line);
              border-left:1px solid var(--line); }
   tbody td:first-child { position:sticky; left:0; z-index:2; text-align:left;
