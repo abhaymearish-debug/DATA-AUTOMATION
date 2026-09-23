@@ -3126,6 +3126,46 @@ def _ii_day_sale(period: str, prior: str) -> dict:
 # already makes: one thing to deploy, and it is never out of date.
 
 
+def _flow_integrity(rows: list) -> dict:
+    """Per month: what the flow columns claim, against what the stock did.
+
+    Warehouse by warehouse, because the set reporting on the first day of a
+    month is not always the set reporting on the last, and an edge summed over
+    two different sets is not an edge.
+    """
+    per: dict = {}
+    for r in rows:
+        day = _parse_date(r.get("date") or r.get("Date"))
+        wh = str(r.get("warehouse") or "").strip().upper()
+        if not day or not wh:
+            continue
+        m = per.setdefault(day.isoformat()[:7], {})
+        w = m.setdefault(wh, {"in": 0.0, "out": 0.0,
+                              "first": None, "start": 0.0, "last": None, "end": 0.0})
+        w["in"] += _num(r.get("inbound_cases"))
+        w["out"] += _num(r.get("dispatched_cases"))
+        iso = day.isoformat()
+        if w["first"] is None or iso < w["first"]:
+            w["first"], w["start"] = iso, _num(r.get("phys_start"))
+        if w["last"] is None or iso > w["last"]:
+            w["last"], w["end"] = iso, _num(r.get("phys_end"))
+
+    out = {}
+    for key, whs in per.items():
+        tin = sum(w["in"] for w in whs.values())
+        tout = sum(w["out"] for w in whs.values())
+        moved = sum(w["end"] - w["start"] for w in whs.values())
+        net = tin - tout
+        gap = net - moved
+        # a case or two per warehouse is rounding; anything that scales with
+        # the month is a column meaning something other than this window
+        tol = max(2.0 * len(whs), abs(tout) * 0.02)
+        out[key] = {"in": round(tin), "out": round(tout), "net": round(net),
+                    "moved": round(moved), "gap": round(gap),
+                    "ok": abs(gap) <= tol, "warehouses": len(whs)}
+    return out
+
+
 def _history_csv(name: str) -> Path:
     return config.CLAUDE_ROOT / "Warehouse stock" / "_history" / name
 
@@ -3163,6 +3203,7 @@ def warehouse_dashboard() -> dict:
             pass
 
     inbound: list[dict] = []
+    inbound_raw: list[dict] = []
     path = _history_csv("inbound_history.csv")
     if path.is_file():
         try:
@@ -3172,6 +3213,7 @@ def warehouse_dashboard() -> dict:
                     wh = canon_warehouse(str(row.get("warehouse") or "").strip())
                     if not day or not wh:
                         continue
+                    inbound_raw.append(row)
                     inbound.append({"d": day.isoformat(), "w": wh,
                                     "in": round(_num(row.get("inbound_cases"))),
                                     "out": round(_num(row.get("dispatched_cases")))})
@@ -3180,10 +3222,24 @@ def warehouse_dashboard() -> dict:
 
     stock.sort(key=lambda r: (r["d"], r["w"]))
     inbound.sort(key=lambda r: (r["d"], r["w"]))
+
+    # A self-check the data itself provides. Every inbound row carries the
+    # physical stock at both ends of the window it covers, so across a month
+    # the flows and the movement have to agree:
+    #
+    #     Σ(inbound − dispatched)  ==  phys_end(last row) − phys_start(first)
+    #
+    # It holds to the case on sound data. When it does not, one of the two
+    # columns is not what the dashboard thinks it is - a report that carries
+    # month-to-date figures instead of the window's, say - and the sales and
+    # inbound tiles would be adding the same cases several times over. The
+    # page is told, so it can say so instead of showing them.
+    flows = _flow_integrity(inbound_raw)
     as_of = stock[-1]["d"] if stock else ""
     out = {"stock": stock, "inbound": inbound, "asOf": as_of,
            "days": sorted({r["d"] for r in stock}),
            "warehouses": sorted({r["w"] for r in stock})}
+    out["flows"] = flows
     out["sales"] = _warehouse_demand(inbound, as_of)
     out.update(_warehouse_mix(as_of))
     out["dailyDispatch"] = _daily_dispatch(as_of)

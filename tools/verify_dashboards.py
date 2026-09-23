@@ -207,6 +207,45 @@ def warehouse(root: Path) -> None:
                   sum(num(r["physical"]) for r in rows), tol=len(rows),
                   note="two files, same total")
 
+    # The flow columns have to account for the stock itself: warehouse by
+    # warehouse, everything that came in less everything that went out is the
+    # movement in physical stock. Exact on sound data; a gap means one of those
+    # columns is not the window's figure, and the sales and inbound tiles are
+    # reading it.
+    per: dict = defaultdict(lambda: defaultdict(
+        lambda: {"in": 0.0, "out": 0.0, "first": None, "start": 0.0, "last": None, "end": 0.0}))
+    for r in inbound:
+        mon = r["date"][:7]
+        w = per[mon][r["warehouse"].strip().upper()]
+        w["in"] += num(r["inbound_cases"])
+        w["out"] += num(r["dispatched_cases"])
+        if w["first"] is None or r["date"] < w["first"]:
+            w["first"], w["start"] = r["date"], num(r["phys_start"])
+        if w["last"] is None or r["date"] > w["last"]:
+            w["last"], w["end"] = r["date"], num(r["phys_end"])
+    for mon in sorted(per)[-4:]:
+        whs = per[mon]
+        net = sum(w["in"] - w["out"] for w in whs.values())
+        moved = sum(w["end"] - w["start"] for w in whs.values())
+        check(f"{mon}: flows account for the stock movement", net, moved,
+              tol=max(2.0 * len(whs), 1.0),
+              note=f"{sum(w['in'] for w in whs.values()):,.0f} in, "
+                   f"{sum(w['out'] for w in whs.values()):,.0f} out")
+
+    # the same row twice under two spellings of one warehouse doubles a month
+    seen = defaultdict(set)
+    clashes = []
+    for r in inbound:
+        canon = re.sub(r"[^A-Z]", "", r["warehouse"].upper())
+        key = (r["date"], canon)
+        if r["warehouse"] in seen[key]:
+            continue
+        seen[key].add(r["warehouse"])
+        if len(seen[key]) > 1:
+            clashes.append(f"{r['date']} {sorted(seen[key])}")
+    check("one row per warehouse per day", len(clashes), 0,
+          note=("; ".join(clashes[:3])) if clashes else "no repeated days")
+
     # monthly dispatch, and the average behind every months-of-cover figure
     sales = data["sales"]
     months = {m: defaultdict(float) for m in sales["monthsUsed"]}
