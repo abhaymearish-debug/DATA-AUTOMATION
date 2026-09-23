@@ -22,8 +22,13 @@
 {% endblock %}
 
 {% block content %}
+<!-- aria-label, not title: a title on an iframe is read out by screen
+     readers AND drawn by the browser as a tooltip that follows the
+     pointer around the dashboard, parking "Liquidation Dashboard" on top of
+     whatever you were reading. aria-label does the first without the
+     second. -->
 <iframe class="frame" id="dashFrame" src="/dashboard/liquidation/view"
-        title="Liquidation Dashboard" loading="eager"></iframe>
+        aria-label="Liquidation Dashboard" loading="eager"></iframe>
 {% endblock %}
 
 {% block scripts %}

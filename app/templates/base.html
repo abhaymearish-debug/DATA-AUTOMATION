@@ -122,13 +122,22 @@
                    background:linear-gradient(90deg, transparent,
                               rgba(255,189,48,.34) 18%, rgba(255,189,48,.34) 82%, transparent); }
   .sb-top .mark { flex:none; display:grid; place-items:center; }
-  /* One tight dark shadow, and nothing else. The gold bloom that used to sit
-     under this spread the mark's own colour back over its edges, which is a
-     halo when you want an edge. */
-  .sb-top .mark img { width:44px; height:44px; display:block;
-                      filter:drop-shadow(0 2px 6px rgba(0,0,0,.55)); }
-  .sb-top .n { font-size:16.5px; font-weight:750; color:#fff; letter-spacing:-.3px;
+  /* The dashboards' own lockup, brought back to the sidebar it shares a screen
+     with: the shield lit from behind, the name in the same heavy tracked caps,
+     and the app's line under it in gold. The glow is tighter than the
+     dashboard's 10px because the mark here is 46px rather than 58 - at this
+     size a wider bloom stops reading as light and starts reading as a halo. */
+  .sb-top .mark img { width:46px; height:46px; display:block;
+                      filter:drop-shadow(0 0 8px rgba(255,215,0,.30))
+                             drop-shadow(0 1px 2px rgba(0,0,0,.55)); }
+  .sb-top .n { font-size:12.4px; font-weight:800; color:#fff; letter-spacing:.075em;
+               text-transform:uppercase; white-space:nowrap;
                line-height:1.1; text-shadow:0 1px 3px rgba(0,0,0,.35); }
+  /* The dashboard's tag is tracked at .30em, which is right for 10.5px across
+     a whole header. Here the line has 130px to live in, and tracking is the
+     first thing to give: at .085em it still reads as a tag and it fits. */
+  .sb-top .ident { margin-top:4px; font-size:7.2px; font-weight:700; color:#FFD700;
+                 text-transform:uppercase; letter-spacing:.085em; white-space:nowrap; }
 
   /* A section label, not something you can click. */
   .sb .sect { padding:17px 11px 7px; font-size:9px; font-weight:800;
@@ -816,6 +825,7 @@
     <span class="mark"><img src="/static/ksd-logo.png" alt="K.S. Distillery"></span>
     <div>
       <div class="n">K.S. Distillery</div>
+      <div class="ident">Report Transformer</div>
     </div>
   </div>
   <nav>
