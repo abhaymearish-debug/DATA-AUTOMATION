@@ -2526,25 +2526,47 @@ def _liq_source(start: date, end: date, p_start, p_end) -> dict:
         plan = plan_window(a, b)
         return src_windows(plan.get("chain", []))
 
+    # THE PANEL IS GROUPED THE WAY THE CONTROLS ARE.
+    # This report reads four sets of files: two streams, twice over. Listing
+    # them as three legs - shop, dispatch, and everything the comparison read
+    # in one heap - meant the two halves of the comparison were shaped
+    # differently, and which window a file answered for had to be worked out
+    # from the dates on it. The panel now opens with Period and Against, the
+    # same two words as the controls above the table, and under each one the
+    # same two streams in the same order (Abhay, 23 Sep 2026: "structure it by
+    # month, as in period and against below it").
     now = shop(start, end)
     hole = src_gap(start, end, src_chain_days(plan_window(start, end).get("chain", [])))
     legs = [src_leg("Shop sales (KSBC)",
-                    (now + ([hole] if hole else [])) or [src_missing(start, end)],
-                    f"{period_for(start, end)['short']}")]
+                    (now + ([hole] if hole else [])) or [src_missing(start, end)])]
     sec_leg = src_secondary(sec, start, end)
     gap = src_gap(start, end, secondary_covered_days())
     if gap and sec_leg.get("items"):
         sec_leg["items"].append(gap)
+    if not sec_leg.get("items"):
+        sec_leg = src_leg(STREAM["secondary"], [src_missing(start, end)])
     legs.append(sec_leg)
-    # The comparison side reads the same two streams as this side does, so it
-    # is named the same way - one leg holding both, each row wearing its own
-    # card. It used to name only the shop files, which meant a month whose
-    # dispatch raws were never uploaded compared silently against nothing.
+    for leg in legs:
+        leg["group"] = "Period"
+        leg["groupNote"] = period_for(start, end)["short"]
+
+    # The comparison side reads the same two streams in the same order, so it
+    # is built the same way rather than as one heap. It used to name only the
+    # shop files, which meant a month whose dispatch raws were never uploaded
+    # compared silently against nothing.
     if p_start:
-        was = shop(p_start, p_end) or [src_missing(p_start, p_end)]
-        was += src_secondary(sec, p_start, p_end).get("items", [])
-        legs.append(src_leg("Compared against", was,
-                            period_for(p_start, p_end)["short"], "green"))
+        prev = [src_leg("Shop sales (KSBC)",
+                        shop(p_start, p_end) or [src_missing(p_start, p_end)],
+                        "", "green")]
+        prev_sec = src_secondary(sec, p_start, p_end)
+        if not prev_sec.get("items"):
+            prev_sec = src_leg(STREAM["secondary"], [src_missing(p_start, p_end)])
+        prev_sec["tone"] = "green"
+        prev.append(prev_sec)
+        for leg in prev:
+            leg["group"] = "Against"
+            leg["groupNote"] = period_for(p_start, p_end)["short"]
+        legs += prev
     return src_block(legs)
 
 

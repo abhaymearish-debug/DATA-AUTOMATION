@@ -3,6 +3,7 @@
 {% block heading %}Secondary Sales - Analysis{% endblock %}
 
 {% block head %}
+{% include '_calendar.html' %}
 <style>
   .controls { position:sticky; top:0; z-index:30; background:var(--bg);
               padding:2px 0 12px; margin:-4px 0 0; }
@@ -117,15 +118,25 @@
 <div class="controls">
   <div class="bar1">
     <div class="fbar">
-      <label class="fitem">
+      <!-- A pull is a window that runs to a day - "1 to 22 September" - so it
+           is known by the day it runs to, and the calendar picks that day. The
+           list these two used to be was thirty-odd windows deep and every one
+           of them began "1-", which made the only part that differed the last
+           thing you read. Days no pull ends on are dimmed and inert, so the
+           calendar only offers what has actually been uploaded. -->
+      <div class="fitem calhost" id="calWrap" style="position:relative">
         <span class="fi-k">Period</span>
-        <div class="selw"><select id="fPeriod" onchange="load()"></select><i>&#9662;</i></div>
-      </label>
+        <button type="button" class="fi-v" onclick="openCur(event)">
+          <span id="calLabel">Pick a pull</span><i>&#9662;</i></button>
+        <div class="calpop" id="calPop"></div>
+      </div>
       <span class="fdiv"></span>
-      <label class="fitem">
+      <div class="fitem calhost" id="calWrap2" style="position:relative">
         <span class="fi-k">Against</span>
-        <div class="selw"><select id="fPrior" onchange="load()"></select><i>&#9662;</i></div>
-      </label>
+        <button type="button" class="fi-v" onclick="openPrev(event)">
+          <span id="calLabel2">Nothing</span><i>&#9662;</i></button>
+        <div class="calpop" id="calPop2"></div>
+      </div>
       <span class="fdiv"></span>
       <label class="fitem">
         <span class="fi-k">Cluster</span>
@@ -137,6 +148,7 @@
         </select><i>&#9662;</i></div>
       </label>
     </div>
+    <button type="button" class="link" id="priorClear" hidden onclick="clearPrior()">Clear comparison</button>
     <label class="chk"><input type="checkbox" id="round" checked onchange="load()"><span class="sw"></span><span class="t">Round off</span></label>
     <div class="sp">
       <a class="act xl" id="xl" href="#">Download Excel</a>
@@ -184,10 +196,87 @@ const esc = t => String(t ?? '').replace(/[&<>"]/g, c =>
 const num = n => (n === null || n === undefined)
   ? '<span class="nil">&ndash;</span>' : ksdCases(n, round.checked);
 
+// Which stored pull each control is on. Keys, not dates: the day is only how
+// the pull is picked.
+let PERIOD_KEY = '', PRIOR_KEY = '', PULLS = [];
+
+const pullOf = key => PULLS.find(p => p.key === key) || null;
+const pullOnDay = day => PULLS.find(p => p.end === day) || null;
+
+// Paint both buttons and hand the calendar the days it may offer. The
+// "Against" control may not offer the day the period is already on, because a
+// pull compared with itself is a column of noughts.
+function paintPickers(){
+  const cur = pullOf(PERIOD_KEY), pri = pullOf(PRIOR_KEY);
+  document.getElementById('calLabel').textContent = cur ? cur.label : 'Pick a pull';
+  document.getElementById('calLabel2').textContent = pri ? pri.label : 'Nothing';
+  const clear = document.getElementById('priorClear');
+  if (clear) clear.hidden = !PRIOR_KEY;
+}
+
+function openPull(ev, which){
+  const isCur = which === 'cur';
+  const chosen = isCur ? PERIOD_KEY : PRIOR_KEY;
+  const on = pullOf(chosen);
+  // Every day a pull ends on, less the one the other control is holding.
+  const only = PULLS
+    .filter(p => isCur || p.key !== PERIOD_KEY)
+    .map(p => p.end);
+  // The days a pull COVERS get the marker under them, so the month reads as
+  // the range it is and not as a scatter of end dates.
+  const covered = new Set();
+  PULLS.forEach(p => {
+    let d = new Date(p.start + 'T00:00:00');
+    const end = new Date(p.end + 'T00:00:00');
+    while (d <= end){ covered.add(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
+  });
+  // With nothing chosen, the comparison opens on the month before the period
+  // rather than on the period's own - which is where the answer nearly always
+  // is, and saves a click back every single time.
+  let start = on ? on.end : '';
+  if (!start){
+    const cur = pullOf(PERIOD_KEY);
+    if (!isCur && cur){
+      const want = cur.end.slice(0, 7);
+      const before = PULLS.filter(p => p.end.slice(0, 7) < want);
+      start = (before[0] || PULLS.find(p => p.key !== PERIOD_KEY) || {}).end || '';
+    } else {
+      start = (only[0] || '');
+    }
+  }
+  Cal.init(start, start,
+    (day) => {
+      const got = pullOnDay(day);
+      if (!got) return;
+      if (isCur){
+        PERIOD_KEY = got.key;
+        if (PRIOR_KEY === got.key) PRIOR_KEY = '';
+      } else {
+        PRIOR_KEY = got.key;
+      }
+      paintPickers();
+      load();
+    },
+    {single: true, only: only,
+     popId: isCur ? 'calPop' : 'calPop2',
+     labelId: isCur ? 'calLabel' : 'calLabel2'});
+  Cal.setData([...covered], []);
+  Cal.open(ev);
+  // Cal writes the day it is holding onto the button; the button's job here is
+  // to name the PULL - "1-31 August 2026", not "31 Aug 2026" - so it is put
+  // back straight after. Picking a day calls paintPickers() again for the same
+  // reason.
+  paintPickers();
+}
+
+function openCur(ev){ openPull(ev, 'cur'); }
+function openPrev(ev){ openPull(ev, 'prev'); }
+function clearPrior(){ PRIOR_KEY = ''; paintPickers(); load(); }
+
 function params(){
   const p = new URLSearchParams();
-  if (fPeriod.value) p.set('period', fPeriod.value);
-  if (fPrior.value)  p.set('prior', fPrior.value);
+  if (PERIOD_KEY) p.set('period', PERIOD_KEY);
+  if (PRIOR_KEY)  p.set('prior', PRIOR_KEY);
   if (+fCluster.value) p.set('cluster', fCluster.value);
   p.set('round_off', round.checked ? '1' : '0');
   return p;
@@ -226,11 +315,10 @@ async function load(){
   }
   DATA = d;
 
-  fPeriod.innerHTML = d.periods.map(p =>
-    `<option value="${p.key}"${p.key === d.period ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
-  fPrior.innerHTML = `<option value="">Nothing</option>` + d.periods
-    .filter(p => p.key !== d.period)
-    .map(p => `<option value="${p.key}"${p.key === d.prior ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
+  PULLS = d.periods || [];
+  PERIOD_KEY = d.period || '';
+  PRIOR_KEY = d.prior || '';
+  paintPickers();
 
   const notes = [];
   if (!d.prior)

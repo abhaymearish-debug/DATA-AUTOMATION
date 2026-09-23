@@ -32,6 +32,13 @@
                     color:var(--ink); padding:0; }
   .cal-g button.d:hover { background:var(--hover); }
   .cal-g button.d.out { color:var(--zero); }
+  /* A day nothing can be picked on. Some pages are not choosing a date at all
+     but choosing one of the pulls that have been stored, and a pull is known
+     by the day it runs to - so every other day in the month is a day there is
+     no answer for. Dimmed and inert rather than hidden, because the month
+     still has to read as a month. */
+  .cal-g button.d.off { opacity:.25; cursor:default; }
+  .cal-g button.d.off:hover { background:none; }
   /* a dot means an upload stands behind that day */
   .cal-g button.d.has::after { content:''; position:absolute; left:50%; bottom:3px;
                                transform:translateX(-50%); width:4px; height:4px;
@@ -95,6 +102,7 @@ const Cal = {
      sense: an upload covers one day, not a range. */
   init(from, to, onApply, opts){
     this.single = !!(opts && opts.single);
+    this.only = (opts && opts.only && opts.only.length) ? new Set(opts.only) : null;
     this.popId = (opts && opts.popId) || 'calPop';
     this.labelId = (opts && opts.labelId) || 'calLabel';
     this.from = from || ''; this.to = to || '';
@@ -109,6 +117,13 @@ const Cal = {
      of shortcuts for them, so it takes the argument and ignores it. */
   setData(days, _periods){
     this.days = new Set(days || []);
+    this.draw();
+  },
+
+  /* The only days that can be picked, where a page has such a list. Passing
+     nothing puts the calendar back to any day at all. */
+  setOnly(days){
+    this.only = (days && days.length) ? new Set(days) : null;
     this.draw();
   },
 
@@ -145,6 +160,7 @@ const Cal = {
   },
 
   hit(d){
+    if (this.only && !this.only.has(d)) return;
     if (this.single){ this.from = this.to = d; this.pick = null; this.apply(); return; }
     if (!this.pick){ this.pick = d; this.hover = d; this.paint(); return; }
     // The second click completes the range, so it applies there and then.
@@ -224,6 +240,7 @@ const Cal = {
       const cls = [
         'd',
         this.days.has(key) ? 'has' : '',
+        (this.only && !this.only.has(key)) ? 'off' : '',
         key > today ? 'out' : '',
         (key === lo || key === hi) ? 'edge' : '',
         (lo && hi && key > lo && key < hi) ? 'in' : '',

@@ -553,6 +553,31 @@
   .srcline.rt .srcpop { left:auto; right:0; }
   .srcpop .body { padding:6px 18px 15px; }
 
+  /* ---------- the window a set of legs answered for ----------
+     Two words, the same two on the controls above the table: Period, and
+     Against. Everything under one of them was read for that window. It sits
+     above the leg labels and reads louder than they do, because it is the
+     first question - which window is this file answering? - and the card it
+     came off is the second. */
+  .srcgrp { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
+            margin:16px -18px 2px; padding:9px 18px 8px;
+            border-top:1px solid var(--line);
+            background:color-mix(in srgb, var(--hover) 60%, transparent); }
+  .srcpop .body > .srcgrp:first-child { margin-top:-6px; border-top:0;
+            border-radius:17px 17px 0 0; }
+  .srcgrp b { font-size:10px; font-weight:800; letter-spacing:1.2px;
+              text-transform:uppercase; color:var(--ink); }
+  .srcgrp .gw { font-size:11px; font-weight:650; color:var(--muted);
+                letter-spacing:0; text-transform:none; }
+  .srcgrp .ct { margin-left:auto; font-size:9.5px; font-weight:700;
+                color:var(--muted); letter-spacing:.2px; }
+  /* Inside a group the legs are the streams, so they indent under it and drop
+     the rule that separated them when they were the top level. */
+  .srcleg.ing { margin-top:8px; padding-top:0; border-top:0; padding-left:11px; }
+  .srcleg.ing .leg { margin-left:-11px; padding-left:29px; top:0; }
+  .srcpop .body > .srcleg.ing:first-of-type > .leg { border-radius:0;
+            margin-top:0; padding-top:11px; }
+
   /* ---------- one leg: a label, then its rail ---------- */
   .srcleg { --tone:var(--blue); margin-top:14px; padding-top:13px;
              border-top:1px solid color-mix(in srgb, var(--line) 70%, transparent); }
@@ -1217,6 +1242,16 @@ window.ksdSource = function (block, host) {
                'daily snapshot': 'snapshot'};
   const TONE = {gold: 'g', green: 's'};
 
+  // A report that reads the same streams for two windows says which window
+  // each set answered for, once, above them - rather than leaving it to be
+  // worked out from the dates on the files. A leg carries `group` when its
+  // report wants that; reports that do not set it are grouped no differently
+  // than before.
+  const groupCount = g => legs.filter(l => (l.group || '') === g)
+    .reduce((n, l) => n + (l.items || [])
+      .reduce((m, c) => m + (Number(c.files) || 0), 0), 0);
+  let lastGroup = null;
+
   const body = legs.map(l => {
     // Where every file in a leg came off the same card - which is most legs,
     // and always the long ones - the card is named once at its head instead of
@@ -1275,7 +1310,17 @@ window.ksdSource = function (block, host) {
     // The rail's line is a chain through time, so it is only drawn when the
     // files actually sit on one - not under a pair of loose workbooks.
     const chained = l.items.length > 1 && l.items.every(c => c.from || c.to);
-    return `<div class="srcleg ${TONE[l.tone] || ''}">${head}
+    let gh = '';
+    if (l.group && l.group !== lastGroup) {
+      lastGroup = l.group;
+      const n = groupCount(l.group);
+      gh = `<div class="srcgrp${lastGroup === null ? '' : ''}">
+          <b>${esc(l.group)}</b>
+          ${l.groupNote ? `<span class="gw">${esc(l.groupNote)}</span>` : ''}
+          ${n ? `<span class="ct">${said(n)}</span>` : ''}
+        </div>`;
+    }
+    return `${gh}<div class="srcleg ${TONE[l.tone] || ''}${l.group ? ' ing' : ''}">${head}
         <div class="srcrail${chained ? '' : ' one'}">${rows}</div></div>`;
   }).join('');
 
