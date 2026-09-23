@@ -3113,3 +3113,74 @@ def _ii_day_sale(period: str, prior: str) -> dict:
     diff = (a - b) if (a is not None and b is not None) else None
     pct = (diff / b * 100) if (diff is not None and b) else None
     return {"cur": a, "prior": b, "diff": diff, "pct": pct}
+
+
+# ---------------------------------------------------------------------------
+# Dashboards
+# ---------------------------------------------------------------------------
+#
+# The Warehouse dashboard is the live artifact brought inside the app. The
+# artifact was built by a script that baked its data into the page, so opening
+# it showed whatever the last refresh had found. Here the page is static and
+# the figures are fetched, which is the same trade every report on this app
+# already makes: one thing to deploy, and it is never out of date.
+
+
+def _history_csv(name: str) -> Path:
+    return config.CLAUDE_ROOT / "Warehouse stock" / "_history" / name
+
+
+def _num(value) -> float:
+    try:
+        return float(str(value).replace(",", "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def warehouse_dashboard() -> dict:
+    """Every stock snapshot and every day's movement, as the dashboard reads them.
+
+    Both files are appended to by the daily build, so this is the whole history
+    rather than a window: the trend chart offers month-by-month and the league
+    table's sparklines want a fortnight, and which of those is on screen is the
+    page's business, not this function's.
+    """
+    stock: list[dict] = []
+    path = _history_csv("stock_history.csv")
+    if path.is_file():
+        try:
+            with path.open(newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    day = _parse_date(row.get("date") or row.get("Date"))
+                    wh = canon_warehouse(str(row.get("warehouse") or "").strip())
+                    if not day or not wh:
+                        continue
+                    stock.append({"d": day.isoformat(), "w": wh,
+                                  "p": round(_num(row.get("physical"))),
+                                  "a": round(_num(row.get("allotable"))),
+                                  "n": round(_num(row.get("pending")))})
+        except (OSError, csv.Error):
+            pass
+
+    inbound: list[dict] = []
+    path = _history_csv("inbound_history.csv")
+    if path.is_file():
+        try:
+            with path.open(newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    day = _parse_date(row.get("date") or row.get("Date"))
+                    wh = canon_warehouse(str(row.get("warehouse") or "").strip())
+                    if not day or not wh:
+                        continue
+                    inbound.append({"d": day.isoformat(), "w": wh,
+                                    "in": round(_num(row.get("inbound_cases"))),
+                                    "out": round(_num(row.get("dispatched_cases")))})
+        except (OSError, csv.Error):
+            pass
+
+    stock.sort(key=lambda r: (r["d"], r["w"]))
+    inbound.sort(key=lambda r: (r["d"], r["w"]))
+    as_of = stock[-1]["d"] if stock else ""
+    return {"stock": stock, "inbound": inbound, "asOf": as_of,
+            "days": sorted({r["d"] for r in stock}),
+            "warehouses": sorted({r["w"] for r in stock})}

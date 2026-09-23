@@ -1941,6 +1941,63 @@ def status_calendar(request: Request):
     )
 
 
+# ---------------------------------------------------------------------------
+# Dashboards
+# ---------------------------------------------------------------------------
+#
+# The Warehouse dashboard is the live artifact that used to open only in the
+# desktop sidebar, and only ever showed whatever its last refresh had baked
+# into it. Here the page is fixed and the figures are fetched.
+
+
+_DASH_CACHE: dict = {}
+
+
+def _dash_page(name: str) -> str:
+    """The dashboard's own HTML, read off disk and kept.
+
+    Not a Jinja template: it is a quarter of a megabyte of somebody else's
+    stylesheet and script, full of braces that mean something to JavaScript
+    and nothing to a template engine. Nothing in it needs rendering.
+    """
+    path = Path(__file__).resolve().parent / "templates" / name
+    stamp = path.stat().st_mtime_ns
+    hit = _DASH_CACHE.get(name)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    text = path.read_text(encoding="utf-8")
+    _DASH_CACHE[name] = (stamp, text)
+    return text
+
+
+@app.get("/dashboard/warehouse", response_class=HTMLResponse)
+def dashboard_warehouse(request: Request):
+    user = require_user(request)
+    return templates.TemplateResponse(
+        request, "dashboard_warehouse.html",
+        {"user": user, "page": "dash_warehouse", "started_at": STARTED_AT,
+         "problems": getattr(app.state, "problems", [])},
+    )
+
+
+@app.get("/dashboard/warehouse/view", response_class=HTMLResponse)
+def dashboard_warehouse_view(request: Request):
+    """The dashboard itself, framed by the page above."""
+    require_user(request)
+    return HTMLResponse(_dash_page("dashboard_warehouse_frame.html"))
+
+
+@app.get("/api/dashboard/warehouse")
+def dashboard_warehouse_data(request: Request):
+    require_user(request)
+    data = reports_api.warehouse_dashboard()
+    if not data["stock"]:
+        return JSONResponse(
+            {"error": "No stock history yet - upload a Bevco stock report first."},
+            status_code=404)
+    return JSONResponse(data)
+
+
 @app.get("/reports/warehouse-stock", response_class=HTMLResponse)
 def stock_page(request: Request):
     user = current_user(request)
