@@ -1298,6 +1298,24 @@
   .scroll::-webkit-scrollbar-thumb, .scroll-y::-webkit-scrollbar-thumb { background: #24365A; border-radius: 99px; }
   .scroll::-webkit-scrollbar-thumb:hover, .scroll-y::-webkit-scrollbar-thumb:hover { background: #31456B; }
   .scroll, .scroll-y { scrollbar-width: thin; scrollbar-color: #24365A transparent; }
+
+  /* ---- narrow-pane override ------------------------------------------
+     Last in the sheet on purpose: it restates rules set above, and a media
+     query carries no extra weight of its own. */
+  /* Six tiles across a box narrower than a full browser window - which is
+     exactly what the dashboard gets beside the app's sidebar - leaves the
+     delta pill nowhere to sit, and the tile's own overflow:hidden then cuts it
+     off mid-percent ("+156.1" with the sign gone). Between the six-column
+     breakpoint and the width this was drawn at, the headline and its pill
+     scale with the box instead of being clipped by it; at 1500 and above they
+     are back to the sizes the artifact set, to the pixel. */
+  @media (min-width: 1241px) and (max-width: 1500px) {
+    .grid-kpi .kpi .value { font-size: clamp(19px, 1.8vw, 27px); gap: 5px; }
+    .grid-kpi .kpi .value .u { font-size: 9.4px; }
+    .grid-kpi .kpi .dpill { font-size: 8.8px; padding: 2px 6px; }
+    .grid-kpi .kpi .dpill { margin-right: 5px; }
+    .grid-kpi .kpi .sub { font-size: 9.2px; gap: 4px; }
+  }
 </style>
 <!-- Chart.js is served by this app rather than a CDN: an internal tool on a
      distillery network should not stop drawing because somebody else's

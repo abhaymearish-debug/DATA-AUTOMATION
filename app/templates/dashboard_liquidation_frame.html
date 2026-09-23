@@ -1046,6 +1046,30 @@
     text-transform:uppercase; letter-spacing:.14em; font-weight:900; }
     background:var(--tc); box-shadow:0 0 8px var(--tc); flex:0 0 auto; }
     letter-spacing:-.025em; font-variant-numeric:tabular-nums; }
+
+  /* ---- narrow-pane overrides ---------------------------------------
+     Last in the sheet on purpose: these restate rules set above, and a
+     media query carries no extra weight of its own. */
+  /* Six tiles across a box narrower than a full browser window - which is
+     what a dashboard gets beside the app's sidebar - leaves the delta pill
+     nowhere to sit, and the tile's overflow:hidden cuts it off mid-percent.
+     The warehouse dashboard is scaled the same way over the same range, so
+     the two strips stay the same size as each other; at 1500 and above both
+     are back to the sizes the artifacts set. */
+  @media (min-width:1151px) and (max-width:1500px) {
+    .kpis .cmp .now { font-size:clamp(19px, 1.8vw, 27px); gap:5px; }
+    .kpis .cmp .now .u { font-size:9.4px; }
+    .kpis .cmp .dpill { font-size:8.8px; padding:2px 6px; }
+    .kpis .cmp .vs { font-size:9.2px; gap:4px; }
+  }
+  /* Same range, the bond x brand matrix: its first column is a fixed 132px
+     that a narrower table shrinks to about 115, which cut PERINTHALMANNA and
+     PATHANAMTHITTA short and clipped CHAIRMAN'S CHOICE out of the header.
+     Tracking and a point of type are cheaper to give up than a bond's name. */
+  @media (min-width:1151px) and (max-width:1500px) {
+    .heat th.row { font-size:10px; letter-spacing:0; padding-right:8px; }
+    .heat th { font-size:8.6px; letter-spacing:.06em; }
+  }
 </style>
 </head>
 <body>
