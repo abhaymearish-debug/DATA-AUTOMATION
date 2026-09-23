@@ -103,7 +103,7 @@ def load_master(path):
 # NOT the DETAIL presentation sheets — they are a regenerated display layer
 # that drifted ~319 cs low in May 2026 (see load_ksbc_brand_sales docstring).
 # ---------------------------------------------------------------------------
-def load_ksbc_brand_sales(ksbc_path):
+def load_ksbc_brand_sales(ksbc_path, book=None):
     """
     KSBC tertiary brand x shop sales for the month.
 
@@ -118,7 +118,9 @@ def load_ksbc_brand_sales(ksbc_path):
 
     Returns (out={shop_code:int -> {brand:str -> cases:float}}, seen_codes:set).
     """
-    wb = load_workbook(ksbc_path, data_only=True, read_only=True)
+    # `book` lets a caller hand in something that is not a file on disk - the
+    # app passes the day exports dressed as a month workbook (app/liq_source).
+    wb = book if book is not None else load_workbook(ksbc_path, data_only=True, read_only=True)
     brand_norm = {norm_brand(b): b for b in BRAND_COLS}
     cands = [s for s in wb.sheetnames
              if s.upper().rstrip().endswith('COMBINED') and 'DISPATCH' not in s.upper()]
@@ -174,14 +176,14 @@ def load_ksbc_brand_sales(ksbc_path):
 # ---------------------------------------------------------------------------
 # Secondary dispatches: parse COMBINED DISPATCHES for FED + BAR outlets
 # ---------------------------------------------------------------------------
-def load_secondary_brand_sales(sec_path, fed_codes, bar_codes):
+def load_secondary_brand_sales(sec_path, fed_codes, bar_codes, book=None):
     # Reads '<MONTH> COMBINED DISPATCHES' and aggregates Issue Cases by
     # (shop_code, brand) for FED + BAR outlets only. Columns are resolved BY
     # HEADER NAME (positional fallback) so a future column re-order in
     # build_secondary.py can't silently shift the read.
     # Returns (out={shop_code -> {brand -> cases}}, seen_codes), where
     # seen_codes is every licensee code seen (for main()'s unmatched audit).
-    wb = load_workbook(sec_path, data_only=True, read_only=True)
+    wb = book if book is not None else load_workbook(sec_path, data_only=True, read_only=True)
     candidates = [s for s in wb.sheetnames if s.upper().rstrip().endswith('COMBINED DISPATCHES')]
     if not candidates:
         raise RuntimeError(f"No 'COMBINED DISPATCHES' sheet in {sec_path}")

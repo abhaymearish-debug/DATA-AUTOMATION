@@ -31,6 +31,7 @@ from pathlib import Path
 
 from . import config
 from . import liq_extract as B
+from . import liq_source
 
 log = logging.getLogger("ksd.liquidation")
 
@@ -96,7 +97,13 @@ def detect_current_month(root: Path) -> str:
         if best is None or mt > best[0]:
             best = (mt, mon)
     if best is None:
-        raise Unavailable("No KSBC analysis workbook found to detect the month.")
+        # No month workbook here; the day exports say which month is being
+        # worked on just as well.
+        newest = liq_source.newest_month(root)
+        if newest:
+            return newest
+        raise Unavailable("No KSBC sales uploaded yet - upload a day's shop "
+                          "sales export and this fills in.")
     return best[1]
 
 
@@ -124,19 +131,51 @@ def window_end_day(root: Path, month: str, ksbc_path=None):
     return None
 
 
+# --- where a month's figures come from ---------------------------------------
+# On Abhay's machine a month is one workbook. On the server it is the day
+# exports that workbook is assembled from, and liq_source dresses those as the
+# same sheets - so everything below reads one shape and does not care which it
+# got. A real workbook still wins where there is one.
+def _ksbc_source(root: Path, month: str):
+    """(book, path) for a month's KSBC sales; (None, None) if there is none."""
+    path = _analysis_path(root / "KSBC shop sales", month,
+                          "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")
+    if path:
+        from openpyxl import load_workbook
+        return load_workbook(path, read_only=True, data_only=True), path
+    return liq_source.cached_book(root, month, "ksbc"), None
+
+
+def _sec_source(root: Path, month: str):
+    """(book, path) for a month's CFD/BAR invoices."""
+    path = _analysis_path(root / "Secondary sales", month,
+                          "SECONDARY SALES ANALYSIS.xlsx",
+                          "SECONDARY SALES ANALYSIS.xlsx")
+    if path:
+        from openpyxl import load_workbook
+        return load_workbook(path, read_only=True, data_only=True), path
+    return liq_source.cached_book(root, month, "secondary"), None
+
+
+def _analysis_path(folder: Path, month: str, full: str, mid: str):
+    """The month's analysis workbook, or None - including when the folder
+    itself is not there, which on a fresh server it is not."""
+    try:
+        return B.find_analysis_file(str(folder), month, full, mid)[0]
+    except OSError:
+        return None
+
+
 # --- per-shop rows via the locked extractors ---------------------------------
 def build_rows(root: Path, month: str, master, active_fed, active_bar):
     """Returns (rows, ksbc_path, sec_path) or (None, ...) if a source is absent."""
-    ksbc_path, _ = B.find_analysis_file(
-        str(root / "KSBC shop sales"), month,
-        "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")
-    sec_path, _ = B.find_analysis_file(
-        str(root / "Secondary sales"), month,
-        "SECONDARY SALES ANALYSIS.xlsx", "SECONDARY SALES ANALYSIS.xlsx")
-    if not ksbc_path or not sec_path:
+    kbook, ksbc_path = _ksbc_source(root, month)
+    sbook, sec_path = _sec_source(root, month)
+    if kbook is None or sbook is None:
         return None, ksbc_path, sec_path
-    ksbc_sales, _ = B.load_ksbc_brand_sales(ksbc_path)
-    sec_sales, _ = B.load_secondary_brand_sales(sec_path, active_fed, active_bar)
+    ksbc_sales, _ = B.load_ksbc_brand_sales(ksbc_path, book=kbook)
+    sec_sales, _ = B.load_secondary_brand_sales(sec_path, active_fed, active_bar,
+                                                book=sbook)
     rows = []
     for code, m in master.items():
         if not m['active'] or m['type'] not in {'KSBC', 'CFD', 'BAR'}:
@@ -187,13 +226,9 @@ def ksbc_daily(root: Path, month: str, master=None):
     `.byBond` -> {bond: {day: cases}} (26 Jul 2026, Abhay: daily-trend
     drill-downs). Built from the identical row scan, so every bond series
     sums back to the network series exactly."""
-    ksbc_path, _ = B.find_analysis_file(
-        str(root / "KSBC shop sales"), month,
-        "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")
-    if not ksbc_path:
+    wb, _ = _ksbc_source(root, month)
+    if wb is None:
         return {}
-    from openpyxl import load_workbook
-    wb = load_workbook(ksbc_path, read_only=True, data_only=True)
     pat = re.compile(rf"^{month}\s+(\d+)$", re.I)
     out = {}
     by_bond = defaultdict(lambda: defaultdict(float))
@@ -234,13 +269,9 @@ def secondary_daily(root: Path, month: str, fed, bar, master=None):
 
     With `master`, also returns `.byBond` -> {bond: {day: cases}} from the
     same rows (26 Jul 2026) for the daily-trend drill-downs."""
-    sec_path, _ = B.find_analysis_file(
-        str(root / "Secondary sales"), month,
-        "SECONDARY SALES ANALYSIS.xlsx", "SECONDARY SALES ANALYSIS.xlsx")
-    if not sec_path:
+    wb, _ = _sec_source(root, month)
+    if wb is None:
         return {}
-    from openpyxl import load_workbook
-    wb = load_workbook(sec_path, read_only=True, data_only=True)
     cands = [s for s in wb.sheetnames if s.upper().rstrip().endswith('COMBINED DISPATCHES')]
     if not cands:
         wb.close()
@@ -304,7 +335,6 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
     so current vs prior stays apples-to-apples.
     PER-DAY series (dailyK/dailyI/dailyBrand/dailyPack) remain daily-sheet
     based -- the cumulative gives a block total, not a per-day shape."""
-    from openpyxl import load_workbook
     res = {'grand': 0.0, 'byType': defaultdict(float), 'byBrand': defaultdict(float),
            'byBond': defaultdict(float), 'dailyK': defaultdict(float), 'dailyI': defaultdict(float),
            'byStaff': defaultdict(float), 'byShop': defaultdict(float),
@@ -314,10 +344,8 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
            'dailyBond': defaultdict(lambda: defaultdict(lambda: [0.0, 0.0])),
            'dailyBrand': defaultdict(lambda: defaultdict(float))}
     # KSBC tertiary (daily sheets)
-    ksbc_path, _ = B.find_analysis_file(
-        str(root / "KSBC shop sales"), month, "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")
-    if ksbc_path:
-        wb = load_workbook(ksbc_path, read_only=True, data_only=True)
+    wb, _ = _ksbc_source(root, month)
+    if wb is not None:
         pat = re.compile(rf"^{month}\s+(\d+)$", re.I)
         # PERIOD TRUTH: KSBC's portal exports in fixed blocks (1-16, 17-EOM) and
         # summing the daily exports drifts from the block total by case-conversion
@@ -405,11 +433,8 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
                 _add_agg(*v)
         wb.close()
     # CFD + BAR invoice (dispatches by date)
-    sec_path, _ = B.find_analysis_file(
-        str(root / "Secondary sales"), month,
-        "SECONDARY SALES ANALYSIS.xlsx", "SECONDARY SALES ANALYSIS.xlsx")
-    if sec_path:
-        wb = load_workbook(sec_path, read_only=True, data_only=True)
+    wb, _ = _sec_source(root, month)
+    if wb is not None:
         cands = [s for s in wb.sheetnames if s.upper().rstrip().endswith('COMBINED DISPATCHES')]
         if cands:
             ws = max((wb[s] for s in cands), key=lambda w: w.max_row)
@@ -487,13 +512,9 @@ def shop_stock(root: Path, month: str, master):
     NOT-MOVING stock: closing cases on shop x SKU lines that sold nothing at
     all this period. KSBC shops only (CFD/BAR are invoice channels).
     """
-    ksbc_path, _ = B.find_analysis_file(
-        str(root / "KSBC shop sales"), month,
-        "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")
-    if not ksbc_path:
+    wb, _ = _ksbc_source(root, month)
+    if wb is None:
         return None
-    from openpyxl import load_workbook
-    wb = load_workbook(ksbc_path, read_only=True, data_only=True)
     comb = next((sn for sn in wb.sheetnames if "COMBINED" in sn.upper()), None)
     if not comb:
         wb.close()
@@ -665,12 +686,8 @@ def build_payload(root: Path, month=None):
         # optional, so a missing prior KSBC or Secondary workbook used to yield
         # a one-legged 'prior' that still passed grand>0 -- rendering e.g.
         # MoM +264% instead of hiding the panel.
-        _pk, _ps = B.find_analysis_file(
-            str(root / "KSBC shop sales"), pmon,
-            "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")[0], \
-            B.find_analysis_file(
-            str(root / "Secondary sales"), pmon,
-            "SECONDARY SALES ANALYSIS.xlsx", "SECONDARY SALES ANALYSIS.xlsx")[0]
+        _pk = bool(_ksbc_source(root, pmon)[0])
+        _ps = bool(_sec_source(root, pmon)[0])
         if not (_pk and _ps):
             print(f"WARNING: {pmon} is incomplete (KSBC={bool(_pk)} "
                   f"Secondary={bool(_ps)}) -- month-over-month and movers suppressed.")
@@ -849,20 +866,23 @@ CACHE_PATH = "Monthly statement-liquidation/.artifact/liq_month_cache.json"
 
 def month_sources(root: Path, month: str):
     """The two analysis workbooks that feed `month` (either may be None)."""
-    k, _ = B.find_analysis_file(str(root / "KSBC shop sales"), month,
-                                "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx")
-    s, _ = B.find_analysis_file(str(root / "Secondary sales"), month,
-                                "SECONDARY SALES ANALYSIS.xlsx",
-                                "SECONDARY SALES ANALYSIS.xlsx")
-    return k, s
+    return (_analysis_path(root / "KSBC shop sales", month,
+                           "SHOP SALES ANALYSIS.xlsx", "ANALYSIS.xlsx"),
+            _analysis_path(root / "Secondary sales", month,
+                           "SECONDARY SALES ANALYSIS.xlsx",
+                           "SECONDARY SALES ANALYSIS.xlsx"))
 
 
 def available_months(root: Path):
-    """Months with BOTH legs on disk, in calendar order."""
+    """Months with BOTH legs on disk, in calendar order.
+
+    Either leg counts whether it is a month workbook or the day exports it
+    would have been assembled from.
+    """
     out = []
     for m in MONTHS_UP:
         k, s = month_sources(root, m)
-        if k and s:
+        if (k or liq_source.has_ksbc(root, m)) and (s or liq_source.has_secondary(root, m)):
             out.append(m)
     return out
 
@@ -870,9 +890,10 @@ def available_months(root: Path):
 def month_signature(root: Path, month: str) -> str:
     """size+mtime fingerprint of everything build_payload() reads for `month`."""
     idx = MONTHS_UP.index(month)
-    paths = list(month_sources(root, month))
+    paths = list(month_sources(root, month)) + liq_source.sources(root, month)
     if idx > 0:
-        paths += list(month_sources(root, MONTHS_UP[idx - 1]))
+        pmon = MONTHS_UP[idx - 1]
+        paths += list(month_sources(root, pmon)) + liq_source.sources(root, pmon)
     paths.append(str(root / "MASTER DATA CONFIRMED.xlsx"))
     parts = []
     for p in paths:
@@ -972,7 +993,15 @@ def dashboard_bundle(root: Path | None = None) -> dict:
     """{'current': KEY, 'months': [...], 'data': {KEY: payload}} for the page."""
     root = Path(root) if root else claude_root()
     cur = detect_current_month(root)
-    months = sorted(set(available_months(root)) | {cur}, key=MONTHS_UP.index)
+    months = available_months(root)
+    if months and cur not in months:
+        # The month being worked on is missing one of its two legs. On a
+        # server that is ordinary - an upload lands at a different hour for
+        # each - and the dashboard is more use open on the newest month that
+        # IS whole than refusing to open at all.
+        print(f"  {cur} has only one leg - opening on {months[-1]} instead.")
+        cur = months[-1]
+    months = sorted(set(months) | {cur}, key=MONTHS_UP.index)
     stamp = "|".join(month_signature(root, m) for m in months)
 
     hit = _MEMO.get(str(root))
@@ -985,7 +1014,10 @@ def dashboard_bundle(root: Path | None = None) -> dict:
         hit = _MEMO.get(str(root))
         if hit and hit[0] == stamp:
             return hit[1]
-        bundle = build_bundle(root, months=months, current=cur)
+        try:
+            bundle = build_bundle(root, months=months, current=cur)
+        finally:
+            liq_source.forget()
         _MEMO[str(root)] = (stamp, bundle)
     return bundle
 
@@ -1008,13 +1040,17 @@ def sources_note(root: Path | None = None) -> str:
         got = sorted(f.name for f in folder.glob(pat)
                      if not f.name.startswith("~$"))
         if got:
-            bits.append(f"{label}: {', '.join(got[:4])}"
-                        + (f" (+{len(got) - 4} more)" if len(got) > 4 else ""))
+            bits.append(f"{label}: {', '.join(got[:3])}"
+                        + (f" (+{len(got) - 3} more)" if len(got) > 3 else ""))
         else:
-            other = len([f for f in folder.glob("*.xlsx")
-                         if not f.name.startswith("~$")])
-            bits.append(f"{label}: no month workbook"
-                        + (f", {other} other file(s)" if other else ", empty"))
+            bits.append(f"{label}: no month workbook")
+    # The day exports are a source in their own right, so say what they cover.
+    for label, months in (("KSBC days", [m for m in MONTHS_UP
+                                         if liq_source.has_ksbc(root, m)]),
+                          ("invoice days", [m for m in MONTHS_UP
+                                            if liq_source.has_secondary(root, m)])):
+        bits.append(f"{label}: " + (", ".join(m.title() for m in months)
+                                    if months else "none"))
     return " · ".join(bits)
 
 
