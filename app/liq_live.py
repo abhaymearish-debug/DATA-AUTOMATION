@@ -1114,6 +1114,31 @@ _MEMO: dict = {}
 _LOCK = threading.Lock()
 
 
+_JSON_MEMO: dict = {}
+
+
+def dashboard_bundle_json(root: Path | None = None) -> str:
+    """The bundle, already serialised, and safe to sit inside a <script>.
+
+    The page embeds this rather than fetching it, so it renders the moment it
+    parses - no second round trip and no loading line. Kept beside the bundle
+    and thrown away on the same terms, because re-serialising it on every open
+    would cost more than building it does.
+    """
+    bundle = dashboard_bundle(root)
+    key = str(Path(root) if root else claude_root())
+    stamp = _MEMO.get(key, ("",))[0]
+    hit = _JSON_MEMO.get(key)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    blob = json.dumps(bundle, default=str, separators=(",", ":"))
+    # A literal </script> in the data would end the tag early; JSON does not
+    # care how a solidus is escaped.
+    blob = blob.replace("</", "<\\/")
+    _JSON_MEMO[key] = (stamp, blob)
+    return blob
+
+
 def dashboard_bundle(root: Path | None = None, pause=None) -> dict:
     """{'current': KEY, 'months': [...], 'data': {KEY: payload}} for the page."""
     root = Path(root) if root else claude_root()

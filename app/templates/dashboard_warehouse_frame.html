@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>K.S. Distillery — Warehouse Live Position</title>
+<!--KSD_PAYLOAD-->
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -1459,9 +1461,9 @@
      start, after all of it. Kicked off here it runs alongside the download and
      the parse instead of after them. -->
 <script>
-  window.__whFigures = fetch('/api/dashboard/warehouse', { credentials: 'same-origin' })
+  if (!window.__KSD_WAREHOUSE__) window.__whFigures = fetch('/api/dashboard/warehouse', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); });
-  window.__whFigures.catch(function () {});   // handled properly at the bootstrap
+  if (window.__whFigures) window.__whFigures.catch(function () {});   // handled properly at the bootstrap
 </script>
 <script src="/static/chart.umd.js"></script>
 </head>
@@ -4480,8 +4482,13 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleEq
 // deploy, and never a stale snapshot baked into the markup.
 const PHASE2 = true;
 if (PHASE2) document.body.classList.add('phase2');
-(window.__whFigures || fetch('/api/dashboard/warehouse', { credentials: 'same-origin' })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+// The figures are normally already in the page - see _dash_page_with in
+// main.py - so there is nothing to wait for and nothing to fetch. The fetch
+// paths stay for a page served bare, and for anything that reloads the
+// figures without reloading the page.
+(window.__KSD_WAREHOUSE__ ? Promise.resolve(window.__KSD_WAREHOUSE__)
+  : (window.__whFigures || fetch('/api/dashboard/warehouse', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))))
   .then(data => {
     if (data && data.error) throw new Error(data.error);
     if (!data || !(data.stock || []).length) throw new Error('No stock history yet.');

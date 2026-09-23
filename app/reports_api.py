@@ -3219,6 +3219,38 @@ def _num(value) -> float:
         return 0.0
 
 
+def warehouse_stamp() -> str:
+    """What the warehouse dashboard is built from, as one token."""
+    return "|".join((_file_stamp(_history_csv("stock_history.csv")),
+                     _file_stamp(_history_csv("brand_pack_history.csv")),
+                     _secondary_stamp(), _master_stamp()))
+
+
+def warehouse_dashboard_json() -> str:
+    """The payload, already serialised, and safe to sit inside a <script>.
+
+    The page embeds this rather than fetching it, so it renders the moment it
+    parses - no second round trip, and no loading line between the click and
+    the dashboard. Serialising 665 KB on every open would have put back the
+    cost that memoising the build had just taken out, so the text is kept
+    beside the payload and thrown away on the same terms.
+    """
+    key = f"whdashjson:{_PARSER_VERSION}:{warehouse_stamp()}"
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+    if hit:
+        return hit[1]
+    import json as _json
+    blob = _json.dumps(warehouse_dashboard(), default=str, separators=(",", ":"))
+    # A literal </script> anywhere in the data would end the tag early. JSON
+    # does not care how a solidus is escaped, and the browser's tokeniser
+    # stops looking for the closing tag once it sees the backslash.
+    blob = blob.replace("</", "<\\/")
+    with _CACHE_LOCK:
+        _CACHE[key] = (0.0, blob)
+    return blob
+
+
 def warehouse_dashboard() -> dict:
     """Every stock snapshot, and the dispatch that draws it down.
 
@@ -3248,10 +3280,7 @@ def warehouse_dashboard() -> dict:
     # paid on EVERY open of the page. It was the delay Abhay saw on 23 Sep 2026
     # between clicking Warehouse and the figures arriving. The per-file parses
     # were already cached; the reading and folding on top of them were not.
-    stamp = "|".join((_file_stamp(_history_csv("stock_history.csv")),
-                      _file_stamp(_history_csv("brand_pack_history.csv")),
-                      _secondary_stamp(), _master_stamp()))
-    key = f"whdash:{_PARSER_VERSION}:{stamp}"
+    key = f"whdash:{_PARSER_VERSION}:{warehouse_stamp()}"
     with _CACHE_LOCK:
         hit = _CACHE.get(key)
     if hit:

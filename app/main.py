@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import gzip
 import os
 import re
 import shutil
@@ -19,7 +20,7 @@ import openpyxl
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request, UploadFile, File
 from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
-                               FileResponse, PlainTextResponse)
+                               FileResponse, PlainTextResponse, Response)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -2032,6 +2033,68 @@ def _dash_page(name: str) -> str:
     return text
 
 
+# The dashboard HTML with its figures already inside it, kept as one string so
+# a reload costs a dictionary lookup - and beside it the compressed bytes,
+# because squeezing eight hundred kilobytes takes a tenth of a second here and
+# several times that on the server's half a CPU. Paid once per build instead of
+# once per open, which is the difference between the page arriving and the page
+# being worked on.
+_DASH_INLINE: dict = {}
+_DASH_GZ: dict = {}
+
+
+def _dash_response(request: Request, name: str, var: str, blob_of):
+    html = _dash_page_with(name, var, blob_of)
+    if "gzip" not in request.headers.get("accept-encoding", "").lower():
+        return HTMLResponse(html)
+    hit = _DASH_GZ.get(name)
+    if hit is None or hit[0] is not html:
+        hit = (html, gzip.compress(html.encode("utf-8"), 6))
+        _DASH_GZ[name] = hit
+    return Response(content=hit[1], media_type="text/html; charset=utf-8",
+                    headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+
+
+def _dash_page_with(name: str, var: str, blob_of) -> str:
+    """The dashboard's page, with its payload written into the head.
+
+    It used to arrive empty, ask the server for its figures, and show a
+    loading line until they came back - two round trips and a blank screen
+    between clicking the dashboard and seeing it (23 Sep 2026, Abhay: "i want
+    the dashboard to appear directly as i click"). The figures are memoised
+    anyway, so putting them in the page costs a string join and removes both
+    the round trip and the wait: the browser has everything it needs the
+    moment it has the page, and paints the dashboard rather than a message
+    about fetching it.
+
+    If the figures cannot be built the page is served bare, and its own fetch
+    path then reports the problem properly.
+    """
+    try:
+        blob = blob_of()
+    except Exception as exc:                                # noqa: BLE001
+        print(f"[dash] {name}: serving bare ({type(exc).__name__}: {exc})")
+        return _dash_page(name)
+    if not blob:
+        return _dash_page(name)
+
+    page = _dash_page(name)
+    key = (name, var, len(page), len(blob), blob[:64], blob[-64:])
+    hit = _DASH_INLINE.get(name)
+    if hit and hit[0] == key:
+        return hit[1]
+    tag = f"<script>window.{var}={blob};</script>\n"
+    # At the marker, which sits after <meta charset> - half a megabyte of JSON
+    # in front of that would push it out of the first kilobyte the browser
+    # sniffs for an encoding - and before the page's own fetch, which then
+    # sees the payload already there and does not ask for it again.
+    mark = "<!--KSD_PAYLOAD-->"
+    out = (page.replace(mark, tag, 1) if mark in page
+           else page.replace("</head>", tag + "</head>", 1))
+    _DASH_INLINE[name] = (key, out)
+    return out
+
+
 @app.get("/dashboard/warehouse", response_class=HTMLResponse)
 def dashboard_warehouse(request: Request):
     user = require_user(request)
@@ -2044,13 +2107,17 @@ def dashboard_warehouse(request: Request):
 
 @app.get("/dashboard/warehouse/view", response_class=HTMLResponse)
 def dashboard_warehouse_view(request: Request):
-    """The dashboard itself, framed by the page above."""
+    """The dashboard itself, framed by the page above - figures included."""
     require_user(request)
-    return HTMLResponse(_dash_page("dashboard_warehouse_frame.html"))
+    return _dash_response(
+        request, "dashboard_warehouse_frame.html", "__KSD_WAREHOUSE__",
+        lambda: reports_api.warehouse_dashboard_json()
+        if reports_api.warehouse_dashboard().get("stock") else "")
 
 
 @app.get("/api/dashboard/warehouse")
 def dashboard_warehouse_data(request: Request):
+    """Still here for anything that asks - the page itself no longer has to."""
     require_user(request)
     data = reports_api.warehouse_dashboard()
     if not data["stock"]:
@@ -2072,9 +2139,11 @@ def dashboard_liquidation(request: Request):
 
 @app.get("/dashboard/liquidation/view", response_class=HTMLResponse)
 def dashboard_liquidation_view(request: Request):
-    """The dashboard itself, framed by the page above."""
+    """The dashboard itself, framed by the page above - figures included."""
     require_user(request)
-    return HTMLResponse(_dash_page("dashboard_liquidation_frame.html"))
+    return _dash_response(
+        request, "dashboard_liquidation_frame.html", "__KSD_LIQUIDATION__",
+        lambda: liq_live.dashboard_bundle_json())
 
 
 @app.get("/api/dashboard/liquidation")
