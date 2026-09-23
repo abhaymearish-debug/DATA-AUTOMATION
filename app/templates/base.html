@@ -469,6 +469,17 @@
      are not on the screen is worse than no panel. */
   .srcline[hidden] { display:none; }
 
+  /* ---------- the chip in the top bar ----------
+     Up here it has no margins of its own, it sits hard against the right of
+     the heading row, and its panel hangs DOWN - under the table it opened
+     upwards, which from the top of the page would have put it off-screen. */
+  .topsrc { margin-left:auto; display:flex; align-items:center; min-width:0; }
+  .topsrc > .srcline { margin:0; }
+  .topsrc .srcpop { top:calc(100% + 11px); bottom:auto; left:auto; right:0; }
+  /* The strip that keeps the pointer covered on its way to the panel moves
+     to the other side of the chip with it. */
+  .topsrc .srcpop::after { top:auto; bottom:100%; }
+
   .srcchip { display:inline-flex; align-items:center; gap:8px; cursor:pointer;
              border:1px solid var(--line); border-radius:999px;
              background:linear-gradient(180deg,
@@ -868,6 +879,9 @@
   <div class="topbar">
     <button class="burger" onclick="drawer()" aria-label="Menu">☰</button>
     <h1>{% block heading %}{% endblock %}</h1>
+    {# Where the Source chip goes. It used to sit under the table, which cost
+       a band of the window on every report for something read once a day. #}
+    <span class="topsrc" id="srcSlot"></span>
   </div>
   <div class="content">
     {% if problems %}
@@ -1125,6 +1139,12 @@ window.ksdSource = function (block, host) {
     .reduce((m, c) => m + (Number(c.files) || 0), 0), 0);
   line.hidden = !lines;
   line.classList.remove('on', 'rt');
+  // The chip belongs in the top bar, beside the page's heading. Every report
+  // leaves its placeholder at the foot of the table, where it has always been
+  // written; it is lifted up here once, so no report has to be edited and none
+  // of them can forget.
+  const slot = document.getElementById('srcSlot');
+  if (slot && line.parentElement !== slot) slot.appendChild(line);
   if (!lines) { line.innerHTML = ''; return; }
   const said = n => n + (n === 1 ? ' file' : ' files');
 
@@ -1223,8 +1243,9 @@ window.ksdSource = function (block, host) {
   const pop = line.querySelector('.srcpop');
   // Near the right edge the panel hangs the other way, so it never runs off.
   const place = () => line.classList.toggle('rt',
-    line.getBoundingClientRect().left + pop.offsetWidth
-      > document.documentElement.clientWidth - 16);
+    line.parentElement && line.parentElement.classList.contains('topsrc')
+      || line.getBoundingClientRect().left + pop.offsetWidth
+         > document.documentElement.clientWidth - 16);
 
   // Opening and closing is done here rather than by :hover, which could not
   // be made to work: the panel stands clear of the chip, and the pointer has
