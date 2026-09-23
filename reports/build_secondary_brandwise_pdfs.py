@@ -228,8 +228,22 @@ from app import reports_pdf as layout  # noqa: E402
 
 
 def build_cluster_pdf(cluster, extracted, outdir):
+    """One cluster, one file - what the CLI has always written."""
+    return build_pdf([cluster], extracted, outdir,
+                     "Secondary Sales - Cumulative (Cluster %d).pdf" % cluster)
+
+
+def build_pdf(clusters, extracted, outdir, filename):
+    """Every warehouse in `clusters`, in order, as ONE document.
+
+    Three clusters used to mean three files, and three files mean an archive
+    to download and unpack before anybody can read a page of it. They are the
+    same report with the same columns; there was never a reason for them to
+    arrive as separate documents.
+    """
     data = extracted["data"]
-    warehouses = [w for w in CLUSTERS[cluster] if w in data and data[w]]
+    warehouses = [(cl, w) for cl in clusters
+                  for w in CLUSTERS[cl] if w in data and data[w]]
     if not warehouses:
         return None
 
@@ -238,21 +252,11 @@ def build_cluster_pdf(cluster, extracted, outdir):
         period = (extracted["from"].strftime("%-d %B %Y") + " - "
                   + extracted["to"].strftime("%-d %B %Y"))
 
-    # One page size for the whole cluster. Pages with fewer brand columns give
-    # the slack to the shop-name column rather than shrinking the page.
-    shapes = []
-    for wh in warehouses:
-        shops = data[wh]
-        brands_wh = sorted({b for s in shops.values() for b in s["brands"] if s["brands"][b]})
-        shapes.append({"labels": [s["name"] or lic for lic, s in shops.items()],
-                       "columns": brands_wh, "rows": len(shops)})
-    doc_w, doc_h, _ = layout.document_size(shapes)
-
-    out = outdir / ("Secondary Sales - Cumulative (Cluster %d).pdf" % cluster)
-    c = pdfcanvas.Canvas(str(out), pagesize=(doc_w, doc_h))
+    out = outdir / filename
+    c = pdfcanvas.Canvas(str(out))
     total_pages = len(warehouses)
 
-    for page_no, wh in enumerate(warehouses, start=1):
+    for page_no, (cl, wh) in enumerate(warehouses, start=1):
         shops = data[wh]
         # Columns are per page, exactly as in the source report: a warehouse
         # shows only the brands it actually dispatched.
@@ -269,11 +273,17 @@ def build_cluster_pdf(cluster, extracted, outdir):
             totals["__total__"] += rt
             rows.append({"name": shop["name"] or lic, "cells": cells, "total": rt})
 
-        label_w = layout.label_width_for(doc_w, len(brands))
+        width, height, label_w = layout.page_size(
+            [r["name"] for r in rows], brands, len(rows))
+        c.setPageSize((width, height))
         layout.draw_page(
-            c, width=doc_w, height=doc_h, label_w=label_w,
+            c, width=width, height=height, label_w=label_w,
             report_title="SECONDARY SALES - CUMULATIVE",
-            period=period, group_line="WH - " + wh,
+            period=period,
+            # The cluster rides along when the document holds more than one,
+            # so a page read on its own still says where it belongs.
+            group_line=(("CLUSTER %d  \u00b7  " % cl) if len(clusters) > 1 else "")
+                       + "WH - " + wh,
             label_heading="SHOP NAME", columns=brands,
             rows=rows, totals=totals,
             page_no=page_no, pages=total_pages,
@@ -325,6 +335,10 @@ def main() -> int:
     ap.add_argument("--workbook", default=None)
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--cluster", type=int, choices=[1, 2, 3], default=None)
+    ap.add_argument("--clusters", default="",
+                    help="comma-separated, e.g. 1,2,3 - written as ONE document "
+                         "rather than a file per cluster")
+    ap.add_argument("--name", default="", help="filename for --clusters")
     ap.add_argument("--from", dest="date_from", default=None,
                     help="ISO date; only dispatches on or after this are counted")
     ap.add_argument("--to", dest="date_to", default=None,
@@ -349,6 +363,19 @@ def main() -> int:
           f"Warehouses with dispatches: {len(extracted['data'])}")
 
     rc = verify(extracted) if args.verify else 0
+
+    if args.clusters:
+        want = [int(x) for x in args.clusters.split(",") if x.strip()]
+        if any(c not in (1, 2, 3) for c in want):
+            print("--clusters takes 1, 2 and 3 only.")
+            return 2
+        name = args.name or "Secondary Sales - Cumulative.pdf"
+        out = build_pdf(want, extracted, outdir, name)
+        if out is None:
+            print("No dispatches in the period - no PDF written.")
+        else:
+            print(f"{out.name}")
+        return rc
 
     wanted = [args.cluster] if args.cluster else [1, 2, 3]
     for cl in wanted:

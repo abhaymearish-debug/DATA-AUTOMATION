@@ -51,11 +51,13 @@ TOTAL_BAND_H = 19.0
 RULE_H = 1.0
 FOOTER_H = 23.0        # measured: 150.4 + 15*rows is the page height
 
-COL_W = 59.4          # every numeric column
+COL_W = 59.4          # every numeric column, at its roomiest
+COL_MIN = 44.0        # and at its narrowest: a wrapped brand head still fits
 DOC_W = 453.114       # the page width the office's PDFs use, every document
 LABEL_MIN_HARD = 90.0 # never let the label column fall below this
 LABEL_MIN = 150.0
 PAD_L = 6.0
+F_ROW_MIN = 6.8       # a name may shrink this far before it is cut
 
 F_TITLE = 15.0
 F_SUB = 9.6
@@ -138,21 +140,36 @@ def page_size(labels: list[str], columns: list[str], rows: int) -> tuple[float, 
     return document_size([{"labels": labels, "columns": columns, "rows": rows}])
 
 
-def columns_width(n_columns: int) -> float:
+def label_need(labels: list[str]) -> float:
+    """What the longest label would like: its own width, plus its padding."""
+    widest = max((pdfmetrics.stringWidth(str(l), "Helvetica", F_ROW)
+                  for l in labels), default=0.0)
+    return widest + 2 * PAD_L
+
+
+def columns_width(n_columns: int, wanted: float = 0.0) -> float:
     """Width of one numeric column on a page carrying `n_columns` of them.
 
-    Normally the measured 59.4. It only shrinks on a page wide enough to squeeze
-    the label column below what a shop name needs — better a narrower figure
-    column than a name clipped to nothing.
+    The figures in these columns are three or four digits; the 59.4 measured
+    off the office's own PDF is there for the wrapped brand heading above
+    them, and a brand heading wraps onto another line quite happily. A shop
+    name cannot. So when the labels want more room than the leftovers, the
+    numeric columns give some back - down to COL_MIN, which still carries
+    MATURED, the longest word any brand puts in a heading.
     """
     if n_columns <= 0:
         return COL_W
-    return min(COL_W, (DOC_W - LABEL_MIN_HARD) / n_columns)
+    # What a column may be at most: the measured width, or less on a page with
+    # so many brands that the label column would otherwise be starved.
+    cap = min(COL_W, (DOC_W - LABEL_MIN_HARD) / n_columns)
+    # What the labels would like it to be.
+    want = (DOC_W - wanted) / n_columns
+    return max(min(COL_MIN, cap), min(cap, want))
 
 
-def label_width_for(width: float, n_columns: int) -> float:
+def label_width_for(width: float, n_columns: int, wanted: float = 0.0) -> float:
     """The label column takes whatever the numeric columns leave."""
-    return width - columns_width(n_columns + 1) * (n_columns + 1)
+    return width - columns_width(n_columns + 1, wanted) * (n_columns + 1)
 
 
 def document_size(pages: list[dict]) -> tuple[float, float, float]:
@@ -165,9 +182,10 @@ def document_size(pages: list[dict]) -> tuple[float, float, float]:
     """
     max_cols = max(len(p["columns"]) for p in pages)
     max_rows = max(p["rows"] for p in pages)
+    wanted = max((label_need(p["labels"]) for p in pages if p["labels"]), default=0.0)
     height = (TITLE_BAND_H + SUB_BAND_H + HEAD_BAND_H
               + ROW_H * max_rows + RULE_H + TOTAL_BAND_H + RULE_H + FOOTER_H)
-    return DOC_W, height, label_width_for(DOC_W, max_cols)
+    return DOC_W, height, label_width_for(DOC_W, max_cols, wanted)
 
 
 def draw_page(c, *, width: float, height: float, label_w: float,
@@ -177,7 +195,10 @@ def draw_page(c, *, width: float, height: float, label_w: float,
               page_no: int = 1, pages: int = 1, round_off: bool = False) -> None:
     """Draw one page. `rows` are {'name': str, 'cells': {col: value}, 'total': v}."""
     all_cols = list(columns) + ["TOTAL"]
-    col_w = columns_width(len(all_cols))
+    # Taken from the label column the caller settled on, not worked out again
+    # here: the two used to be computed separately and a page whose labels had
+    # claimed extra room drew its headings out of line with its figures.
+    col_w = (width - label_w) / len(all_cols)
 
     # ---- title band ----
     y = height
@@ -238,8 +259,18 @@ def draw_page(c, *, width: float, height: float, label_w: float,
         # '2016-KARUNAGAPALLY SOUTH' as the same string, which is two
         # different shops printing under one name with no sign anything was
         # lost.
-        name = _fit(str(r["name"]), "Helvetica", F_ROW, label_w - 2 * PAD_L)
-        c.drawString(PAD_L, base, name)
+        # A shop name is the one thing on the page that cannot be looked up
+        # anywhere else, so it shrinks before it is cut: down to F_ROW_MIN,
+        # and only then to an ellipsis.
+        room = label_w - 2 * PAD_L
+        raw = str(r["name"])
+        size = F_ROW
+        while (size > F_ROW_MIN
+               and pdfmetrics.stringWidth(raw, "Helvetica", size) > room):
+            size -= 0.25
+        c.setFont("Helvetica", size)
+        c.drawString(PAD_L, base, _fit(raw, "Helvetica", size, room))
+        c.setFont("Helvetica", F_ROW)
 
         for j, col in enumerate(columns):
             v = r["cells"].get(col, 0) or 0

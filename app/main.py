@@ -1820,30 +1820,31 @@ def brandwise_pdf(
     if any(c not in (1, 2, 3) for c in wanted):
         raise HTTPException(400, "Cluster must be 1, 2 or 3.")
 
-    built = []
-    for c in wanted:
-        into = outdir / f"c{c}"
-        into.mkdir(parents=True, exist_ok=True)
-        argv = ["python3", str(APP_REPORTS / "build_secondary_brandwise_pdfs.py"),
-                "--base", str(config.CLAUDE_ROOT), "--workbook", str(workbook),
-                "--outdir", str(into), "--cluster", str(c)]
-        if date_from:
-            argv += ["--from", date_from]
-        if date_to:
-            argv += ["--to", date_to]
-
-        proc = subprocess.run(argv, capture_output=True, text=True,
-                              timeout=config.STEP_TIMEOUT_SECONDS)
-        if proc.returncode != 0:
-            raise HTTPException(500, f"PDF build failed: {(proc.stderr or proc.stdout)[-400:]}")
-        built += list(into.glob("*.pdf"))
-
-    if not built:
-        where = "any cluster" if len(wanted) > 1 else f"cluster {wanted[0]}"
-        raise HTTPException(404, f"No dispatches for {where} in the selected range.")
+    # One document, whether that is one cluster or all three. It used to be a
+    # file per cluster and therefore a zip, and an archive is something to
+    # deal with before you can read a page of it.
     span = _asked_period(date_from, date_to, "")
     label = f" ({span['short']})" if span else ""
-    return _as_folder(built, f"Secondary Sales - Cumulative{label}")
+    name = _safe_name(f"Secondary Sales - Cumulative{label}") + ".pdf"
+    argv = ["python3", str(APP_REPORTS / "build_secondary_brandwise_pdfs.py"),
+            "--base", str(config.CLAUDE_ROOT), "--workbook", str(workbook),
+            "--outdir", str(outdir), "--name", name,
+            "--clusters", ",".join(str(c) for c in wanted)]
+    if date_from:
+        argv += ["--from", date_from]
+    if date_to:
+        argv += ["--to", date_to]
+
+    proc = subprocess.run(argv, capture_output=True, text=True,
+                          timeout=config.STEP_TIMEOUT_SECONDS)
+    if proc.returncode != 0:
+        raise HTTPException(500, f"PDF build failed: {(proc.stderr or proc.stdout)[-400:]}")
+
+    out = outdir / name
+    if not out.is_file():
+        where = "any cluster" if len(wanted) > 1 else f"cluster {wanted[0]}"
+        raise HTTPException(404, f"No dispatches for {where} in the selected range.")
+    return FileResponse(out, filename=out.name)
 
 
 
