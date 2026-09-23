@@ -143,8 +143,58 @@ def _ksbc_files(root: Path, month: str):
             m = _CUM_RE.search(path.name)
             if m and m.group(1).upper() == up:
                 blocks.append((int(m.group(2)), int(m.group(3)), path))
-    blocks.sort()
-    return days, blocks
+    return days, _pick_blocks(blocks)
+
+
+def _pick_blocks(blocks: list) -> list:
+    """Blocks that can be added together - no day counted twice.
+
+    A month workbook's blocks tile the month (1-16, then 17-EOM) because that
+    is how KSBC's portal exports them, and the builder adds them up. What gets
+    uploaded here is cumulative-to-date: 1-8 one week, 1-16 the next, 1-22
+    today, each one containing the last. Adding those counts most of the month
+    five or six times over - 33,170 cs of KSBC tertiary against a daily trend
+    totalling 5,790.
+
+    So take the set of blocks that overlap nowhere and cover the most days:
+    1-22 alone beats 1-8 + 1-16, and 1-16 + 17-23 beats 1-20. Days no block
+    covers still come from their own day file.
+    """
+    if not blocks:
+        return []
+    spans = [(a, b, p, set(range(a, b + 1))) for a, b, p in blocks]
+
+    def pick(rest, covered, used):
+        """Best (days covered, fewest blocks) from here on."""
+        if not rest:
+            return len(covered), -len(used), used
+        head, tail = rest[0], rest[1:]
+        best = pick(tail, covered, used)
+        if not (head[3] & covered):
+            take = pick(tail, covered | head[3], used + [head])
+            if take[:2] > best[:2]:
+                best = take
+        return best
+
+    if len(spans) <= 12:
+        spans.sort(key=lambda t: (t[0], -t[1]))
+        chosen = pick(spans, set(), [])[2]
+    else:
+        # More period exports than anyone has reason to keep; widest-first is
+        # close enough and does not blow up.
+        chosen, covered = [], set()
+        for sp in sorted(spans, key=lambda t: (t[0] - t[1], t[0])):
+            if sp[3] & covered:
+                continue
+            chosen.append(sp)
+            covered |= sp[3]
+
+    keep = {id(c) for c in chosen}
+    dropped = [sp[2].name for sp in spans if id(sp) not in keep]
+    if dropped:
+        log.info("liquidation: period export(s) inside another, skipped: %s",
+                 ", ".join(sorted(dropped)))
+    return sorted((a, b, p) for a, b, p, _ in chosen)
 
 
 def _sec_files(root: Path, month: str) -> dict:
