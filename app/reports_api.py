@@ -3181,6 +3181,192 @@ def warehouse_dashboard() -> dict:
     stock.sort(key=lambda r: (r["d"], r["w"]))
     inbound.sort(key=lambda r: (r["d"], r["w"]))
     as_of = stock[-1]["d"] if stock else ""
-    return {"stock": stock, "inbound": inbound, "asOf": as_of,
-            "days": sorted({r["d"] for r in stock}),
-            "warehouses": sorted({r["w"] for r in stock})}
+    out = {"stock": stock, "inbound": inbound, "asOf": as_of,
+           "days": sorted({r["d"] for r in stock}),
+           "warehouses": sorted({r["w"] for r in stock})}
+    out["sales"] = _warehouse_demand(inbound, as_of)
+    out.update(_warehouse_mix(as_of))
+    out["dailyDispatch"] = _daily_dispatch(as_of)
+    return out
+
+
+def _daily_dispatch(as_of: str) -> dict:
+    """This month's dispatch day by day, and last month's beside it.
+
+    Split the way the trade is: what went to a KSBC shop and what went out on
+    an invoice. Same lines the Secondary Sales - Daily report totals, so the
+    race chart on the dashboard and that report cannot tell different stories.
+    """
+    if not as_of:
+        return {}
+    lines, _sources = secondary_lines()
+    if not lines:
+        return {}
+
+    y, m = int(as_of[:4]), int(as_of[5:7])
+    py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+
+    def month(yy: int, mm: int) -> dict:
+        days: dict = {}
+        ksbc: dict = {}
+        inv: dict = {}
+        for line in lines:
+            d = line.get("date")
+            if not d or d.year != yy or d.month != mm:
+                continue
+            cases = float(line.get("cases") or 0)
+            key = str(d.day)
+            days[key] = days.get(key, 0.0) + cases
+            side = ksbc if str(line.get("cat") or "").upper() == "KSBC" else inv
+            side[key] = side.get(key, 0.0) + cases
+        if not days:
+            return {}
+        rnd = lambda got: {k: round(v, 2) for k, v in sorted(got.items(), key=lambda kv: int(kv[0]))}
+        return {"m": _MONTH_NAME[mm - 1], "y": yy, "mi": mm,
+                "days": rnd(days), "ksbc": rnd(ksbc), "inv": rnd(inv)}
+
+    # 'pri' for the prior month, which is the name the dashboard reads it by.
+    out = {}
+    cur = month(y, m)
+    pri = month(py, pm)
+    if cur:
+        out["cur"] = cur
+    if pri:
+        out["pri"] = pri
+    return out
+
+
+_MONTH_NAME = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY",
+               "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"]
+
+
+def _warehouse_demand(inbound: list[dict], as_of: str) -> dict:
+    """What each warehouse ships in a month, averaged over the last three whole ones.
+
+    This is the divisor behind every "months of cover" figure on the dashboard,
+    so it has to be demand the warehouse actually saw, not a target. It is the
+    dispatch column of the same inbound history the Inbound KPI reads, which
+    means the two halves of the page cannot disagree with each other.
+
+    The current month is left out on purpose: a month that is four days old
+    would drag the average down and read as a network that has stopped selling.
+    """
+    if not as_of or not inbound:
+        return {"byWarehouse": {}, "monthsUsed": [], "periodLabel": ""}
+    cur = as_of[:7]
+    months: list[str] = []
+    y, m = int(cur[:4]), int(cur[5:7])
+    for _ in range(3):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        months.append(f"{y:04d}-{m:02d}")
+    months.reverse()
+
+    per: dict = {}
+    for row in inbound:
+        key = row["d"][:7]
+        if key not in months:
+            continue
+        seen = per.setdefault(row["w"], {})
+        seen[key] = seen.get(key, 0) + row["out"]
+
+    names = [_MONTH_NAME[int(k[5:7]) - 1] for k in months]
+    by: dict = {}
+    for wh, seen in per.items():
+        got = [seen.get(k, 0) for k in months]
+        total = sum(got)
+        by[wh] = {"avg": round(total / len(months)), "total": round(total),
+                  "months": {n: round(v) for n, v in zip(names, got)}}
+
+    short = [n.title()[:3] for n in names]
+    label = f"{short[0]}\u2013{short[-1]} {months[-1][:4]} avg"
+    return {"byWarehouse": by, "monthsUsed": names, "periodLabel": label}
+
+
+# The brand and pack feeds all come off one file, so they are read once.
+# Ninety days is what the trend panels offer and rather less than the whole
+# history, which is a megabyte and a half and would be sent on every open.
+_MIX_DAYS = 90
+
+
+def _warehouse_mix(as_of: str) -> dict:
+    """Brand and pack, per warehouse and over time, from the daily build's history."""
+    path = _history_csv("brand_pack_history.csv")
+    empty = {"skuDetail": {"date": as_of, "byWarehouse": {}},
+             "brandTrend": [], "packTrend": [],
+             "mixByWh": {"date": [], "wh": [], "brand": [], "pack": [], "b": [], "p": []}}
+    if not path.is_file():
+        return empty
+
+    rows = []
+    try:
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            for row in csv.DictReader(fh):
+                day = _parse_date(row.get("date") or row.get("Date"))
+                wh = canon_warehouse(str(row.get("warehouse") or "").strip())
+                brand = str(row.get("brand") or "").strip().upper()
+                pack = str(row.get("pack") or "").strip().upper()
+                if not (day and wh and brand and pack):
+                    continue
+                rows.append((day.isoformat(), wh, brand, pack,
+                             round(_num(row.get("physical"))),
+                             round(_num(row.get("allotable"))),
+                             round(_num(row.get("pending")))))
+    except (OSError, csv.Error):
+        return empty
+    if not rows:
+        return empty
+
+    days = sorted({r[0] for r in rows})[-_MIX_DAYS:]
+    keep = set(days)
+    rows = [r for r in rows if r[0] in keep]
+    latest = days[-1]
+
+    # The drill-down: one warehouse's shelf on the latest day.
+    sku: dict = {}
+    for d, wh, brand, pack, p, a, n in rows:
+        if d == latest:
+            sku.setdefault(wh, []).append([brand, pack, p, a, n])
+    for lines in sku.values():
+        lines.sort(key=lambda x: -x[2])
+
+    def series(idx: int) -> list:
+        agg: dict = {}
+        for r in rows:
+            k = (r[0], r[idx])
+            got = agg.setdefault(k, [0, 0, 0])
+            got[0] += r[4]; got[1] += r[5]; got[2] += r[6]
+        return [[d, name, *vals] for (d, name), vals in sorted(agg.items())]
+
+    whs = sorted({r[1] for r in rows})
+    brands = sorted({r[2] for r in rows})
+    packs = sorted({r[3] for r in rows}, key=lambda s: (_pack_ml(s), s))
+    di = {d: i for i, d in enumerate(days)}
+    wi = {w: i for i, w in enumerate(whs)}
+    bi = {b: i for i, b in enumerate(brands)}
+    pi = {p: i for i, p in enumerate(packs)}
+
+    def folded(idx: int, index: dict) -> list:
+        agg: dict = {}
+        for r in rows:
+            k = (di[r[0]], wi[r[1]], index[r[idx]])
+            got = agg.setdefault(k, [0, 0, 0])
+            got[0] += r[4]; got[1] += r[5]; got[2] += r[6]
+        # A warehouse that holds none of a brand on a day is not a fact worth
+        # sending: it is two thousand rows of noughts across the wire.
+        return [[d, w, x, *vals] for (d, w, x), vals in sorted(agg.items())
+                if any(vals)]
+
+    return {
+        "skuDetail": {"date": latest, "byWarehouse": sku},
+        "brandTrend": series(2),
+        "packTrend": series(3),
+        "mixByWh": {"date": days, "wh": whs, "brand": brands, "pack": packs,
+                    "b": folded(2, bi), "p": folded(3, pi)},
+    }
+
+
+def _pack_ml(text: str) -> int:
+    m = re.search(r"(\d+)", str(text))
+    return int(m.group(1)) if m else 9999

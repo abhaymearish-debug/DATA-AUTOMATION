@@ -198,6 +198,13 @@ async def please_sign_in(request: Request, exc):
     return RedirectResponse(dest, status_code=303)
 
 
+# The dashboard's payload is the first response on this app big enough for
+# this to matter - a megabyte of JSON that goes down to about a tenth of that.
+# Everything else on the page is already small; nothing is made slower by it.
+from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
+app.add_middleware(GZipMiddleware, minimum_size=2048)
+
+
 @app.middleware("http")
 async def no_cache_html(request: Request, call_next):
     """Never let a browser cache a page of this app.

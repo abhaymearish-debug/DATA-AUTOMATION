@@ -851,12 +851,18 @@
     <a class="item {% if page == 'pi' %}active{% endif %}" href="/reports/pi-variance">
       {{ nav_icon('clipboard') }}Purchase Instruction</a>
 
-    <div class="sect">Settings</div>
-    <a class="item {% if page == 'bonds' %}active{% endif %}" href="/settings/bond-mapping">
-      {{ nav_icon('map') }}Bond Mapping</a>
-    <a class="item {% if page == 'people' %}active{% endif %}" href="/settings/people">
-      {{ nav_icon('users') }}People</a>
-    <a class="item soon">{{ nav_icon('gear') }}General<span class="tag">soon</span></a>
+    {# One Settings entry rather than a heading and a list under it: these are
+       pages you visit to change something and then leave, and a standing
+       section for them cost three lines of the sidebar all day. It opens
+       itself when you are on one of them. #}
+    {% set in_settings = page in ('bonds', 'people') %}
+    <button class="group {% if not in_settings %}collapsed{% endif %}" onclick="tog(this)">
+      {{ nav_icon('gear') }}Settings<span class="chev">▾</span></button>
+    <div class="kids {% if not in_settings %}hidden{% endif %}">
+      <a class="item {% if page == 'bonds' %}active{% endif %}" href="/settings/bond-mapping">Bond Mapping</a>
+      <a class="item {% if page == 'people' %}active{% endif %}" href="/settings/people">People</a>
+      <a class="item soon">General<span class="tag">soon</span></a>
+    </div>
   </nav>
 
   <div class="sb-foot">

@@ -4339,7 +4339,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleEq
 
 // The page is served by the app and the figures come from it: one thing to
 // deploy, and never a stale snapshot baked into the markup.
-const PHASE2 = false;
+const PHASE2 = true;
 if (PHASE2) document.body.classList.add('phase2');
 fetch('/api/dashboard/warehouse', {credentials: 'same-origin'})
   .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
