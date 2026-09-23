@@ -146,6 +146,12 @@ def _ksbc_files(root: Path, month: str):
     return days, _pick_blocks(blocks)
 
 
+def pick_periods(blocks: list) -> list:
+    """Public name for the overlap filter: liq_live needs it for the period
+    SHEETS inside a real month workbook, which can overlap the same way."""
+    return _pick_blocks(blocks)
+
+
 def _pick_blocks(blocks: list) -> list:
     """Blocks that can be added together - no day counted twice.
 
@@ -190,7 +196,7 @@ def _pick_blocks(blocks: list) -> list:
             covered |= sp[3]
 
     keep = {id(c) for c in chosen}
-    dropped = [sp[2].name for sp in spans if id(sp) not in keep]
+    dropped = [getattr(sp[2], "name", str(sp[2])) for sp in spans if id(sp) not in keep]
     if dropped:
         log.info("liquidation: period export(s) inside another, skipped: %s",
                  ", ".join(sorted(dropped)))
@@ -219,6 +225,20 @@ def sources(root: Path, month: str) -> list:
     return (sorted(days.values())
             + sorted(p for _, _, p in blocks)
             + sorted(_sec_files(root, month).values()))
+
+
+def ksbc_covered_to(root: Path, month: str) -> int:
+    """The last day of the month the KSBC exports account for.
+
+    A period export covers days that have no day file, and the builder's
+    day-sheet scan cannot see inside one - so asking it alone how far the month
+    has got answers 5 when a 1-22 block is sitting right there, and every
+    per-day figure then divides 22 days of sales by 5. Invoice coverage is not
+    counted here: that leg is dated by the invoices themselves, which the
+    builder already reads.
+    """
+    days, blocks = _ksbc_files(root, month)
+    return max([0] + list(days) + [b for _, b, _ in blocks])
 
 
 def has_ksbc(root: Path, month: str) -> bool:

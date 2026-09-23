@@ -289,7 +289,7 @@ def secondary_daily(root: Path, month: str, fed, bar, master=None):
             continue
         if code not in target:
             continue
-        day = parse_day(row[11])
+        day = parse_day(row[11], MONTHS_UP.index(month.upper()) + 1)
         if day is None:
             continue
         try:
@@ -308,21 +308,36 @@ def secondary_daily(root: Path, month: str, fed, bar, master=None):
     return res
 
 
-def parse_day(val):
-    """Day-of-month int from a date cell that may be a datetime or a string
-    like '05-06-2026' / '2026-06-05' / '5/6/2026'."""
+def parse_parts(val):
+    """(day, month) from a date cell that may be a datetime or a string like
+    '05-06-2026' / '2026-06-05' / '5/6/2026'. month is None when the cell only
+    yields a day."""
     if val is None:
         return None
     if isinstance(val, datetime):
-        return val.day
+        return val.day, val.month
     s = str(val).strip()
     m = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$", s)
     if m:
-        return int(m.group(1))  # DD-MM-YYYY (Kerala export convention)
+        return int(m.group(1)), int(m.group(2))  # DD-MM-YYYY (Kerala convention)
     m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$", s)
     if m:
-        return int(m.group(3))  # YYYY-MM-DD
+        return int(m.group(3)), int(m.group(2))  # YYYY-MM-DD
     return None
+
+
+def parse_day(val, month_no=None):
+    """Day-of-month, or None - and None too when the cell belongs to another
+    month. A stray 31 August invoice inside a September upload used to be
+    counted as September the 31st, which that month does not have.
+    """
+    got = parse_parts(val)
+    if not got:
+        return None
+    day, mon = got
+    if month_no and mon and mon != month_no:
+        return None
+    return day
 
 
 # --- same-window breakdown (for month-over-month to the same date) -----------
@@ -364,6 +379,13 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
                 a, b = int(cm.group(1)), int(cm.group(2))
                 if b <= day_max:                      # window fully covers the block
                     cum_blocks.append((a, b, sn))
+        # A month workbook's blocks tile the month, but what people upload is
+        # cumulative-to-date - 1-8, then 1-16, then 1-22 - and adding those
+        # counts the same days several times over. Take the set that overlaps
+        # nowhere and covers the most days, exactly as liq_source does for the
+        # exports it serves.
+        cum_blocks = [(a, b, sn) for a, b, sn in
+                      liq_source.pick_periods([(a, b, sn) for a, b, sn in cum_blocks])]
         cum_days = set()
         for a, b, _ in cum_blocks:
             cum_days.update(range(a, b + 1))
@@ -392,6 +414,12 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
 
         def _add_agg(cs, bn, code, pk):
             mrec = master.get(code, {}) or {}
+            # The headline counts active KSBC outlets only (build_rows), so the
+            # window this is compared against must count the same ones - or a
+            # shop the master closed shows up as a top mover against a total it
+            # was never in.
+            if not mrec.get('active') or mrec.get('type') != 'KSBC':
+                return
             res['byType']['KSBC'] += cs
             res['byBrand'][bn] += cs
             res['byBond'][mrec.get('bond') or 'UNKNOWN'] += cs
@@ -448,7 +476,7 @@ def window_breakdown(root: Path, month: str, master, fed, bar, day_max: int):
                 typ = 'CFD' if code in fed else ('BAR' if code in bar else None)
                 if typ is None:
                     continue
-                day = parse_day(row[11])
+                day = parse_day(row[11], MONTHS_UP.index(month.upper()) + 1)
                 if day is None or day < 1 or day > day_max:
                     continue
                 bn = B.BRAND_LOOKUP.get(B.norm_brand(row[4]))
@@ -627,7 +655,14 @@ def build_payload(root: Path, month=None):
     all_days = sorted(set(kd) | set(sd))
     days_in_month = calendar.monthrange(year, cur_idx + 1)[1]
     win_end = window_end_day(root, cur, ksbc_path)
-    days_elapsed = win_end or (max(all_days) if all_days else 0)
+    # The day scan above only sees day sheets. A period export covers days that
+    # have no day sheet, and those days are in `grand` - so without this the
+    # run-rate divides a whole month's sales by however few days happen to have
+    # their own file, and the projection multiplies that mistake by thirty.
+    covered = liq_source.ksbc_covered_to(root, cur)
+    days_elapsed = win_end or max(all_days + [covered]) if (win_end or all_days or covered) else 0
+    if not days_elapsed:
+        raise Unavailable(f"{cur} has exports but no day this app can date.")
     daily = [{'day': d, 'ksbc': kd.get(d, 0.0), 'inv': sd.get(d, 0.0)}
              for d in range(1, days_elapsed + 1)]
     # per-bond daily series for the trend drill-downs (26 Jul 2026, Abhay) —

@@ -1515,11 +1515,18 @@ $('rumBrandySplit').textContent = 'Rum ' + Math.round(pct(rumC,GRAND)) + '% · B
 
 // ================= target (editable, persisted) =================
 const TKEY = 'ksdLiqTarget:' + P.monthUpper + P.year;
-const T_DEFAULT = Math.round(P.targetDefault || P.projected || 0);
+/* The default target is last month's actual - a figure from the exports. It
+   used to fall back to THIS month's own projection when there was no prior
+   month, which made the gauge self-fulfilling: projected ÷ target was then
+   exactly 100%, the dial went gold, and the page said "on pace" however the
+   month was really going. With no prior month there is no target, and the
+   panel says so instead of inventing one. */
+const T_DEFAULT = Math.round(P.targetDefault || 0);
 function getTarget(){
   try { const v = parseFloat(localStorage.getItem(TKEY)); if(v>0) return v; } catch(e){}
   return T_DEFAULT;
 }
+function hasTarget(){ return getTarget() > 0; }
 function setTarget(v){ try { localStorage.setItem(TKEY, String(v)); } catch(e){} renderTargetViews(); }
 let gaugeChart = null;
 
@@ -1601,10 +1608,27 @@ function renderKpis(){
 // ================= PACE vs TARGET =================
 function renderTargetViews(){
   const TARGET = getTarget();
-  $('targetInput').value = Math.round(TARGET);
+  $('targetInput').value = TARGET > 0 ? Math.round(TARGET) : '';
   $('tdLeft').textContent  = Math.max(0, P.daysInMonth - P.daysElapsed);
   $('tdTotal').textContent = P.daysInMonth;
   $('tbPrior').textContent = P.prior ? (P.prior.month+' actual') : 'reset';
+  // Nothing here means anything without a target, and a made-up one reads as
+  // fact. Say it is not set and show the month's own figures instead.
+  if(!hasTarget()){
+    if(gaugeChart){ try { gaugeChart.destroy(); } catch(e){} gaugeChart = null; }
+    const cv = $('gaugeChart');
+    if(cv){ const c = cv.getContext('2d'); c && c.clearRect(0,0,cv.width,cv.height); }
+    $('gaugeSub').innerHTML =
+        `<div class="gs"><em>Projected</em><b>${fmt(P.projected)}<u>cs</u></b></div>`
+      + `<div class="gs tgt"><em>Target</em><b>not set</b></div>`;
+    $('paceBars').innerHTML =
+        '<div style="padding:18px 2px;color:#8093AE;font-size:12px;line-height:1.6">'
+      + 'No target set for ' + P.month + '. Type one in the box on the right and the '
+      + 'pace, the gap and the run-rate needed to hit it appear here. '
+      + '<b style="color:#C4D2E6">Running ' + fmt1(P.runRate) + ' cs/day across '
+      + P.daysElapsed + ' days, ' + fmt(GRAND) + ' cs banked.</b></div>';
+    return;
+  }
   const volPct = pct(GRAND,TARGET), projPct = pct(P.projected,TARGET), timePct = pct(P.daysElapsed,P.daysInMonth);
   // gauge
   safeChart(()=>{
@@ -2510,6 +2534,9 @@ function renderBond(){
 // delta is recomputed from the SUMMED current-vs-prior legs rather than
 // averaging the per-bond percentages -- an average would weight a 72 cs bond
 // the same as a 669 cs one.
+/* The share cell used to be the literal 100.0%, which is only true of the
+   unfiltered table: filtered to one cluster it claimed that cluster was the
+   whole month. It is the visible rows' share of the month now. */
 function bondTotalRow(){
   const tCases = bondRows.reduce((a,r)=>a+r.cases,0);
   const tPrev  = bondRows.reduce((a,r)=>a+(r.prev||0),0);
@@ -2526,7 +2553,7 @@ function bondTotalRow(){
     <td class="num" style="color:#A9B9D4;font-weight:800">${C?fmt1(tPrev):'—'}</td>
     <td class="num">${dcsCell(C?tCases-tPrev:null)}</td>
     <td class="num">${duCell(tDelta)}</td>
-    <td class="num sh">100.0%</td>
+    <td class="num sh">${fmt1(pct(tCases, GRAND))}%</td>
     <td class="num"><div class="covbar" style="justify-content:center">
       <span class="ct" style="color:${COV_TXT[covTone(tA,tT)]}">${tA}/${tT}</span>
       <div class="bar"><span style="width:${cv}%;background:linear-gradient(90deg,${COV_BAR[covTone(tA,tT)]})"></span></div>

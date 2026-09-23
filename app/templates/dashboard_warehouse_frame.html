@@ -2866,7 +2866,21 @@ function renderWds() {
   if (!panel) return;
   const DD = PAYLOAD.dailyDispatch;
   if (!DD || !DD.cur || !DD.cur.days || !Object.keys(DD.cur.days).length) {
-    panel.style.display = 'none'; return;
+    // It used to remove itself, which reads exactly like a panel that was
+    // never built. This one says what is missing.
+    const chips = panel.querySelector('#wdsChips');
+    const mix = panel.querySelector('#wdsMix');
+    const wrap = panel.querySelector('.wds-wrap');
+    const seg = panel.querySelector('#wdsSeg');
+    if (mix) mix.innerHTML = '';
+    if (wrap) wrap.style.display = 'none';
+    if (seg) seg.style.display = 'none';
+    if (chips) chips.innerHTML =
+      '<div style="padding:18px 2px 8px;color:#7E90AE;font-size:12px;line-height:1.6">'
+      + 'No invoice-dated dispatch for this month yet. This panel fills in once a '
+      + 'day\u2019s Secondary Sales export is uploaded; until then the Sales tile above '
+      + 'reads the stock report\u2019s own dispatch column instead.</div>';
+    return;
   }
   const cur = DD.cur, pri = DD.pri || null;
   const lastDay = Math.max.apply(null, Object.keys(cur.days).map(Number));
@@ -2889,7 +2903,10 @@ function renderWds() {
   const WDU = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
   const mtd = cumC[cumC.length - 1] || 0;
-  const tradeDays = Math.max(1, lastDay - (daily[0] <= 0.01 ? 1 : 0));
+  // Days something actually moved. This used to be the day of the month less
+  // one for a dry 1st, which counted every Sunday and every holiday as a
+  // trading day and so understated cs/day by about a day in seven.
+  const tradeDays = Math.max(1, daily.filter(v => v > 0.01).length);
   let bi = 0; daily.forEach((v, i) => { if (v > daily[bi]) bi = i; });
   const priPace = priCum ? priCum[priCum.length - 1] : null;
   const dPace = priPace != null ? Math.round((mtd - priPace) * 100) / 100 : null;
@@ -3466,17 +3483,24 @@ function render() {
   const sHave = !!(sDD && sDD.cur && sDD.cur.days && Object.keys(sDD.cur.days).length);
   const sLastDay = sHave ? Math.max.apply(null, Object.keys(sDD.cur.days).map(Number)) : kLastDay;
   const sMtd = sHave ? Object.values(sDD.cur.days).reduce((a, b) => a + b, 0) : kCur.out;
+  // Both sides must come from the same source. Invoice-dated dispatch and the
+  // stock report's own dispatch column differ by a few percent by nature, so
+  // one over the other is not a growth rate, it is the gap between two
+  // definitions. When only one side has invoice data, there is no comparison.
+  const sSameBasis = sHave ? !!(sDD.pri && sDD.pri.days) : true;
   const sPrv = (sHave && sDD.pri && sDD.pri.days)
     ? Object.keys(sDD.pri.days).reduce((a, k) => a + (Number(k) <= sLastDay ? sDD.pri.days[k] : 0), 0)
     : kPrv.out;
-  const sPct = sPrv > 0 ? (sMtd / sPrv - 1) * 100 : null;
+  const sPct = (sSameBasis && sPrv > 0) ? (sMtd / sPrv - 1) * 100 : null;
   const sLbl = sHave
     ? sDD.cur.m.charAt(0) + sDD.cur.m.slice(1, 3).toLowerCase() + ' 1–' + sLastDay
     : null;
   const sPriorMo = (sHave && sDD.pri)
     ? sDD.pri.m.charAt(0) + sDD.pri.m.slice(1, 3).toLowerCase()
     : kPriorLbl.split(' ')[0];
-  const sPerDay = sMtd / Math.max(1, sLastDay - ((sHave && (sDD.cur.days['1'] || 0) <= 0.01) ? 1 : 0));
+  const sPerDay = sHave
+    ? sMtd / Math.max(1, Object.values(sDD.cur.days).filter(v => v > 0.01).length)
+    : sMtd / Math.max(1, sLastDay - ((kCur.dry || 0) > 0 ? 1 : 0));
   const kNet      = (kCur.in + (kCur.adj || 0)) - kCur.out;
   // shared bar: base = the portion NOT moving, delta = the move against it
   const kMoveBar = (cur, prv, goodUp) => {
@@ -3633,8 +3657,13 @@ function render() {
             <th>Physical</th>
             <th>Allotable</th>
             <th>Pending</th>
-            <th>DoD Δ</th>
-            <th>14-Day Trend</th>
+            <!-- Both columns were named for a cadence the data does not
+                 promise: the comparison is against each warehouse's previous
+                 SNAPSHOT, and the sparkline covers the last 14 snapshots. On a
+                 day when yesterday's report was not uploaded, "DoD" was a
+                 four-day change and "14-Day" was three weeks. -->
+            <th title="Against each warehouse's previous stock report">Δ vs prev</th>
+            <th title="The last 14 stock reports">Recent trend</th>
             <th class="col-status">Status</th>
           </tr></thead>
           <tbody>${tableHtml}</tbody>
@@ -3687,7 +3716,7 @@ function render() {
           <div class="bp-h">By Brand</div>
           <table class="brand-tbl">
             <thead><tr>
-              <th>Brand</th><th>Physical</th><th>Allotable</th><th>Pending</th><th>Share</th><th>7-Day Δ</th><th>Trend</th>
+              <th>Brand</th><th>Physical</th><th>Allotable</th><th>Pending</th><th>Share</th><th title="Against the newest stock report at least 7 days back">Δ vs ~7d</th><th>Trend</th>
             </tr></thead>
             <tbody id="brandTableBody"></tbody>
           </table>
@@ -3701,7 +3730,7 @@ function render() {
           <div class="bp-h">By Pack Size</div>
           <table class="brand-tbl">
             <thead><tr>
-              <th>Pack</th><th>Physical</th><th>Allotable</th><th>Pending</th><th>Share</th><th>7-Day Δ</th><th>Trend</th>
+              <th>Pack</th><th>Physical</th><th>Allotable</th><th>Pending</th><th>Share</th><th title="Against the newest stock report at least 7 days back">Δ vs ~7d</th><th>Trend</th>
             </tr></thead>
             <tbody id="packTableBody"></tbody>
           </table>

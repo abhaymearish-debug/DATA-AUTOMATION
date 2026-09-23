@@ -3276,11 +3276,23 @@ def _warehouse_demand(inbound: list[dict], as_of: str) -> dict:
     for wh, seen in per.items():
         got = [seen.get(k, 0) for k in months]
         total = sum(got)
-        by[wh] = {"avg": round(total / len(months)), "total": round(total),
+        # Divide by the months this warehouse actually traded in, not by three.
+        # A warehouse that opened in August was having two empty months
+        # averaged into its demand, which cut its monthly rate to a third and
+        # so multiplied its months-of-cover by three - enough to move it from
+        # Critical to Overstocked on the strength of not existing yet.
+        live = sum(1 for v in got if v > 0) or len(months)
+        by[wh] = {"avg": round(total / live), "total": round(total),
+                  "monthsWithSales": live,
                   "months": {n: round(v) for n, v in zip(names, got)}}
 
     short = [n.title()[:3] for n in names]
-    label = f"{short[0]}\u2013{short[-1]} {months[-1][:4]} avg"
+    # The year belongs to the month it is written beside: Nov-Dec 2026 with a
+    # January window is not "Nov-Jan 2027".
+    span = (f"{short[0]} {months[0][:4]}\u2013{short[-1]} {months[-1][:4]}"
+            if months[0][:4] != months[-1][:4]
+            else f"{short[0]}\u2013{short[-1]} {months[-1][:4]}")
+    label = f"{span} avg"
     return {"byWarehouse": by, "monthsUsed": names, "periodLabel": label}
 
 
