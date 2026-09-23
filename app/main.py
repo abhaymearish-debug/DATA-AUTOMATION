@@ -2045,8 +2045,14 @@ def dashboard_liquidation_data(request: Request):
     except (liq_live.Unavailable, FileNotFoundError) as exc:
         # These name the workbook that is missing, which is the useful half of
         # the message; the absolute path in front of it is this server's
-        # business, not the reader's.
+        # business, not the reader's. What IS on disk goes after it, so the
+        # page says which of the two legs is missing rather than sending
+        # somebody to look.
         said = str(exc).replace(str(config.CLAUDE_ROOT) + "/", "")
+        try:
+            said += " — on disk: " + liq_live.sources_note()
+        except OSError:
+            pass
         return JSONResponse({"error": said}, status_code=404)
     return JSONResponse(data)
 

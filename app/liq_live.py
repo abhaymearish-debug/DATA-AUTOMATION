@@ -990,6 +990,34 @@ def dashboard_bundle(root: Path | None = None) -> dict:
     return bundle
 
 
+def sources_note(root: Path | None = None) -> str:
+    """What the builder can actually see, for when it cannot build.
+
+    A dashboard that says only "no workbook" leaves you opening folders to
+    find out which one. This names both legs and what is in them, because the
+    answer is nearly always that one month's pair is half there.
+    """
+    root = Path(root) if root else claude_root()
+    bits = []
+    for label, pat in (("KSBC shop sales", "*ANALYSIS.xlsx"),
+                       ("Secondary sales", "*SECONDARY SALES ANALYSIS.xlsx")):
+        folder = root / label
+        if not folder.is_dir():
+            bits.append(f"{label}: no such folder")
+            continue
+        got = sorted(f.name for f in folder.glob(pat)
+                     if not f.name.startswith("~$"))
+        if got:
+            bits.append(f"{label}: {', '.join(got[:4])}"
+                        + (f" (+{len(got) - 4} more)" if len(got) > 4 else ""))
+        else:
+            other = len([f for f in folder.glob("*.xlsx")
+                         if not f.name.startswith("~$")])
+            bits.append(f"{label}: no month workbook"
+                        + (f", {other} other file(s)" if other else ", empty"))
+    return " · ".join(bits)
+
+
 def warm() -> None:
     """Read the workbooks while the server is coming up.
 
