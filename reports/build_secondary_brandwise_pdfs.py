@@ -208,8 +208,15 @@ def extract(workbook: Path, date_from=None, date_to=None):
     return {
         "data": data,
         "brands": sorted(brands_seen),
-        "from": min(dates) if dates else None,
-        "to": max(dates) if dates else None,
+        # The window the report was ASKED for, when one was named. The header
+        # used to print the first and last day a dispatch actually went out
+        # inside it, so a report run for 1-21 September announced itself as
+        # 2-19 September because nothing moved on the 1st or the 20th - and
+        # changing the period changed nothing you could see.
+        "from": date_from or (min(dates) if dates else None),
+        "to": date_to or (max(dates) if dates else None),
+        "moved_from": min(dates) if dates else None,
+        "moved_to": max(dates) if dates else None,
         "grand": grand,
         "skipped_warehouses": skipped_wh,
         "workbook": workbook,

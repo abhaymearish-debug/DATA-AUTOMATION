@@ -332,12 +332,21 @@ def build_view_pdf(data: dict, out_path: Path, *, round_off: bool = False,
         {"labels": [r["name"] for r in rows], "columns": brands,
          "rows": max(len(ch) for ch in chunks)}])
 
-    period = ""
+    # The window the screen is showing, said the way the cluster PDFs say it -
+    # "1 September 2026 - 21 September 2026", not a pair of ISO stamps.
+    def _said(iso: str) -> str:
+        from datetime import date as _date
+        try:
+            d = _date.fromisoformat(str(iso))
+        except (TypeError, ValueError):
+            return str(iso or "")
+        return f"{d.day} {d:%B %Y}"
+
     span = data.get("span") or {}
-    if span.get("min"):
-        period = f"{span['min']} to {span['max']}"
-    if filters and filters.get("date_from"):
-        period = f"{filters['date_from']} to {filters.get('date_to') or span.get('max','')}"
+    opens = data.get("opens") or {}
+    lo = (filters or {}).get("date_from") or opens.get("from") or span.get("min")
+    hi = (filters or {}).get("date_to") or opens.get("to") or span.get("max")
+    period = f"{_said(lo)} - {_said(hi)}" if lo else ""
 
     scope = f"{data['label'].upper()} VIEW"
     if filters:

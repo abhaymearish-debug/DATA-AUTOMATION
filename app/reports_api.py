@@ -989,7 +989,11 @@ def brandwise(view: str = "bond", date_from=None, date_to=None,
                          "Upload a day's raw export on the Raw Data Upload page."}
     workbook = find_secondary_workbook() or Path(sources[0]["name"])
 
-    dates = [l["date"] for l in lines if l["date"]]
+    # Every day an upload answers for, not only the days a dispatch went out.
+    # A day nothing moved is still a day somebody pulled the export and filed
+    # it, and leaving those out made the report open on the 2nd of the month
+    # whenever the 1st was a nil day - which reads as the 1st being missing.
+    dates = sorted({l["date"] for l in lines if l["date"]} | secondary_covered_days())
     span = {"min": min(dates).isoformat() if dates else None,
             "max": max(dates).isoformat() if dates else None}
     # The span is everything on disk, which is what the picker offers. It is
