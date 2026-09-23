@@ -558,28 +558,47 @@ def _sweep_cache() -> None:
             pass
 
 
-def warm_cache() -> None:
+def warm_cache(pause=None) -> None:
     """Parse anything not parsed yet, off the critical path.
 
     A deploy comes up with an empty cache, and the first person to open the
     daily report would otherwise pay for every day file in it. This runs on a
     thread at startup: by the time anybody has signed in, the reading is done.
     Best-effort - a failure here costs nothing but the speed it was buying.
+
+    `pause` is called between files and is where this gives way. One worker
+    serves this app and openpyxl holds the interpreter for as long as it takes
+    to parse a workbook, so a warm-up that simply ran flat out starved the
+    pages it was meant to speed up: after the 23 Sep 2026 deploy - which
+    invalidated every cached parse on purpose, so that a fix to a reader could
+    not be served from behind the old reader's output - both dashboards sat on
+    their loading line while this thread worked through the year. Now, while
+    anybody is waiting on a page, the warm-up waits instead, and the longest it
+    can hold a request is one workbook.
     """
+    hold = pause or (lambda: None)
+
+    def each(items, fn):
+        for item in items:
+            hold()
+            fn(item)
+
     steps = (
         ("master data", lambda: load_master()),
         ("shop day files", lambda: load_shop_daily_raws()),
         ("secondary dispatch", lambda: secondary_lines()),
-        ("cumulative periods", lambda: [cumulative_lines(p["path"])
-                                        for p in cumulative_periods()]),
+        ("cumulative periods",
+         lambda: each(cumulative_periods(), lambda p: cumulative_lines(p["path"]))),
         # A window that runs past the last cumulative pull is stitched from
         # day files, which are read a second way - so warm that reading too.
-        ("day files, stitched", lambda: [_day_lines(f, load_master())
-                                         for f in shop_day_files().values()]),
+        ("day files, stitched",
+         lambda: each(list(shop_day_files().values()),
+                      lambda f: _day_lines(f, load_master()))),
         ("warehouse stock", lambda: load_stock_rows()),
     )
     for what, run in steps:
         try:
+            hold()
             began = datetime.now()
             run()
             took = (datetime.now() - began).total_seconds()
@@ -938,6 +957,25 @@ def _named_window(name: str, near: date | None):
         return None
 
 
+def _secondary_stamp() -> str:
+    """What the secondary uploads look like right now, cheaply."""
+    parts = []
+    for end, path in secondary_raw_files():
+        try:
+            st = path.stat()
+            parts.append(f"{path.name}:{st.st_size}:{st.st_mtime_ns}")
+        except OSError:
+            continue
+    book = find_secondary_workbook()
+    if book is not None:
+        try:
+            st = book.stat()
+            parts.append(f"{book.name}:{st.st_size}:{st.st_mtime_ns}")
+        except OSError:
+            pass
+    return "|".join(parts)
+
+
 def secondary_lines() -> tuple[list, list]:
     """Every dispatch line the app can answer for, and what it read.
 
@@ -947,6 +985,16 @@ def secondary_lines() -> tuple[list, list]:
     only the days no earlier source already claimed. That keeps a cumulative
     export from counting the same invoice twice.
     """
+    # The warehouse payload asks for these twice - once for the months-of-cover
+    # demand and once for the daily panel - and both of those are on the path
+    # of every dashboard open. The per-file parses are cached below, but the
+    # walk and the day-claiming are not, so they are cached here.
+    key = f"seclines:{_PARSER_VERSION}:{_secondary_stamp()}:{_master_stamp()}"
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+    if hit:
+        return hit[1]
+
     claimed: set = set()
     lines: list = []
     sources: list = []
@@ -996,6 +1044,8 @@ def secondary_lines() -> tuple[list, list]:
         claimed |= days
         sources.append(entry(path.name, fresh))
 
+    with _CACHE_LOCK:
+        _CACHE[key] = (0.0, (lines, sources))
     return lines, sources
 
 

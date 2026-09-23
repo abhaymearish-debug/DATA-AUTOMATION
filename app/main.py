@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import threading
+import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode
@@ -40,6 +41,52 @@ from .pipelines import (
 
 app = FastAPI(title="KSD Report Transformer")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+# ---------------------------------------------------------------------------
+# Giving way to whoever is actually waiting
+# ---------------------------------------------------------------------------
+# One worker serves this app, and openpyxl holds the interpreter for as long as
+# it takes to parse a workbook. The start-up warm-up therefore does not merely
+# compete with the pages - it starves them, and a deploy that invalidates the
+# caches on purpose (23 Sep 2026) left both dashboards sitting on their loading
+# line while the warm thread worked through the year's uploads.
+#
+# So the warm-up asks, between files, whether anybody is waiting; if somebody
+# is, it stands aside until they are served. The longest a request can now be
+# held behind the warm-up is one workbook.
+_inflight = 0
+_inflight_lock = threading.Lock()
+_idle = threading.Event()
+_idle.set()
+
+
+@app.middleware("http")
+async def _track_inflight(request: Request, call_next):
+    global _inflight
+    with _inflight_lock:
+        _inflight += 1
+        _idle.clear()
+    try:
+        return await call_next(request)
+    finally:
+        with _inflight_lock:
+            _inflight -= 1
+            if _inflight <= 0:
+                _inflight = 0
+                _idle.set()
+
+
+def _yield_to_requests() -> None:
+    """Called by the warm-up between files. Returns at once when nobody is
+    waiting, which is the usual case; otherwise waits for the page to be
+    served. The timeout is there so a wedged request cannot stop the warm-up
+    for ever - it would only make the NEXT open slow, which is the thing this
+    is trying to avoid."""
+    if _idle.is_set():
+        return
+    _idle.wait(timeout=20)
+    time.sleep(0.02)
 
 
 def _trim0(text: str) -> str:
@@ -271,8 +318,8 @@ def _startup() -> None:
     # one thread, because both are openpyxl and the GIL makes racing them
     # slower than taking turns.
     def _warm() -> None:
-        reports_api.warm_cache()
-        liq_live.warm()
+        reports_api.warm_cache(pause=_yield_to_requests)
+        liq_live.warm(pause=_yield_to_requests)
 
     threading.Thread(target=_warm, name="warm", daemon=True).start()
 

@@ -1014,8 +1014,14 @@ def month_signature(root: Path, month: str) -> str:
     return BUILDER_VERSION + "|" + "|".join(parts)
 
 
-def build_bundle(root: Path, months=None, current=None, use_cache=True):
-    """{'current': KEY, 'months': [...], 'data': {KEY: payload}}"""
+def build_bundle(root: Path, months=None, current=None, use_cache=True, pause=None):
+    """{'current': KEY, 'months': [...], 'data': {KEY: payload}}
+
+    `pause`, when the start-up warm-up passes one, is called before each month
+    is built: it is where the warm-up stands aside for a page somebody is
+    actually waiting on.
+    """
+    hold = pause or (lambda: None)
     months = months or available_months(root)
     cur = (current or detect_current_month(root)).strip().upper()
     if cur not in months:
@@ -1039,6 +1045,7 @@ def build_bundle(root: Path, months=None, current=None, use_cache=True):
             print(f"  {m:<10} cached")
         else:
             try:
+                hold()
                 data[m] = build_payload(root, m)
                 print(f"  {m:<10} built   {data[m]['grand']:>10,.2f} cs")
             except Exception as e:                              # noqa: BLE001
@@ -1107,7 +1114,7 @@ _MEMO: dict = {}
 _LOCK = threading.Lock()
 
 
-def dashboard_bundle(root: Path | None = None) -> dict:
+def dashboard_bundle(root: Path | None = None, pause=None) -> dict:
     """{'current': KEY, 'months': [...], 'data': {KEY: payload}} for the page."""
     root = Path(root) if root else claude_root()
     cur = detect_current_month(root)
@@ -1133,7 +1140,7 @@ def dashboard_bundle(root: Path | None = None) -> dict:
         if hit and hit[0] == stamp:
             return hit[1]
         try:
-            bundle = build_bundle(root, months=months, current=cur)
+            bundle = build_bundle(root, months=months, current=cur, pause=pause)
         finally:
             liq_source.forget()
         _MEMO[str(root)] = (stamp, bundle)
@@ -1172,14 +1179,18 @@ def sources_note(root: Path | None = None) -> str:
     return " · ".join(bits)
 
 
-def warm() -> None:
+def warm(pause=None) -> None:
     """Read the workbooks while the server is coming up.
 
     A month costs half a minute of openpyxl the first time and nothing
     afterwards, and the person who opens the dashboard after a deploy should
     not be the one paying for all of them.
+
+    `pause` is called before each month and is where this gives way to anybody
+    actually waiting on a page - see warm_cache() in reports_api for why that
+    matters on a one-worker install.
     """
     try:
-        dashboard_bundle()
+        dashboard_bundle(pause=pause)
     except Exception as exc:                                    # noqa: BLE001
         log.info("liquidation warm-up skipped: %s: %s", type(exc).__name__, exc)
