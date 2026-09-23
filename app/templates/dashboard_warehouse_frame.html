@@ -1340,8 +1340,94 @@
     table.tbl thead th, table.tbl tbody td { padding-left: 6px; padding-right: 6px; }
     table.tbl tbody td .pill { padding: 2px 7px; }
   }
-  /* And if a pane ever is too narrow even for that, the table scrolls inside
-     its own panel rather than reaching across the one beside it. */
+  /* NARROW PANES AND PHONES.
+     Seven columns do not fit a phone. Making the table scroll inside its own
+     panel stopped it reaching across the page, but it left a table you have to
+     drag sideways to read, which on a phone is a table nobody reads (23 Sep
+     2026, Abhay: "i dont wanna like move right and left").
+
+     So the columns drop in the order of how little they add, and the three
+     that decide anything stay to the end: which warehouse, how much it is
+     holding, and whether that is enough. Nothing is lost that is not also on
+     the page somewhere else - Allotable and Pending are in the header tiles
+     and the brand-and-pack panel, and the sparkline is the same shape the
+     Network Trend chart draws. */
+  .pill .ic { font-style: normal; margin-right: 4px; }
+  .pill b { font-weight: 800; }
+  .pill u.ab { display: none; text-decoration: none; font-weight: 800; }
+  @media (max-width: 760px) {
+    /* the sparkline is decoration before it is information */
+    .col-spark { display: none; }
+  }
+  @media (max-width: 620px) {
+    .col-allot, .col-pend { display: none; }
+    table.tbl { font-size: 11.5px; }
+    table.tbl thead th, table.tbl tbody td { padding-left: 7px; padding-right: 7px; }
+  }
+  @media (max-width: 470px) {
+    .col-delta { display: none; }
+    /* the short word, not a clipped long one */
+    .col-status .pill b { display: none; }
+    .col-status .pill u.ab { display: inline; }
+    .col-status .pill { padding: 3px 6px; font-size: 10px; }
+    .col-status .pill .ic { margin-right: 3px; }
+    table.tbl { font-size: 11px; }
+    table.tbl thead th, table.tbl tbody td { padding-left: 6px; padding-right: 6px; }
+    table.tbl tbody tr.wh-row td:first-child { white-space: normal; line-height: 1.25; }
+    /* a wrapped name reads from its left edge, not from its middle */
+    table.tbl thead th:first-child, table.tbl tbody td:first-child { text-align: left; }
+  }
+  /* The brand and pack tables carry the same seven-column problem and lose
+     their columns on the same rule. Their order is fixed in the markup, so
+     they are addressed by position: 3 Allotable, 4 Pending, 6 delta, 7 trend. */
+  @media (max-width: 760px) {
+    table.brand-tbl th:nth-child(7), table.brand-tbl td:nth-child(7) { display: none; }
+  }
+  @media (max-width: 620px) {
+    table.brand-tbl th:nth-child(3), table.brand-tbl td:nth-child(3),
+    table.brand-tbl th:nth-child(4), table.brand-tbl td:nth-child(4) { display: none; }
+    table.brand-tbl { font-size: 11px; }
+  }
+  @media (max-width: 470px) {
+    table.brand-tbl th:nth-child(6), table.brand-tbl td:nth-child(6) { display: none; }
+  }
+
+  /* Everything else that was laid out for a desk and has to survive a phone.
+     A row of controls that cannot wrap pushes the whole page sideways, and it
+     only takes one of them to make every panel draggable. */
+  @media (max-width: 760px) {
+    /* A grid item is min-width:auto by default, so one wide table inside a
+       single-column grid stretches the column past the screen and takes the
+       whole page with it. */
+    .grid-main > *, .bp-grid > *, .moc-grid > *, .svs-grid > *,
+    .wt-grid > *, .si-grid > *, .cl-grid > * { min-width: 0; }
+    table.brand-tbl tbody td:first-child,
+    table.brand-tbl thead th:first-child { white-space: normal; }
+    #ntHov, #whsReadout, .rdrow { flex-wrap: wrap; }
+    .seg-ctl, .range-chips, .wh-trend-ctrls, .rdrow, .whs-rd, .wh-sub { flex-wrap: wrap; }
+    .seg-ctl > *, .range-chips > * { flex: 0 0 auto; }
+    .wh-trend-ctrls > * { min-width: 0; max-width: 100%; }
+    .rdrow, .whs-rd { row-gap: 6px; }
+    .rd-s, .rd-h { min-width: 0; }
+    .panel h2 { flex-wrap: wrap; row-gap: 8px; }
+    select, .seg-ctl button, .range-chips button { max-width: 100%; }
+  }
+  @media (max-width: 470px) {
+    .seg-ctl button, .range-chips button { font-size: 9.6px; padding: 4px 8px; }
+  }
+  /* The brand x pack matrix is the one thing here that cannot shed a column
+     and still be a matrix, so it is the one thing allowed to scroll - inside
+     its own box, which is a gesture people expect from a grid of figures,
+     rather than dragging the whole page with it. */
+  #bpMatrix { overflow-x: auto; }
+  @media (max-width: 620px) {
+    #bpMatrix table.heat-tbl { font-size: 10px; }
+    #bpMatrix table.heat-tbl th, #bpMatrix table.heat-tbl td { padding-left: 4px; padding-right: 4px; }
+  }
+
+  /* The last resort, for a pane narrower than the three surviving columns:
+     the table scrolls inside its own panel rather than reaching across the
+     page. It should never come to this now. */
   .scroll { overflow-x: auto; }
 </style>
 <!-- Chart.js is served by this app rather than a CDN: an internal tool on a
@@ -3392,13 +3478,21 @@ function render() {
   // Table Status column uses months-of-cover (same classification as the Stock Health
   // panel and the Dispatch Priority section). Pending% tier kept around for legacy
   // (statusFor) but not displayed in the warehouse league table any more.
+  // The glyph and the word are separate so a narrow screen can keep the glyph
+  // and drop the word, rather than clipping "Overstocked" halfway through or
+  // making the whole table drag sideways.
   function shortCoverTier(physical, avg) {
-    if (!avg || avg <= 0) return { tier: 'idle',         label: physical > 0 ? '— No sales' : '—' };
+    // `short` is what a phone gets: "Overstocked" is the only word here long
+    // enough to need one, and a clipped half of it tells nobody anything.
+    const out = (tier, ic, text, short) =>
+      ({ tier, ic, text, short: short || text, label: ic + ' ' + text });
+    if (!avg || avg <= 0) return physical > 0 ? out('idle', '—', 'No sales')
+                                              : out('idle', '—', '');
     const cover = physical / avg;
-    if (cover < 1)  return { tier: 'critical',    label: '🚫 Critical' };
-    if (cover <= 2) return { tier: 'cover-ok',    label: '✅ Healthy'  };
-    if (cover <= 3) return { tier: 'cover-watch', label: '⚠️ Watch'    };
-    return                 { tier: 'overstock',   label: '🚀 Overstocked' };
+    if (cover < 1)  return out('critical',    '🚫', 'Critical');
+    if (cover <= 2) return out('cover-ok',    '✅', 'Healthy');
+    if (cover <= 3) return out('cover-watch', '⚠️', 'Watch');
+    return                 out('overstock',   '🚀', 'Overstocked', 'Over');
   }
   // Sort worst-to-best by months of cover (Critical first, Overstocked last,
   // no-sales rows pushed to the very bottom).
@@ -3427,11 +3521,11 @@ function render() {
     return `<tr class="wh-row" data-wh="${r.warehouse}" data-tier="${s.tier}" title="Click for brand & pack detail">
       <td>${r.warehouse}</td>
       <td class="num">${fmt(r.physical)}</td>
-      <td class="num">${fmt(r.allotable)}</td>
-      <td class="num">${fmt(r.pending)}</td>
-      <td class="num delta-cell ${dCls}">${dTxt}</td>
-      <td class="sparkcell">${sparkSvg(sVals, { w: 84, h: 22, color: sparkColor })}</td>
-      <td class="col-status"><span class="pill ${s.tier}">${s.label}</span></td>
+      <td class="num col-allot">${fmt(r.allotable)}</td>
+      <td class="num col-pend">${fmt(r.pending)}</td>
+      <td class="num delta-cell col-delta ${dCls}">${dTxt}</td>
+      <td class="sparkcell col-spark">${sparkSvg(sVals, { w: 84, h: 22, color: sparkColor })}</td>
+      <td class="col-status"><span class="pill ${s.tier}" title="${s.text}"><i class="ic">${s.ic}</i><b>${s.text}</b><u class="ab">${s.short}</u></span></td>
     </tr>`;
   }).join('');
 
@@ -3628,15 +3722,15 @@ function render() {
           <thead><tr>
             <th>Warehouse</th>
             <th>Physical</th>
-            <th>Allotable</th>
-            <th>Pending</th>
+            <th class="col-allot">Allotable</th>
+            <th class="col-pend">Pending</th>
             <!-- Both columns were named for a cadence the data does not
                  promise: the comparison is against each warehouse's previous
                  SNAPSHOT, and the sparkline covers the last 14 snapshots. On a
                  day when yesterday's report was not uploaded, "DoD" was a
                  four-day change and "14-Day" was three weeks. -->
-            <th title="Against each warehouse's previous stock report">Δ vs prev</th>
-            <th title="The last 14 stock reports">Recent trend</th>
+            <th class="col-delta" title="Against each warehouse's previous stock report">Δ vs prev</th>
+            <th class="col-spark" title="The last 14 stock reports">Recent trend</th>
             <th class="col-status" title="Months of cover — physical stock ÷ monthly demand. Demand basis: ${demandLbl || 'no dispatch uploaded'}${demandScale ? ' (a +' + demandScale + '% scale-up from the days uploaded)' : ''}">Status</th>
           </tr></thead>
           <tbody>${tableHtml}</tbody>
