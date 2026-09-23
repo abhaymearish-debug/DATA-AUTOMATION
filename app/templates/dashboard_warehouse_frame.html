@@ -1341,30 +1341,42 @@
     table.tbl tbody td .pill { padding: 2px 7px; }
   }
   /* NARROW PANES AND PHONES.
-     Seven columns do not fit a phone. Making the table scroll inside its own
-     panel stopped it reaching across the page, but it left a table you have to
-     drag sideways to read, which on a phone is a table nobody reads (23 Sep
-     2026, Abhay: "i dont wanna like move right and left").
+     Seven columns do not fit a phone, and they do not fit half a laptop
+     either. Making the table scroll inside its own panel stopped it reaching
+     across the page, but it left a table you have to drag sideways to read
+     (23 Sep 2026, Abhay: "i dont wanna like move right and left", then "the
+     slideing thing is still there" on a full-screen desktop window).
 
-     So the columns drop in the order of how little they add, and the three
-     that decide anything stay to the end: which warehouse, how much it is
-     holding, and whether that is enough. Nothing is lost that is not also on
-     the page somewhere else - Allotable and Pending are in the header tiles
-     and the brand-and-pack panel, and the sparkline is the same shape the
-     Network Trend chart draws. */
+     The second complaint is why these are CONTAINER queries and not media
+     queries. Above 1100px this page is two columns, so the table gets half
+     the width: on a 1210px page the pane is 600px and the table wants 627,
+     and the names were clipped off the left edge. A media query cannot see
+     that - it measures the window, which was enormous - so the table has to
+     measure the box it is actually in.
+
+     Columns then drop in the order of how little they add, and the three that
+     decide anything survive to the end: which warehouse, how much it holds,
+     and whether that is enough. Nothing goes that is not also somewhere else
+     on the page - Allotable and Pending are in the header tiles and the
+     brand-and-pack panel, and the sparkline is the shape the Network Trend
+     chart draws. */
+  .grid-main > .panel:first-child,
+  #bpGrid > div { container-type: inline-size; }
+
   .pill .ic { font-style: normal; margin-right: 4px; }
   .pill b { font-weight: 800; }
   .pill u.ab { display: none; text-decoration: none; font-weight: 800; }
-  @media (max-width: 760px) {
+
+  @container (max-width: 700px) {
     /* the sparkline is decoration before it is information */
     .col-spark { display: none; }
   }
-  @media (max-width: 620px) {
+  @container (max-width: 560px) {
     .col-allot, .col-pend { display: none; }
     table.tbl { font-size: 11.5px; }
     table.tbl thead th, table.tbl tbody td { padding-left: 7px; padding-right: 7px; }
   }
-  @media (max-width: 470px) {
+  @container (max-width: 430px) {
     .col-delta { display: none; }
     /* the short word, not a clipped long one */
     .col-status .pill b { display: none; }
@@ -1377,32 +1389,33 @@
     /* a wrapped name reads from its left edge, not from its middle */
     table.tbl thead th:first-child, table.tbl tbody td:first-child { text-align: left; }
   }
-  /* The brand and pack tables carry the same seven-column problem and lose
+
+  /* The brand and pack tables have the same seven-column problem and lose
      their columns on the same rule. Their order is fixed in the markup, so
      they are addressed by position: 3 Allotable, 4 Pending, 6 delta, 7 trend. */
-  @media (max-width: 760px) {
+  @container (max-width: 700px) {
     table.brand-tbl th:nth-child(7), table.brand-tbl td:nth-child(7) { display: none; }
   }
-  @media (max-width: 620px) {
+  @container (max-width: 560px) {
     table.brand-tbl th:nth-child(3), table.brand-tbl td:nth-child(3),
     table.brand-tbl th:nth-child(4), table.brand-tbl td:nth-child(4) { display: none; }
     table.brand-tbl { font-size: 11px; }
+    table.brand-tbl tbody td:first-child,
+    table.brand-tbl thead th:first-child { white-space: normal; }
   }
-  @media (max-width: 470px) {
+  @container (max-width: 430px) {
     table.brand-tbl th:nth-child(6), table.brand-tbl td:nth-child(6) { display: none; }
   }
 
   /* Everything else that was laid out for a desk and has to survive a phone.
-     A row of controls that cannot wrap pushes the whole page sideways, and it
-     only takes one of them to make every panel draggable. */
+     These stay viewport-keyed: a row of controls that cannot wrap pushes the
+     whole page sideways, and that is a property of the window. */
   @media (max-width: 760px) {
     /* A grid item is min-width:auto by default, so one wide table inside a
        single-column grid stretches the column past the screen and takes the
        whole page with it. */
     .grid-main > *, .bp-grid > *, .moc-grid > *, .svs-grid > *,
     .wt-grid > *, .si-grid > *, .cl-grid > * { min-width: 0; }
-    table.brand-tbl tbody td:first-child,
-    table.brand-tbl thead th:first-child { white-space: normal; }
     #ntHov, #whsReadout, .rdrow { flex-wrap: wrap; }
     .seg-ctl, .range-chips, .wh-trend-ctrls, .rdrow, .whs-rd, .wh-sub { flex-wrap: wrap; }
     .seg-ctl > *, .range-chips > * { flex: 0 0 auto; }
@@ -1425,9 +1438,9 @@
     #bpMatrix table.heat-tbl th, #bpMatrix table.heat-tbl td { padding-left: 4px; padding-right: 4px; }
   }
 
-  /* The last resort, for a pane narrower than the three surviving columns:
-     the table scrolls inside its own panel rather than reaching across the
-     page. It should never come to this now. */
+  /* The last resort, for a browser with no container queries or a pane
+     narrower than the three surviving columns: the table scrolls inside its
+     own panel rather than reaching across the page. */
   .scroll { overflow-x: auto; }
 </style>
 <!-- Chart.js is served by this app rather than a CDN: an internal tool on a
@@ -1440,6 +1453,16 @@
      than an absent one. It comes back with the sales half. */
   body:not(.phase2) .col-status { display: none; }
 </style>
+<!-- Ask for the figures BEFORE the stylesheet and Chart.js are parsed. The
+     page is a quarter of a megabyte of inline script and the chart library is
+     another two hundred kilobytes, and the fetch used to be the last thing to
+     start, after all of it. Kicked off here it runs alongside the download and
+     the parse instead of after them. -->
+<script>
+  window.__whFigures = fetch('/api/dashboard/warehouse', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); });
+  window.__whFigures.catch(function () {});   // handled properly at the bootstrap
+</script>
 <script src="/static/chart.umd.js"></script>
 </head>
 <body>
@@ -4457,8 +4480,8 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleEq
 // deploy, and never a stale snapshot baked into the markup.
 const PHASE2 = true;
 if (PHASE2) document.body.classList.add('phase2');
-fetch('/api/dashboard/warehouse', {credentials: 'same-origin'})
-  .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+(window.__whFigures || fetch('/api/dashboard/warehouse', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
   .then(data => {
     if (data && data.error) throw new Error(data.error);
     if (!data || !(data.stock || []).length) throw new Error('No stock history yet.');

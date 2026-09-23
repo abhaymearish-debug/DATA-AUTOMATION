@@ -490,6 +490,15 @@ _CACHE_DIR = config.WORKSPACE_ROOT / "_cache"
 _CACHE_KEEP = 600          # files, after which the oldest are swept
 
 
+def _file_stamp(path: Path) -> str:
+    """One short token for a file's current state."""
+    try:
+        st = path.stat()
+        return f"{path.name}:{st.st_size}:{st.st_mtime_ns}"
+    except OSError:
+        return f"{path.name}:-"
+
+
 def _master_stamp() -> str:
     """What master data is right now, as one short token."""
     path = config.MASTER_DATA
@@ -595,6 +604,7 @@ def warm_cache(pause=None) -> None:
          lambda: each(list(shop_day_files().values()),
                       lambda f: _day_lines(f, load_master()))),
         ("warehouse stock", lambda: load_stock_rows()),
+        ("warehouse dashboard", lambda: warehouse_dashboard()),
     )
     for what, run in steps:
         try:
@@ -3231,6 +3241,22 @@ def warehouse_dashboard() -> dict:
     from the invoices and the inbound half, which this app has no raw source
     for at all, is not shown.
     """
+    # The whole payload, kept until one of its sources moves. Building it means
+    # re-reading the stock history (three thousand rows), the brand-and-pack
+    # history (twenty-two thousand) and folding ninety days of mix - about half
+    # a second here and two or three times that on the server's half a CPU,
+    # paid on EVERY open of the page. It was the delay Abhay saw on 23 Sep 2026
+    # between clicking Warehouse and the figures arriving. The per-file parses
+    # were already cached; the reading and folding on top of them were not.
+    stamp = "|".join((_file_stamp(_history_csv("stock_history.csv")),
+                      _file_stamp(_history_csv("brand_pack_history.csv")),
+                      _secondary_stamp(), _master_stamp()))
+    key = f"whdash:{_PARSER_VERSION}:{stamp}"
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+    if hit:
+        return hit[1]
+
     stock: list[dict] = []
     path = _history_csv("stock_history.csv")
     if path.is_file():
@@ -3263,6 +3289,8 @@ def warehouse_dashboard() -> dict:
     out["sales"] = _warehouse_demand(as_of)
     out.update(_warehouse_mix(as_of))
     out["dailyDispatch"] = _daily_dispatch(as_of)
+    with _CACHE_LOCK:
+        _CACHE[key] = (0.0, out)
     return out
 
 

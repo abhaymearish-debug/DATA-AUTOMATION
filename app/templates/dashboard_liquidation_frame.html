@@ -4,6 +4,19 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>K.S. Distillery — Total Liquidation · CMO Live</title>
+<!-- The figures are asked for before the chart library and the page's own
+     script are parsed, so the request runs alongside the download rather than
+     after it. -->
+<script>
+  window.__liqFigures = fetch('/api/dashboard/liquidation', { credentials: 'same-origin' })
+    .then(function (r) {
+      return r.json().catch(function () { return Promise.reject(new Error('HTTP ' + r.status)); })
+        .then(function (d) {
+          return r.ok ? d : Promise.reject(new Error(d && d.error ? d.error : 'HTTP ' + r.status));
+        });
+    });
+  window.__liqFigures.catch(function () {});   // handled properly at the bootstrap
+</script>
 <script src="/static/chart.umd.js"></script>
 <style>
   :root { color-scheme: dark; }
@@ -3232,9 +3245,9 @@ function bootFailed(msg){
     String(msg || '').replace(/[<>&]/g, '') + '</div>';
 }
 
-fetch('/api/dashboard/liquidation', {credentials: 'same-origin'})
+(window.__liqFigures || fetch('/api/dashboard/liquidation', { credentials: 'same-origin' })
   .then(r => r.json().catch(() => Promise.reject(new Error('HTTP ' + r.status)))
-                     .then(d => r.ok ? d : Promise.reject(new Error(d && d.error ? d.error : 'HTTP ' + r.status))))
+                     .then(d => r.ok ? d : Promise.reject(new Error(d && d.error ? d.error : 'HTTP ' + r.status)))))
   .then(data => {
     if(!data || !data.data || !Object.keys(data.data).length) throw new Error('No month could be built yet.');
     boot(data);
