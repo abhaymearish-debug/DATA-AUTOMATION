@@ -23,10 +23,11 @@
   .wrap { max-width: 1540px; margin: 0 auto; }
 
   /* ---------- header ---------- */
-  /* The brand half of this row moved to the sidebar, so the month picker and
-     the period keep to the right rather than sliding left into its place. */
-  .hdr { display:flex; align-items:flex-end; justify-content:flex-end; gap:18px; flex-wrap:wrap;
+  /* The period, the date and the day bar hold the left where the brand lockup
+     used to be; the month picker keeps the right on its own. */
+  .hdr { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap;
          padding-bottom:12px; position:relative; }
+  .hdr .monthpick { flex:0 0 auto; margin-left:auto; }
   .brand { display:flex; align-items:center; gap:16px; }
   .brand-logo { width: 54px; height: 54px; object-fit: contain; flex: 0 0 auto;
     filter: drop-shadow(0 0 10px rgba(255,215,0,0.30)) drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
@@ -39,17 +40,10 @@
   .brand h1 { margin:0; font-size:22px; font-weight:800; letter-spacing:.13em; color:#FFFFFF; line-height:1.1; white-space:nowrap; }
   .brand h1 .accent { color:#FFD700; }
   .brand .tag { margin-top:5px; font-size:11px; font-weight:700; color:#FFD700; text-transform:uppercase; letter-spacing:.28em; white-space:nowrap; }
-  .live { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-weight:700;
-    letter-spacing:.14em; color:#4ADE80; text-transform:uppercase;
-    border:1px solid rgba(74,222,128,.35); border-radius:999px; padding:3px 9px;
-    background:rgba(74,222,128,.07); }
-  .live .dot { width:7px; height:7px; border-radius:50%; background:#4ADE80;
-    box-shadow:0 0 0 0 rgba(74,222,128,.6); animation:pulse 1.8s infinite; }
-  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(74,222,128,.5)} 70%{box-shadow:0 0 0 8px rgba(74,222,128,0)} 100%{box-shadow:0 0 0 0 rgba(74,222,128,0)} }
-  .hdr .meta { text-align:right; font-size:11.5px; color:#8093AE; letter-spacing:.05em; text-transform:uppercase; }
+  .hdr .meta { text-align:left; font-size:11.5px; color:#8093AE; letter-spacing:.05em; text-transform:uppercase; }
   .hdr .meta .period { font-size:16px; color:#80D8F7; font-weight:800; letter-spacing:.01em; text-transform:none; }
   .hdr .meta b { color:#FFD700; font-weight:700; }
-  .dayprog { margin-top:7px; width:210px; height:5px; border-radius:4px; background:#16223a; overflow:hidden; margin-left:auto; }
+  .dayprog { margin-top:7px; width:210px; height:5px; border-radius:4px; background:#16223a; overflow:hidden; }
   .dayprog > span { display:block; height:100%; border-radius:4px;
     background:linear-gradient(90deg,#4FC3F7,#FFD700); }
 
@@ -1093,12 +1087,13 @@
        on screen whichever dashboard or report is open. Saying it twice on
        one screen said nothing extra and cost the page its first 80px. -->
     <div class="meta">
-      <div><select class="mfsel" id="monthSel" hidden aria-label="Month"></select></div>
       <div class="period" id="periodLabel">—</div>
-      <div style="margin-top:5px"><span class="live"><span class="dot"></span>Live</span>
-        &nbsp; As of <b id="asOf">—</b> · Day <b id="dayN">—</b></div>
+      <div style="margin-top:5px">As of <b id="asOf">—</b> · Day <b id="dayN">—</b></div>
       <div class="dayprog"><span id="dayProg" style="width:0%"></span></div>
     </div>
+    <!-- The month picker already says which month is open and whether it is
+         live, so the pill that said Live beside the date said it twice. -->
+    <div class="monthpick"><select class="mfsel" id="monthSel" hidden aria-label="Month"></select></div>
   </div>
 
   <!-- ============ KPI STRIP ============ -->
