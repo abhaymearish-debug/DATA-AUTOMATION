@@ -1316,6 +1316,20 @@
     .grid-kpi .kpi .dpill { margin-right: 5px; }
     .grid-kpi .kpi .sub { font-size: 9.2px; gap: 4px; }
   }
+
+  /* The league table has seven columns, each with 8px of padding either side,
+     and at this width their natural sizes add up to 629px inside a 622px box.
+     Being auto-laid-out it does not shrink - it overhangs, which is why the
+     status pills sat on the panel's edge and over the line beside it. Two
+     points off each column's padding buys 28px, and the table fits with room
+     to spare. The pill loses a point of padding with it. */
+  @media (min-width: 1101px) and (max-width: 1500px) {
+    table.tbl thead th, table.tbl tbody td { padding-left: 6px; padding-right: 6px; }
+    table.tbl tbody td .pill { padding: 2px 7px; }
+  }
+  /* And if a pane ever is too narrow even for that, the table scrolls inside
+     its own panel rather than reaching across the one beside it. */
+  .scroll { overflow-x: auto; }
 </style>
 <!-- Chart.js is served by this app rather than a CDN: an internal tool on a
      distillery network should not stop drawing because somebody else's
