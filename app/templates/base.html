@@ -206,14 +206,16 @@
 
   /* ---------- main ---------- */
   main { margin-left:var(--sb); min-height:100vh; }
-  .topbar { display:flex; align-items:center; gap:12px; padding:14px 26px;
+  /* Tight. Every pixel the heading row keeps is a pixel of table nobody
+     gets, and there is nothing up here that needs room to breathe. */
+  .topbar { display:flex; align-items:center; gap:12px; padding:9px 26px;
             background:var(--card); border-bottom:1px solid var(--line); }
   .topbar h1 { margin:0; font-size:19px; font-weight:650; }
-  /* The tail below a report - the Source chip and whatever else - is what
-     ksdFit reserves before it caps the table, and this padding is part of
-     it. Sixty pixels of it was a band of nothing under every report that the
-     table could have been using. */
-  .content { padding:22px 26px 16px; }
+  /* The tail below a report is what ksdFit reserves before it caps the
+     table, and this padding is part of it. It carried sixty pixels once,
+     which was a band of nothing under every report that the table could have
+     been using; what is left is a margin, not a gap. */
+  .content { padding:10px 26px 8px; }
 
   .btn { border:1px solid var(--line); background:var(--card); color:var(--ink);
          border-radius:8px; padding:8px 14px; font-size:13.5px; cursor:pointer; }
@@ -240,7 +242,7 @@
     .burger { display:inline-block; }
     .topbar { padding:11px 14px; gap:10px; }
     .topbar h1 { font-size:16px; }
-    .content { padding:16px 14px 18px; }
+    .content { padding:10px 14px 8px; }
   }
 
   .banner { background:color-mix(in srgb, var(--bad) 12%, var(--card));
@@ -979,7 +981,7 @@ function tog(btn) {
       // window, and every page carried a scrollbar with nothing under it.
       const par = wrap.parentElement;
       const tail = par ? par.getBoundingClientRect().bottom - box.bottom : 0;
-      const room = innerHeight - box.top - Math.max(0, tail) - 6;
+      const room = innerHeight - box.top - Math.max(0, tail) - 4;
       if (room <= 220) return;
       // A capped box gets a scrollbar; a scrollbar narrows what is inside it;
       // a narrower table is a taller table. On a table already sitting at the
