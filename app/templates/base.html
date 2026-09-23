@@ -14,6 +14,12 @@
     } catch (e) {
       document.documentElement.dataset.theme = 'light';
     }
+    // The sidebar's width, same idea: set before the stylesheet paints, or it
+    // lands at 264 and jumps to wherever you last put it.
+    try {
+      var w = parseInt(localStorage.getItem('ksd-sb') || '', 10);
+      if (w >= 190 && w <= 460) document.documentElement.style.setProperty('--sb', w + 'px');
+    } catch (e) {}
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -206,6 +212,24 @@
 
   /* ---------- main ---------- */
   main { margin-left:var(--sb); min-height:100vh; }
+
+  /* Drag the sidebar's edge to widen or narrow it. The grab area is wider
+     than the line it draws - four pixels is a line, ten is something you can
+     actually catch - and it sits over the seam rather than beside it, so
+     nothing moves to make room for it. */
+  .sb-grip { position:fixed; top:0; bottom:0; left:calc(var(--sb) - 5px);
+             width:10px; z-index:70; cursor:col-resize;
+             background:transparent; border:0; padding:0; }
+  .sb-grip::after { content:''; position:absolute; inset:0 auto 0 4px; width:2px;
+                    background:var(--gold); opacity:0;
+                    transition:opacity .15s ease; }
+  .sb-grip:hover::after, .sb-grip:focus-visible::after,
+  html.sb-dragging .sb-grip::after { opacity:.75; }
+  /* While dragging, the pointer owns the whole window: no text selection, and
+     the cursor stays a resize cursor even over the table it passes across. */
+  html.sb-dragging, html.sb-dragging * { cursor:col-resize !important;
+                                         user-select:none !important; }
+  @media (max-width:900px) { .sb-grip { display:none; } }
   /* Tight. Every pixel the heading row keeps is a pixel of table nobody
      gets, and there is nothing up here that needs room to breathe. */
   .topbar { display:flex; align-items:center; gap:12px; padding:9px 26px;
@@ -887,6 +911,9 @@
   </div>
 </aside>
 
+<button class="sb-grip" id="sbGrip" aria-label="Resize the sidebar"
+        title="Drag to resize · double-click to reset"></button>
+
 <main>
   <div class="topbar">
     <button class="burger" onclick="drawer()" aria-label="Menu">☰</button>
@@ -935,6 +962,56 @@ window.addEventListener('pageshow', e => {
     if (saved) document.documentElement.dataset.theme = saved;
   } catch (err) {}
 });
+
+/* Sidebar width: drag the edge, double-click to put it back. Kept per
+   browser, because it is a preference about this screen and not about the
+   data - and read back before the first paint, up in the head. */
+(function () {
+  const grip = document.getElementById('sbGrip');
+  if (!grip) return;
+  const MIN = 190, MAX = 460, DEFAULT = 264;
+  const root = document.documentElement;
+  const put = px => {
+    const w = Math.max(MIN, Math.min(MAX, Math.round(px)));
+    root.style.setProperty('--sb', w + 'px');
+    try { localStorage.setItem('ksd-sb', String(w)); } catch (e) {}
+    return w;
+  };
+  // A report table caps itself to the window and lays its columns out in
+  // whatever width it has, so it wants to hear about this the same way it
+  // hears about the window changing.
+  const settled = () => dispatchEvent(new Event('resize'));
+
+  let dragging = false;
+  const move = e => { if (dragging) put(e.clientX); };
+  const up = () => {
+    if (!dragging) return;
+    dragging = false;
+    root.classList.remove('sb-dragging');
+    settled();
+  };
+  grip.addEventListener('pointerdown', e => {
+    dragging = true;
+    root.classList.add('sb-dragging');
+    grip.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  grip.addEventListener('pointermove', move);
+  grip.addEventListener('pointerup', up);
+  grip.addEventListener('pointercancel', up);
+  grip.addEventListener('dblclick', () => { put(DEFAULT); settled(); });
+  // Keyboard, because a drag handle that only answers a mouse is a drag
+  // handle half the people in the building cannot use.
+  grip.addEventListener('keydown', e => {
+    const step = e.shiftKey ? 32 : 8;
+    const now = parseInt(getComputedStyle(root).getPropertyValue('--sb'), 10) || DEFAULT;
+    if (e.key === 'ArrowLeft')       { put(now - step); settled(); }
+    else if (e.key === 'ArrowRight') { put(now + step); settled(); }
+    else if (e.key === 'Home')       { put(DEFAULT); settled(); }
+    else return;
+    e.preventDefault();
+  });
+})();
 
 function drawer() {
   document.getElementById('sb').classList.toggle('open');
