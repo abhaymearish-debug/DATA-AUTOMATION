@@ -3950,7 +3950,12 @@ function render() {
     // Past-date exports: physical is drawn, with a hollow ring so the day is
     // visibly different; allotable and pending are left out and the lines run
     // straight across to the days either side.
-    const ptR  = showPts ? 2.2 : 0;
+    // Allotable and pending dots take a 2.4px outline from their line width,
+    // so they come out at a 3.4px radius; physical's had none, came out at
+    // 2.2 and, on a thicker 3px line, read as visibly smaller dots. Same
+    // outline here, and enough radius that each dot stands proud of its own
+    // line by the same amount (3.7 - 1.5 = 3.4 - 1.2).
+    const ptR  = showPts ? 2.5 : 0;
     const ptBg = col => col;
     const noPulled = key => data.map(r => r[key]);
     // Header readout — legend at rest, the hovered day's figures on hover, so
@@ -3991,7 +3996,7 @@ function render() {
             fill: true, cubicInterpolationMode: 'monotone', borderWidth: 3,
             borderCapStyle: 'round', borderJoinStyle: 'round', _glow: 'rgba(96,165,250,.5)',
             pointRadius: ptR, pointBackgroundColor: ptBg(PALETTE.cyan),
-            pointBorderColor: PALETTE.cyan, pointBorderWidth: 0,
+            pointBorderColor: PALETTE.cyan, pointBorderWidth: 2.4,
             pointHoverRadius: 5 },
           { label: 'Allotable', data: noPulled('allot'), spanGaps: true,
             borderColor: PALETTE.green, backgroundColor: 'rgba(0,0,0,0)',
