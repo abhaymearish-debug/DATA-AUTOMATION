@@ -840,6 +840,16 @@ async def build(
             # Everything downstream turns on it: the folder the raws share,
             # what gets moved out of the way, what the history is keyed on and
             # what a later delete would take.
+            # Filed FIRST, before any check can refuse this upload. A refusal
+            # used to leave covers empty, and the history screen groups a run
+            # by the day it covers - so a refused attempt on the 4th filed
+            # itself under today, where nobody filling the 4th would look.
+            # "It doesn't show up in the history" was the refusal, sitting in
+            # the wrong place. The day the operator was filling is the day the
+            # attempt belongs to, whether or not it succeeded.
+            typed_early = _parse_date(covers_date) if covers_date else None
+            if typed_early:
+                job.covers = typed_early.isoformat()
             by_date: dict[str, list[str]] = {}
             for upload in files:
                 shown = Path(upload.filename or "").name
@@ -850,6 +860,8 @@ async def build(
                 found = _warehouse_report_date(upload) or _warehouse_covers([shown])
                 if found:
                     by_date.setdefault(found, []).append(shown)
+            if not job.covers and by_date:
+                job.covers = min(by_date)
             if len(by_date) > 1:
                 # A batch spanning two days cannot be built: the script refuses
                 # to sum two report dates under one, so the whole upload failed
@@ -2117,15 +2129,56 @@ def _card_state() -> dict:
 # ---------------------------------------------------------------------------
 
 
+# The calendar's stream keys are its own, shorter than the upload page's.
+_CAL_STREAM = {
+    "warehouse_stock": "warehouse",
+    "shop_sales_daily": "shop_daily",
+    "shop_sales_cumulative": "shop_cumulative",
+    "secondary_sales": "secondary",
+    "item_issue": "item_issue",
+}
+
+
+def _attempts_that_failed(covered: dict) -> dict:
+    """day -> stream -> the last run for that day that did not land.
+
+    A gap on this screen used to look identical whether nobody had tried to
+    fill it or somebody had tried five times and been turned away each time.
+    They are not the same thing and they need different answers, so a day
+    that was tried says so, and says what it was told.
+    """
+    out: dict = {}
+    for job in STORE.recent(100000):
+        if job.status not in (JobStatus.FAILED, JobStatus.DISCARDED):
+            continue
+        key = _CAL_STREAM.get(job.stream_key)
+        day = job.covers or ""
+        if not key or not day:
+            continue
+        # A later run that landed answers for the day; a failure before it is
+        # history, not a gap.
+        if key in (covered.get(day) or []):
+            continue
+        slot = out.setdefault(day, {})
+        if key in slot:          # recent() is newest first
+            continue
+        slot[key] = {"when": job.finished_at or job.created_at,
+                     "why": job.error or "The upload did not go through.",
+                     "who": (job.user_email or "").split("@")[0]}
+    return out
+
+
 @app.get("/status-calendar", response_class=HTMLResponse)
 def status_calendar(request: Request):
     """Which days the reports can answer for, and which they cannot."""
     user = require_user(request)
+    cal = reports_api.upload_calendar()
+    cal["tried"] = _attempts_that_failed(cal.get("days") or {})
     return templates.TemplateResponse(
         request, "status_calendar.html",
         {"user": user, "page": "calendar", "started_at": STARTED_AT,
          "problems": getattr(app.state, "problems", []),
-         "calendar": reports_api.upload_calendar()},
+         "calendar": cal},
     )
 
 

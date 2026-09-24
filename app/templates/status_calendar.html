@@ -293,6 +293,13 @@
   .bars b.off { background:color-mix(in srgb, var(--bad) 5%, transparent);
                 box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 32%,
                            var(--line)); }
+  /* Missing, but somebody tried. An empty slot on a day nobody touched and
+     an empty slot on a day that was uploaded five times and turned away each
+     time are not the same gap, and the screen has to be able to tell them
+     apart before anyone opens the tile. */
+  .bars b.tried { background:color-mix(in srgb, var(--warn, #F59E0B) 16%, transparent);
+                  box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--warn, #F59E0B) 62%,
+                             transparent); }
   /* Not due: the slot has not opened yet, so it is a mark rather than a disc. */
   .bars b.wait { aspect-ratio:auto; height:4px; max-width:14px; border-radius:2px;
                  background:var(--line); box-shadow:none; }
@@ -442,6 +449,18 @@
   .daypop .st.wait span { margin-left:auto; flex:none; font-size:10px; font-weight:700;
                           color:var(--muted); letter-spacing:.2px; }
 
+  /* What the day was told when it was turned away. It sits under the row it
+     belongs to, in the panel, because it is a sentence and not a state. */
+  .daypop .why { margin:-3px 0 7px; padding:7px 9px; border-radius:9px;
+                 font-size:11.5px; line-height:1.45; color:var(--ink);
+                 background:color-mix(in srgb, var(--warn, #F59E0B) 9%, transparent);
+                 box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--warn, #F59E0B) 26%,
+                            transparent); }
+  .daypop .why u { display:block; text-decoration:none; font-weight:700;
+                   font-size:10px; letter-spacing:.3px; text-transform:uppercase;
+                   color:color-mix(in srgb, var(--warn, #F59E0B) 78%, var(--ink));
+                   margin-bottom:2px; }
+
   /* ---------- a phone ----------
      Seven columns of about fifty pixels: room for the number and five bars,
      and not for their names. The key above still has those, and the panel
@@ -583,10 +602,12 @@ function draw(){
     // file that is in; an empty one is a file that is missing; a stub is one
     // that is not due yet. No words - the key above names them once, and
     // pressing the tile names them again for that day.
+    const triedHere = (CAL.tried || {})[key] || {};
     const bars = S.map(s => {
       const got = have.includes(s.key);
       const wait = !got && dueBy(key, s) > today;
-      return `<b class="${got ? '' : wait ? 'wait' : 'off'}"
+      const tried = !got && !wait && triedHere[s.key];
+      return `<b class="${got ? '' : wait ? 'wait' : (tried ? 'off tried' : 'off')}"
                  style="--c:${esc(s.colour)}"></b>`;
     }).join('');
 
@@ -697,8 +718,17 @@ function openDay(cell){
     if (dueBy(key, s) > today)
       return `<div class="st wait"${c}><i></i><b>${esc(s.label)}</b>` +
              `<span>not due</span></div>`;
-    return `<button type="button" class="up"${c} data-stream="${esc(s.card || s.key)}">` +
-           `<i></i><b>${esc(s.label)}</b><span>Upload</span></button>`;
+    const t = ((CAL.tried || {})[key] || {})[s.key];
+    const row = `<button type="button" class="up"${c} data-stream="${esc(s.card || s.key)}">` +
+                `<i></i><b>${esc(s.label)}</b><span>Upload</span></button>`;
+    if (!t) return row;
+    // A gap somebody has already tried to close needs the reason more than it
+    // needs another Upload button, so the reason goes under it.
+    const who = t.who ? ` by ${esc(t.who)}` : '';
+    const stamp = (t.when || '').slice(0, 10);
+    const when = /^\d{4}-\d{2}-\d{2}$/.test(stamp) ? ` ${esc(saidDay(stamp))}` : '';
+    return row + `<div class="why"><u>Tried${when}${who}` +
+                 ` \u2014 did not go through</u>${esc(t.why)}</div>`;
   }).join('');
 
   pop.innerHTML =
