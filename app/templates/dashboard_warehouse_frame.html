@@ -590,9 +590,6 @@
   .cbar-nm { width: 140px; padding-right: 12px; text-align: right; font-size: 11px; font-weight: 600; color: #E5EAF0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.2px; }
   .cbar-track { flex: 1; position: relative; height: 100%; display: flex; align-items: center; }
   .cbar-rail { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); height: 17px; border-radius: 6px; background: rgba(148,163,184,0.055); box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); z-index: 0; }
-  /* Which days a trend chart left off, and why - one quiet line under it. */
-  .bf-foot { margin: 8px 2px 0; font-size: 11px; line-height: 1.45; color: #93A6C4; }
-  .bf-foot b { color: #C9D6EA; font-weight: 700; }
   .cbar-bar { position: relative; z-index: 1; height: 17px; border-radius: 6px; min-width: 4px; transition: width .8s cubic-bezier(.22,1,.36,1), filter .15s; will-change: width; }
   .cbar-clip { position: absolute; z-index: 2; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 800; text-shadow: 0 1px 1px rgba(0,0,0,0.3); }
   .cbar-val { width: 58px; display: flex; justify-content: flex-end; padding-left: 8px; }
@@ -2067,18 +2064,6 @@ const cluNumOf = k => { const m = /^__C(\d)__$/.exec(k || ''); return m ? +m[1] 
 // the trend charts draw physical only on those days and carry the other two
 // lines straight across. The figures themselves are untouched.
 const pulledOn = d => (PAYLOAD && PAYLOAD.pulledOn && PAYLOAD.pulledOn[d]) || null;
-// "4, 6, 13 Sep" - the back-filled days a chart has left off.
-const backfillFoot = (el, days) => {
-  if (!el) return;
-  if (!days.length) { el.hidden = true; el.innerHTML = ''; return; }
-  const M3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const byMon = {};
-  days.forEach(d => { const [y, m, dd] = d.split('-').map(Number); (byMon[y + '-' + m] = byMon[y + '-' + m] || []).push(dd); });
-  const txt = Object.keys(byMon).map(k => byMon[k].join(', ') + ' ' + M3[+k.split('-')[1] - 1]).join('; ');
-  el.innerHTML = 'Not drawn: <b>' + txt + '</b> \u2014 back-filled from exports pulled later, which Bevco '
-    + 'reports lower than a same-day export (physical as well as pending). Their figures are in the Warehouse Stock report.';
-  el.hidden = false;
-};
 const PULLED_NOTE = d => {
   const p = pulledOn(d); if (!p) return '';
   const [y, m, dd] = p.split('-').map(Number);
@@ -2123,8 +2108,7 @@ let whTrendChart = null;
 function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
   deltaWord = deltaWord || 'month';
   // Same-day pulls only - see renderNetworkTrend for why back-filled days are
-  // left off, and the footnote for which ones.
-  backfillFoot(document.getElementById('wtFoot'), monthDates.filter(d => pulledOn(d)));
+  // left off.
   monthDates = monthDates.filter(d => !pulledOn(d));
   const canvas = document.getElementById('whTrendChart');
   if (!canvas) return;
@@ -3810,7 +3794,6 @@ function render() {
         </div>
         <div class="rdrow" id="ntHov"></div>
         <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
-        <div class="bf-foot" id="ntFoot" hidden></div>
 
         <div class="whs-hd">
           <h2>All Warehouses by Stock</h2>
@@ -3836,7 +3819,6 @@ function render() {
       <div class="sstrip" id="whTrendNote"></div>
       <div class="rdrow" id="whTrendHov"></div>
       <div class="chart-wrap trendwrap"><canvas id="whTrendChart"></canvas></div>
-      <div class="bf-foot" id="wtFoot" hidden></div>
     </div>
 
     <div class="panel" style="margin-top:14px">
@@ -3954,10 +3936,8 @@ function render() {
     // comes in below a same-day one - physical too, not only pending: the 4th
     // of September reads 12,042 between 13,525 and 13,517 - so every one of
     // them drew a dip and a bounce that never happened. Same-day pulls only,
-    // as the Cowork dashboard draws it; the days left off are named beneath.
-    const skipped = data.filter(r => r.pulled).map(r => r.d);
+    // as the Cowork dashboard draws it.
     data = data.filter(r => !r.pulled);
-    backfillFoot(document.getElementById('ntFoot'), skipped);
     if (data.length < 2) data = trendData.filter(r => !r.pulled).slice(-2);
     const ctx2 = canvas.getContext('2d');
     const gradPhys = ctx2.createLinearGradient(0, 0, 0, 320);
