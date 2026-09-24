@@ -57,10 +57,43 @@ def extract_warehouse_name(txt):
         keep.append(tok)
     return ' '.join(keep).strip() or s
 
+# A Bevco stock export carries the date in THREE places, and only one of them
+# answers "which day is this stock?":
+#
+#   <b>Report Date & Time : </b>19-Sep-2026            <- page header, no time
+#   Report Date &amp; Time : 19-Sep-2026 09:09 AM      <- when it was printed
+#   Warehouse : <b>WH-KOLLAM ...</b>,Report Period : <b>19-Sep-2026</b>
+#
+# The first two are the ERP's print stamp. The third sits inside the report,
+# beside the warehouse it belongs to, and is the period the report was asked
+# for. Pull a past day - which Bevco allows - and the print stamp is today
+# while the period is the day you chose.
+#
+# This used to read the print stamp, so every back-dated export was filed
+# under the day it was DOWNLOADED. September 4th, 6th, 13th, 20th and 21st
+# were pulled correctly, on the 23rd, and all five were written into the 23rd.
+# The day asked for is the day it belongs to, so Report Period is read first
+# and the print stamp is only a fallback for an export that has no period.
+_RE_PERIOD = re.compile(
+    r'Report\s+Period\s*:\s*(?:<b>\s*)?([0-9]{1,2}-[A-Za-z]{3}-[0-9]{4})', re.I)
+_RE_PRINTED = re.compile(
+    r'Report\s+Date\s*(?:&amp;|&)\s*Time\s*:\s*(?:</b>)?\s*([0-9]{1,2}-[A-Za-z]{3}-[0-9]{4})', re.I)
+
+
 def extract_report_date(txt):
-    m = re.search(r'Report Date\s*(?:&amp;|&)\s*Time\s*:\s*</b>\s*([0-9]{1,2}-[A-Za-z]{3}-[0-9]{4})', txt)
+    m = _RE_PERIOD.search(txt) or _RE_PRINTED.search(txt)
     if not m:
-        m = re.search(r'Report Period\s*:\s*<b>([0-9]{1,2}-[A-Za-z]{3}-[0-9]{4})', txt)
+        return None
+    # '04-Sep-2026' and '4-Sep-2026' are the same day and the two fields do not
+    # agree on the padding, so it is normalised here rather than leaving two
+    # spellings to be compared downstream.
+    dt = datetime.strptime(m.group(1), "%d-%b-%Y")
+    return f"{dt.day}-{dt.strftime('%b')}-{dt.year}"
+
+
+def extract_printed_date(txt):
+    """When the ERP printed it - not what it is for. Reported, never filed."""
+    m = _RE_PRINTED.search(txt)
     return m.group(1) if m else None
 
 def parse_rows(txt):
@@ -125,6 +158,7 @@ warehouse_rows = {}   # wh_name -> list of dict rows
 report_date = None
 report_dates_seen = {}   # date-string -> count of files carrying it
 unreadable = []
+printed_seen = set()
 for p in raw_files:
     txt = p.read_text(errors='replace')
     if 'Warehouse :' not in txt:
@@ -139,6 +173,9 @@ for p in raw_files:
     if d:
         report_dates_seen[d] = report_dates_seen.get(d, 0) + 1
         if not report_date: report_date = d
+    pulled = extract_printed_date(txt)
+    if pulled:
+        printed_seen.add(pulled)
     rows = parse_rows(txt)
     if wh and rows:
         warehouse_rows[wh] = rows
@@ -651,6 +688,12 @@ top_brand = brands_sorted[0]
 print(f"TOP_WAREHOUSE: {top_wh[0]} ({int(top_wh[1]['phys'])} cases)")
 print(f"TOP_BRAND: {top_brand[0]} ({int(top_brand[1]['phys'])} cases)")
 
+# A back-dated pull is normal and worth saying out loud, so a day filed
+# under one date from an export printed on another is visible in the log
+# rather than being something you have to know to look for.
+if printed_seen and printed_seen != {report_date}:
+    print(f"PULLED_ON: {', '.join(sorted(printed_seen))} (back-dated export; "
+          f"filed under its Report Period, {report_date})")
 print(f"REPORT_DATE: {report_date}")
 print(f"REPORT_ISO: {report_iso}")
 print(f"N_WH: {n_wh}")

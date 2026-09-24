@@ -708,7 +708,7 @@ function openUpload(c){
   if (!upMonth.hidden) initMonth();
   upDayLabel.textContent =
       (c.mode === 'range' || wantsPeriod(c)) ? 'Days this pull covers'
-    : c.mode === 'files' ? 'Date this export covers (read from the file name)'
+    : c.mode === 'files' ? 'Date this export covers (leave blank to read it from the file)'
     : 'Date this export covers';
 
   if (c.mode === 'range' || wantsPeriod(c)){
@@ -851,8 +851,13 @@ upFiles.addEventListener('change', () => {
   showPicked();
   if (card && card.mode === 'batch'){ refreshName(); return; }
   if (!card || card.mode !== 'files' || !upFiles.files.length) return;
-  const found = dateFromFilename(upFiles.files[0].name);
-  if (found && !upDate.value) setDay(found);
+  // The date is NOT taken from the filename any more. Bevco names a stock
+  // export for the day it was DOWNLOADED, so a past day pulled today comes
+  // down called today - and filling the box from that name put the wrong
+  // day in front of the operator as though the app had read it off the file.
+  // The day is inside the file, in its Report Period, and the server reads
+  // it there. Left empty, the file answers for itself; filled in, it is the
+  // operator saying which day they mean, and the two have to agree.
   refreshName();
 });
 

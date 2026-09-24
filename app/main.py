@@ -851,13 +851,19 @@ async def build(
             if typed_early:
                 job.covers = typed_early.isoformat()
             by_date: dict[str, list[str]] = {}
+            printed_on: set = set()
             for upload in files:
                 shown = Path(upload.filename or "").name
-                # The date Bevco wrote INSIDE the export is the one the build
-                # files the stock under, so it is the one that decides which
-                # day this upload fills. The filename only answers for it when
-                # the file itself does not.
-                found = _warehouse_report_date(upload) or _warehouse_covers([shown])
+                # The Report Period inside the export is the day it is OF, and
+                # the day the build files it under, so it is what decides.
+                # The filename is only the day it was DOWNLOADED - Bevco names
+                # a back-dated pull for today - so it answers for the day only
+                # when the file itself cannot.
+                inside, printed = _warehouse_dates(upload)
+                on_name = _warehouse_covers([shown])
+                if printed:
+                    printed_on.add(printed)
+                found = inside or on_name
                 if found:
                     by_date.setdefault(found, []).append(shown)
             if not job.covers and by_date:
@@ -877,25 +883,28 @@ async def build(
                     "time.")
             real = next(iter(by_date), "")
             typed = _parse_date(covers_date) if covers_date else None
+            # A date in the dialog is the operator saying which day they are
+            # filling, and it has to match the day the file is of, because the
+            # file is what gets filed. Letting a filename stand in for that -
+            # the filename is the day it was DOWNLOADED, not the day it is for
+            # - is how a mislabelled export files itself somewhere nobody
+            # asked for. The dialog no longer prefills from the filename, so
+            # a date here is a real answer and a disagreement is a real
+            # disagreement.
             if typed and real and typed.isoformat() != real:
-                # The date in the dialog used to win, in silence, and this is
-                # what that cost. Bevco's stock report is the position ON THE
-                # DAY IT IS PULLED - there is no past-date export - so filling
-                # a gap by pulling it again gives today's stock under today's
-                # report date. The upload was labelled with the day the office
-                # meant to fill, the build read the real date out of the file
-                # and filed the stock under THAT, and the day they were filling
-                # still read "not uploaded" behind a run that had gone green.
-                # September 4th, 6th, 13th, 20th and 21st were all lost this
-                # way, each one re-filing the 23rd.
                 raise UploadRejected(
-                    f"These files are the {_pretty_day(real)} stock export, not "
-                    f"{_pretty_day(typed.isoformat())}. Bevco's stock report is "
-                    "the position on the day it is pulled, so pulling it again "
-                    "now gives today's stock whatever date it is filed under - "
-                    f"and it would be filed under {_pretty_day(real)} anyway. A "
-                    "past day can only be filled from that day's own export.")
+                    f"These files are the {_pretty_day(real)} stock export - "
+                    f"that is the Report Period printed inside them - but the "
+                    f"dialog is set to {_pretty_day(typed.isoformat())}. Set the "
+                    f"date to {_pretty_day(real)}, or pick the "
+                    f"{_pretty_day(typed.isoformat())} export.")
             job.covers = real or (typed.isoformat() if typed else "")
+            # Worth recording: a back-dated pull is filed under the day it is
+            # OF, not the day it came down, and the two being different is the
+            # thing that used to go wrong in silence.
+            back_dated = sorted(d for d in printed_on if d and d != job.covers)
+            if back_dated:
+                job.summary["pulled_on"] = back_dated
             if not job.covers:
                 # An empty covers date falls back to the upload day everywhere
                 # downstream, so a renamed export filed itself under today and
@@ -1173,34 +1182,48 @@ def _first_dispatch_day(raw: Path) -> str:
     return min(dates).isoformat() if dates else ""
 
 
-# The report date Bevco writes into the export itself. build_warehouse_stock.py
-# reads exactly this and files the day's stock under it, so the app has to read
-# the same thing to know which day an upload is really going to fill.
-_WH_INSIDE_RE = re.compile(
-    r"Report\s+Date\s*(?:&amp;|&)\s*Time\s*:\s*</b>\s*"
-    r"(\d{1,2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
+# A Bevco stock export carries a date in three places and they are not the
+# same thing:
+#
+#   <b>Report Date & Time : </b>19-Sep-2026            <- page header, no time
+#   Report Date &amp; Time : 19-Sep-2026 09:09 AM      <- when it was printed
+#   Warehouse : <b>WH-KOLLAM ...</b>,Report Period : <b>19-Sep-2026</b>
+#
+# Bevco lets you export a past day, and when you do, the print stamp is today
+# while the Report Period is the day you asked for. The period is what the
+# report is OF, so it is what decides the day - and it is what
+# build_warehouse_stock.py files the stock under, which is the other reason
+# this has to read the same field.
 _WH_PERIOD_RE = re.compile(
-    r"Report\s+Period\s*:\s*<b>\s*(\d{1,2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
+    r"Report\s+Period\s*:\s*(?:<b>\s*)?(\d{1,2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
+_WH_PRINTED_RE = re.compile(
+    r"Report\s+Date\s*(?:&amp;|&)\s*Time\s*:\s*(?:</b>)?\s*"
+    r"(\d{1,2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
 
 
-def _warehouse_report_date(upload: UploadFile) -> str:
-    """The date inside a Bevco stock export, as ISO. '' if it cannot be read.
+def _warehouse_dates(upload: UploadFile) -> tuple[str, str]:
+    """(the day this export is OF, the day it was printed), ISO, '' if unread.
 
-    A Bevco export is an HTML table saved as .xls and the header sits in the
-    first few KB, so this reads a slice and puts the file back where it found
-    it - _save_upload streams the same handle straight afterwards.
+    A Bevco export is an HTML table saved as .xls and all three date fields
+    sit in the first few KB, so this reads a slice and puts the file back
+    where it found it - _save_upload streams the same handle straight after.
     """
     try:
         head = upload.file.read(262_144)
         upload.file.seek(0)
     except (OSError, ValueError, AttributeError):
-        return ""
+        return "", ""
     if isinstance(head, bytes):
         head = head.decode("utf-8", "replace")
-    m = _WH_INSIDE_RE.search(head) or _WH_PERIOD_RE.search(head)
-    if not m:
-        return ""
-    return _warehouse_covers([f"Report {m.group(1)}"])
+    period = _WH_PERIOD_RE.search(head)
+    printed = _WH_PRINTED_RE.search(head)
+    best = period or printed
+    return (_warehouse_covers([f"Report {best.group(1)}"]) if best else "",
+            _warehouse_covers([f"Report {printed.group(1)}"]) if printed else "")
+
+
+def _warehouse_report_date(upload: UploadFile) -> str:
+    return _warehouse_dates(upload)[0]
 
 
 def _pretty_day(iso: str) -> str:
