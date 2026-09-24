@@ -10,6 +10,7 @@ Nothing here writes. The only mutation path in the service is promote.py.
 from __future__ import annotations
 
 import csv
+import json
 import re
 import threading
 from collections import defaultdict
@@ -3273,6 +3274,95 @@ def warehouse_dashboard_json() -> str:
     return blob
 
 
+# Which stock days came from an export pulled LATER than the day it is for.
+# Bevco lets a past day be exported, and the office back-fills gaps that way,
+# but a past-date export only carries that day's physical stock properly: its
+# allotable sits almost level with physical and its pending near zero (the 4th
+# of September, pulled on the 23rd: 12,042 / 12,017 / 5, against 750-1,770
+# pending on every same-day pull around it). Drawn as a point on a trend, that
+# reads as the whole network's pending collapsing for a day. The figures are
+# kept exactly as uploaded; the charts are told which days to draw physical
+# only. Every upload keeps its own files, so this is read off them rather than
+# guessed from the shape of the numbers.
+_WH_PERIOD_RX = re.compile(
+    r"Report\s+Period\s*:\s*(?:<b>\s*)?(\d{1,2})-([A-Za-z]{3})-(\d{4})", re.I)
+_WH_PRINTED_RX = re.compile(
+    r"Report\s+Date\s*(?:&amp;|&)\s*Time\s*:\s*(?:</b>)?\s*(\d{1,2})-([A-Za-z]{3})-(\d{4})", re.I)
+_MON3_NUM = {m: i for i, m in enumerate(
+    ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"], 1)}
+_PULLED_MEMO: dict = {}
+
+
+def _rx_iso(m) -> str:
+    try:
+        return date(int(m.group(3)), _MON3_NUM[m.group(2).upper()], int(m.group(1))).isoformat()
+    except (KeyError, ValueError):
+        return ""
+
+
+def _upload_dates(job_dir) -> tuple:
+    """(Report Periods, print days) of one kept upload. Memoised per upload."""
+    raw = job_dir / "raw"
+    try:
+        stamp = (job_dir / "job.json").stat().st_mtime_ns
+    except OSError:
+        return set(), set()
+    hit = _PULLED_MEMO.get(job_dir.name)
+    if hit and hit[0] == stamp:
+        return hit[1], hit[2]
+    periods, printed = set(), set()
+    if raw.is_dir():
+        for f in raw.iterdir():
+            if not f.is_file() or not f.name.lower().startswith("report"):
+                continue
+            try:
+                head = f.read_bytes()[:262_144].decode("utf-8", "replace")
+            except OSError:
+                continue
+            m = _WH_PERIOD_RX.search(head)
+            if m:
+                periods.add(_rx_iso(m))
+            m = _WH_PRINTED_RX.search(head)
+            if m:
+                printed.add(_rx_iso(m))
+    periods.discard("")
+    printed.discard("")
+    _PULLED_MEMO[job_dir.name] = (stamp, periods, printed)
+    return periods, printed
+
+
+def stock_pulled_on() -> dict:
+    """day -> the day its stock export was pulled, for days pulled later.
+
+    The day's figures are whatever its latest successful upload built, so that
+    is the upload asked.
+    """
+    root = config.JOBS_ROOT
+    latest: dict = {}
+    if not root.is_dir():
+        return {}
+    for jd in root.iterdir():
+        try:
+            job = json.loads((jd / "job.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if job.get("stream_key") != "warehouse_stock" or job.get("status") != "promoted":
+            continue
+        periods, printed = _upload_dates(jd)
+        if len(periods) != 1:
+            continue
+        day = next(iter(periods))
+        made = str(job.get("created_at") or "")
+        if day not in latest or made > latest[day][0]:
+            latest[day] = (made, printed)
+    out = {}
+    for day, (_, printed) in latest.items():
+        later = sorted(d for d in printed if d > day)
+        if later:
+            out[day] = later[-1]
+    return out
+
+
 def warehouse_dashboard() -> dict:
     """Every stock snapshot, and the dispatch that draws it down.
 
@@ -3337,6 +3427,10 @@ def warehouse_dashboard() -> dict:
     # three cluster cards added to less than the network they are a partition
     # of. One map, served with the data it describes.
     out["clusters"] = dict(CLUSTER_OF_WAREHOUSE)
+    try:
+        out["pulledOn"] = {d: p for d, p in stock_pulled_on().items() if d in set(out["days"])}
+    except Exception:          # a chart annotation must never take the page down
+        out["pulledOn"] = {}
     out["sales"] = _warehouse_demand(as_of)
     out.update(_warehouse_mix(as_of))
     out["dailyDispatch"] = _daily_dispatch(as_of)

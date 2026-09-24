@@ -2058,6 +2058,18 @@ let WH_CLUSTER = {
   MENONPARA: 3, BATTATHUR: 3, KALPETTA: 3, NADUVANNUR: 3,
 };
 const cluNumOf = k => { const m = /^__C(\d)__$/.exec(k || ''); return m ? +m[1] : 0; };
+// Days whose stock export was pulled LATER than the day it is for, and when.
+// A past-date Bevco export carries that day's physical stock but not its
+// allotment - allotable sits level with physical and pending near zero - so
+// the trend charts draw physical only on those days and carry the other two
+// lines straight across. The figures themselves are untouched.
+const pulledOn = d => (PAYLOAD && PAYLOAD.pulledOn && PAYLOAD.pulledOn[d]) || null;
+const PULLED_NOTE = d => {
+  const p = pulledOn(d); if (!p) return '';
+  const [y, m, dd] = p.split('-').map(Number);
+  return 'Pulled ' + dd + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]
+    + ' \u00b7 physical only';
+};
 // A month, in days, for turning months of cover into days of cover. The
 // demand basis is built on whole calendar months, so 30.4 is the honest
 // conversion; a flat 30 quietly added most of a day of cover to every row.
@@ -2108,8 +2120,9 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
     return row ? (row[key] == null ? null : row[key]) : null;
   });
   const physSeries  = seriesFor('physical');
-  const allotSeries = seriesFor('allotable');
-  const pendSeries  = seriesFor('pending');
+  // Past-date exports carry physical only - see pulledOn().
+  const allotSeries = seriesFor('allotable').map((v, i) => pulledOn(monthDates[i]) ? null : v);
+  const pendSeries  = seriesFor('pending').map((v, i) => pulledOn(monthDates[i]) ? null : v);
   const lastOf = arr => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i]; return null; };
   const labels = monthDates.map(fmtDateLabel);
   const ctx = canvas.getContext('2d');
@@ -2235,7 +2248,7 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
 
   // A dot on every snapshot stippled the lines and fought the endpoint markers.
   // The hover already surfaces any single day, so the line itself stays clean.
-  const baseDs = { tension: 0.38, borderCapStyle: 'round', borderJoinStyle: 'round',
+  const baseDs = { cubicInterpolationMode: 'monotone', borderCapStyle: 'round', borderJoinStyle: 'round',
     pointRadius: 0, pointBorderWidth: 0, pointHitRadius: 14,
     pointHoverRadius: 5.5, pointHoverBorderColor: '#0B1220', pointHoverBorderWidth: 2.5,
     spanGaps: true, clip: false };
@@ -2317,9 +2330,14 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
     data: {
       labels: labels,
       datasets: [
-        Object.assign({ label: 'Physical', data: physSeries, borderColor: '#60A5FA',
+        Object.assign({}, baseDs, { label: 'Physical', data: physSeries, borderColor: '#60A5FA',
           backgroundColor: physGrad, fill: 'origin', borderWidth: 3,
-          pointBackgroundColor: '#60A5FA', pointHoverBackgroundColor: '#93C5FD' }, baseDs),
+          pointBackgroundColor: monthDates.map(d => pulledOn(d) ? '#0B1220' : '#60A5FA'),
+          pointHoverBackgroundColor: '#93C5FD',
+          // a hollow ring marks a day drawn from a later export
+          pointRadius: monthDates.map(d => pulledOn(d) ? 3.2 : 0),
+          pointBorderColor: '#60A5FA',
+          pointBorderWidth: monthDates.map(d => pulledOn(d) ? 1.6 : 0) }),
         Object.assign({ label: 'Allotable', data: allotSeries, borderColor: lineGrad,
           backgroundColor: fillGrad, fill: 'origin', borderWidth: 3,
           pointBackgroundColor: '#81C784', pointHoverBackgroundColor: '#A6E9B5' }, baseDs),
@@ -2344,7 +2362,10 @@ function renderWhTrend(byDate, monthDates, monthLabel, selected, deltaWord) {
             }
             const vals = {};
             tt.dataPoints.forEach(dp => { vals[dp.dataset.label] = dp.parsed.y; });
-            paintLegend({ label: tt.dataPoints[0].label, vals: vals });
+            const di = tt.dataPoints[0].dataIndex;
+            const pn = PULLED_NOTE(monthDates[di]);
+            if (pn) { vals.Allotable = null; vals.Pending = null; }
+            paintLegend({ label: tt.dataPoints[0].label + (pn ? '<u>' + pn + '</u>' : ''), vals: vals });
           }
         }
       },
@@ -3578,7 +3599,7 @@ function render() {
   // cliff to anyone who clicked 90D or All.
   const trendData = dates.map(d => {
     const rs = byDate.get(d);
-    return { d, n: rs.length,
+    return { d, n: rs.length, pulled: pulledOn(d),
              phys: sum(rs.map(r=>r.physical)),
              allot: sum(rs.map(r=>r.allotable)),
              pend: sum(rs.map(r=>r.pending)) };
@@ -3913,7 +3934,16 @@ function render() {
     const gradPhys = ctx2.createLinearGradient(0, 0, 0, 320);
     gradPhys.addColorStop(0, 'rgba(96,165,250,0.20)');
     gradPhys.addColorStop(1, 'rgba(96,165,250,0.02)');
-    const showPts = data.length <= 21;
+    // A dot on every day up to a month's worth, as the Cowork dashboard draws
+    // it: a 30-day view of daily uploads is ~28 points, and switching the dots
+    // off at 21 turned the same chart into an unmarked wave.
+    const showPts = data.length <= 31;
+    // Past-date exports: physical is drawn, with a hollow ring so the day is
+    // visibly different; allotable and pending are left out and the lines run
+    // straight across to the days either side.
+    const ptR  = data.map(r => r.pulled ? 3.2 : (showPts ? 2.2 : 0));
+    const ptBg = col => data.map(r => r.pulled ? '#0B1220' : col);
+    const noPulled = key => data.map(r => r.pulled ? null : r[key]);
     // Header readout — legend at rest, the hovered day's figures on hover, so
     // no floating card ever sits over the lines (the liquidation pattern).
     const hov = document.getElementById('ntHov');
@@ -3931,8 +3961,10 @@ function render() {
       const short = trendFullN && r.n < trendFullN;
       hov.innerHTML = '<span class="rd-h live">' + fmtDateLabel(r.d) + '</span>'
         + ntSpan('Physical', '#60A5FA', fmt(r.phys))
-        + ntSpan('Allotable', '#81C784', fmt(r.allot))
-        + ntSpan('Pending', '#FFB74D', fmt(r.pend))
+        + ntSpan('Allotable', '#81C784', r.pulled ? '\u2014' : fmt(r.allot))
+        + ntSpan('Pending', '#FFB74D', r.pulled ? '\u2014' : fmt(r.pend))
+        + (r.pulled ? '<span class="rd-s" style="--c:#93A6C4;cursor:default"><i class="dot"></i><em>'
+            + PULLED_NOTE(r.d) + '</em></span>' : '')
         + (short ? '<span class="rd-s" style="--c:#E3A32B;cursor:default"><i class="dot"></i><em>Short export</em><b>'
             + r.n + '</b><u>of ' + trendFullN + ' WH</u></span>' : '');
     }
@@ -3943,21 +3975,25 @@ function render() {
       data: {
         labels: data.map(r => fmtDateLabel(r.d)),
         datasets: [
+          // monotone: smooth, but never swinging past a real value the way a
+          // tensioned curve does either side of a sharp change
           { label: 'Physical',  data: data.map(r => r.phys),
             borderColor: PALETTE.cyan, backgroundColor: gradPhys,
-            fill: true, tension: 0.35, borderWidth: 3,
+            fill: true, cubicInterpolationMode: 'monotone', borderWidth: 3,
             borderCapStyle: 'round', borderJoinStyle: 'round', _glow: 'rgba(96,165,250,.5)',
-            pointRadius: showPts ? 2 : 0, pointHoverRadius: 5 },
-          { label: 'Allotable', data: data.map(r => r.allot),
+            pointRadius: ptR, pointBackgroundColor: ptBg(PALETTE.cyan),
+            pointBorderColor: PALETTE.cyan, pointBorderWidth: data.map(r => r.pulled ? 1.6 : 0),
+            pointHoverRadius: 5 },
+          { label: 'Allotable', data: noPulled('allot'), spanGaps: true,
             borderColor: PALETTE.green, backgroundColor: 'rgba(0,0,0,0)',
-            fill: false, tension: 0.35, borderWidth: 2.4,
+            fill: false, cubicInterpolationMode: 'monotone', borderWidth: 2.4,
             borderCapStyle: 'round', borderJoinStyle: 'round', _glow: 'rgba(129,199,132,.45)',
-            pointRadius: showPts ? 2 : 0, pointHoverRadius: 5 },
-          { label: 'Pending',   data: data.map(r => r.pend),
+            pointRadius: showPts ? 2.2 : 0, pointBackgroundColor: PALETTE.green, pointHoverRadius: 5 },
+          { label: 'Pending',   data: noPulled('pend'), spanGaps: true,
             borderColor: PALETTE.amber, backgroundColor: 'rgba(0,0,0,0)',
-            fill: false, tension: 0.35, borderWidth: 2.4,
+            fill: false, cubicInterpolationMode: 'monotone', borderWidth: 2.4,
             borderCapStyle: 'round', borderJoinStyle: 'round', _glow: 'rgba(255,183,77,.4)',
-            pointRadius: showPts ? 2 : 0, pointHoverRadius: 5 }
+            pointRadius: showPts ? 2.2 : 0, pointBackgroundColor: PALETTE.amber, pointHoverRadius: 5 }
         ]
       },
       options: {
