@@ -836,19 +836,54 @@ async def build(
                 )
 
         if stream_key == "warehouse_stock":
+            # Which day this drop is for, settled BEFORE a byte is written.
+            # Everything downstream turns on it: the folder the raws share,
+            # what gets moved out of the way, what the history is keyed on and
+            # what a later delete would take.
+            by_date: dict[str, list[str]] = {}
             for upload in files:
-                name = validate_warehouse_name(upload.filename or "")
-                target = stream.input_path() / name
-                _save_upload(upload, target)
-                placed.append(target)
-            # Bevco writes the report date into the filename and the build
-            # aborts on a mixed batch, so the first name speaks for all of them.
-            # A date typed in the dialog wins: the operator is looking at the
-            # file, and a renamed export should not silently file itself wrong.
+                shown = Path(upload.filename or "").name
+                # The date Bevco wrote INSIDE the export is the one the build
+                # files the stock under, so it is the one that decides which
+                # day this upload fills. The filename only answers for it when
+                # the file itself does not.
+                found = _warehouse_report_date(upload) or _warehouse_covers([shown])
+                if found:
+                    by_date.setdefault(found, []).append(shown)
+            if len(by_date) > 1:
+                # A batch spanning two days cannot be built: the script refuses
+                # to sum two report dates under one, so the whole upload failed
+                # and left every file of it sitting in the folder, where it
+                # then failed the NEXT day's build too. Caught here, nothing is
+                # written and nothing is poisoned.
+                spread = "; ".join(
+                    f"{d} ({len(v)} file{'s' if len(v) > 1 else ''})"
+                    for d, v in sorted(by_date.items()))
+                raise UploadRejected(
+                    f"Those files are from more than one report date - {spread}. "
+                    "A day's stock is built on its own, so upload one date at a "
+                    "time.")
+            real = next(iter(by_date), "")
             typed = _parse_date(covers_date) if covers_date else None
-            job.covers = (typed.isoformat() if typed else
-                          _warehouse_covers(job.uploaded_names or
-                                            [p.name for p in placed]) or "")
+            if typed and real and typed.isoformat() != real:
+                # The date in the dialog used to win, in silence, and this is
+                # what that cost. Bevco's stock report is the position ON THE
+                # DAY IT IS PULLED - there is no past-date export - so filling
+                # a gap by pulling it again gives today's stock under today's
+                # report date. The upload was labelled with the day the office
+                # meant to fill, the build read the real date out of the file
+                # and filed the stock under THAT, and the day they were filling
+                # still read "not uploaded" behind a run that had gone green.
+                # September 4th, 6th, 13th, 20th and 21st were all lost this
+                # way, each one re-filing the 23rd.
+                raise UploadRejected(
+                    f"These files are the {_pretty_day(real)} stock export, not "
+                    f"{_pretty_day(typed.isoformat())}. Bevco's stock report is "
+                    "the position on the day it is pulled, so pulling it again "
+                    "now gives today's stock whatever date it is filed under - "
+                    f"and it would be filed under {_pretty_day(real)} anyway. A "
+                    "past day can only be filled from that day's own export.")
+            job.covers = real or (typed.isoformat() if typed else "")
             if not job.covers:
                 # An empty covers date falls back to the upload day everywhere
                 # downstream, so a renamed export filed itself under today and
@@ -858,6 +893,21 @@ async def build(
                 raise UploadRejected(
                     "No report date could be read from those filenames. Pick the "
                     "date the stock is for in the dialog and upload again.")
+            # Raws are only deleted after a build that SUCCEEDS, so one day that
+            # failed left its files behind - and every later day then aborted on
+            # ERROR_MIXED_DATES against them, with no way to clear the folder
+            # from the app. Uploading a new day now parks the older day's
+            # leftovers instead, so a single bad day stops with itself. Same
+            # date is left alone: those are the warehouses already uploaded for
+            # this day, and the build is meant to see them together.
+            parked = _park_stale_raws(job.covers)
+            if parked:
+                job.summary["parked_raws"] = parked
+            for upload in files:
+                name = validate_warehouse_name(upload.filename or "")
+                target = stream.input_path() / name
+                _save_upload(upload, target)
+                placed.append(target)
 
         elif stream_key == "shop_sales_daily":
             # Standalone day: name it canonically and store it. No month
@@ -1109,6 +1159,81 @@ def _first_dispatch_day(raw: Path) -> str:
     except Exception:
         return ""
     return min(dates).isoformat() if dates else ""
+
+
+# The report date Bevco writes into the export itself. build_warehouse_stock.py
+# reads exactly this and files the day's stock under it, so the app has to read
+# the same thing to know which day an upload is really going to fill.
+_WH_INSIDE_RE = re.compile(
+    r"Report\s+Date\s*(?:&amp;|&)\s*Time\s*:\s*</b>\s*"
+    r"(\d{1,2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
+_WH_PERIOD_RE = re.compile(
+    r"Report\s+Period\s*:\s*<b>\s*(\d{1,2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
+
+
+def _warehouse_report_date(upload: UploadFile) -> str:
+    """The date inside a Bevco stock export, as ISO. '' if it cannot be read.
+
+    A Bevco export is an HTML table saved as .xls and the header sits in the
+    first few KB, so this reads a slice and puts the file back where it found
+    it - _save_upload streams the same handle straight afterwards.
+    """
+    try:
+        head = upload.file.read(262_144)
+        upload.file.seek(0)
+    except (OSError, ValueError, AttributeError):
+        return ""
+    if isinstance(head, bytes):
+        head = head.decode("utf-8", "replace")
+    m = _WH_INSIDE_RE.search(head) or _WH_PERIOD_RE.search(head)
+    if not m:
+        return ""
+    return _warehouse_covers([f"Report {m.group(1)}"])
+
+
+def _pretty_day(iso: str) -> str:
+    try:
+        d = date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return iso
+    return f"{d.day} {MONTH_NAMES[d.month - 1][:3].title()} {d.year}"
+
+
+def _park_stale_raws(keep: str) -> list[str]:
+    """Move un-consumed raws for any OTHER report date out of the build folder.
+
+    build_warehouse_stock.py reads every raw in the folder at once and aborts
+    if they carry two report dates, and it only deletes them when the build
+    succeeded. So one day that failed - an export saved from Excel, a download
+    cut short - left 28 files behind that broke every following day as well,
+    and nothing in the app could clear them. They are moved, never deleted:
+    _stale/<date>/ keeps them for anyone who wants to look.
+    """
+    folder = STREAMS["warehouse_stock"].input_path()
+    if not folder.is_dir():
+        return []
+    moved: list[str] = []
+    for path in sorted(folder.iterdir()):
+        if not path.is_file() or not _WH_DATE_RE.match(path.name):
+            continue
+        found = _warehouse_covers([path.name])
+        if not found or found == keep:
+            continue
+        bin_dir = folder / "_stale" / found
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        dest = bin_dir / path.name
+        n = 1
+        while dest.exists():
+            dest = bin_dir / f"{path.stem} ({n}){path.suffix}"
+            n += 1
+        try:
+            shutil.move(str(path), str(dest))
+            moved.append(path.name)
+        except OSError:
+            # Better a build that still aborts on mixed dates, and says so,
+            # than an upload that fails because a leftover would not move.
+            pass
+    return moved
 
 
 def _archive_raws(job: Job, placed: list[Path]) -> None:

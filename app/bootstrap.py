@@ -25,6 +25,24 @@ def _copy_if_absent(src: Path, dst: Path) -> bool:
     return True
 
 
+def _refresh(src: Path, dst: Path) -> bool:
+    """Copy when the copy on the disk is not the one in this image.
+
+    The build scripts are CODE, and the image is where they are versioned.
+    Seeding them only when absent meant a fix shipped in a deploy never
+    reached the disk they actually run from: the first boot's copy ran for
+    ever, and a corrected script sat in the image doing nothing. Data is a
+    different matter and stays on _copy_if_absent.
+    """
+    if not src.exists():
+        return False
+    if dst.exists() and dst.read_bytes() == src.read_bytes():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return True
+
+
 def ensure_workspace() -> list[str]:
     """Create the layout the build scripts expect. Returns what was seeded."""
     done: list[str] = []
@@ -43,7 +61,7 @@ def ensure_workspace() -> list[str]:
     # the reports are their output, not a reimplementation of them.
     copied = 0
     for src in sorted((SEED / "scripts").glob("*.py")):
-        if _copy_if_absent(src, config.SCRIPTS_DIR / src.name):
+        if _refresh(src, config.SCRIPTS_DIR / src.name):
             copied += 1
     if copied:
         done.append(f"{copied} build script(s)")

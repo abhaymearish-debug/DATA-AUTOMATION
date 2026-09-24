@@ -93,8 +93,17 @@ def parse_rows(txt):
 # test silently matched ZERO files on a space-named drop, so the build reported
 # `STATUS: NO_RAWS` on a folder holding a full 28-file day and the dashboard
 # went stale without an error. Accept either separator; inert on the old form.
+# Extension (widened 24 Sep 2026). The app's warehouse_stock stream accepts
+# .xls AND .xlsx, and a portal handing back 'Report_21-Sep-2026.XLS' is the
+# same export in a different case - but `p.suffix == '.xls'` saw none of
+# those. A raw this glob misses is a raw nothing ever reads: the build
+# printed NO_RAWS, exited 0, the job went green, and the day was absent from
+# the history, the reports and the status calendar with a successful run
+# behind it. The gate that accepts the upload and the glob that reads it have
+# to agree, so this takes whatever validate_warehouse_name() let through.
 raw_files = sorted(p for p in FOLDER.iterdir()
-                   if re.match(r'^Report[ _]', p.name) and p.suffix == '.xls')
+                   if re.match(r'^Report[ _]', p.name)
+                   and p.suffix.lower() in ('.xls', '.xlsx'))
 
 # No-raws guard (added 30 Jul 2026). Documented in warehouse-stock-workbook.md
 # step 9 and consumed by the `warehouse-stock` scheduled task, but never
@@ -104,15 +113,27 @@ raw_files = sorted(p for p in FOLDER.iterdir()
 # the task on an already-built day must be a quiet no-op, not a traceback.
 if not raw_files:
     print("STATUS: NO_RAWS")
-    print(f"    No Report_*.xls files in '{FOLDER}'. Nothing to build.")
-    sys.exit(0)
+    print(f"    No Report_* files in '{FOLDER}'. Nothing to build.")
+    # A re-fire of the scheduled task on an already-built day is a quiet
+    # no-op, and stays one. An upload is not: KSD_EXPECT_RAWS says the app
+    # has just written this day's files into the folder, so finding none
+    # means they are not files this script reads - and exiting 0 there filed
+    # the day as built when nothing had been built.
+    sys.exit(3 if os.environ.get("KSD_EXPECT_RAWS") else 0)
 
 warehouse_rows = {}   # wh_name -> list of dict rows
 report_date = None
 report_dates_seen = {}   # date-string -> count of files carrying it
+unreadable = []
 for p in raw_files:
     txt = p.read_text(errors='replace')
-    if 'Warehouse :' not in txt: continue  # skip frameset root
+    if 'Warehouse :' not in txt:
+        # The frameset root of a Bevco export legitimately lands here. So does
+        # a workbook re-saved out of Excel, a download that was cut short, and
+        # an error page saved under the export's name - none of which is a
+        # stock file, and all of which used to pass through in silence.
+        unreadable.append(p.name)
+        continue
     wh = extract_warehouse_name(txt)
     d = extract_report_date(txt)
     if d:
@@ -128,8 +149,33 @@ for p in raw_files:
 if len(report_dates_seen) > 1:
     pairs = ', '.join(f"{k} ({v} file/s)" for k, v in sorted(report_dates_seen.items()))
     print(f"ERROR_MIXED_DATES: raw files span multiple report dates: {pairs}")
-    print("    ACTION: keep only one day's Report_*.xls in 'Warehouse stock/' and re-run.")
+    print("    A day's export is built on its own; two days in one folder would "
+          "be summed under a single date.")
+    print("    ACTION: upload one report date at a time. Uploading the newer "
+          "date on its own moves the older day's leftover files aside "
+          "automatically, so this clears itself on the next upload.")
     sys.exit(2)
+
+# Nothing-parsed guard (added 24 Sep 2026). Zero warehouses used to run
+# straight on: it saved an EMPTY day workbook, wrote a 0-row history entry -
+# which, on a date that already had good rows, DELETED them - and only then
+# fell over on an empty list. The day was gone from the reports and the
+# calendar, and the history was worse than before the run. Nothing is written
+# until at least one warehouse has been read.
+if not warehouse_rows:
+    shown = ', '.join(p.name for p in raw_files[:6])
+    print(f"ERROR_NO_ROWS_PARSED: not one warehouse could be read out of "
+          f"{len(raw_files)} file(s): {shown}" + (" ..." if len(raw_files) > 6 else ""))
+    print("    A Bevco stock export is an HTML table saved as .xls. A file "
+          "re-saved from Excel, a download that stopped short, or an error "
+          "page saved under the export's name all read as empty here.")
+    print("    ACTION: download the day's export from Bevco again and upload it "
+          "exactly as it arrives, without opening it in Excel first.")
+    sys.exit(4)
+
+if unreadable:
+    print(f"UNREADABLE_RAWS: {len(unreadable)} file(s) held no warehouse and were "
+          f"skipped: {', '.join(unreadable[:6])}" + (" ..." if len(unreadable) > 6 else ""))
 
 if _num_warnings:
     sample = ', '.join(sorted({str(x) for x in _num_warnings})[:5])
@@ -180,6 +226,24 @@ else:
 if missing:
     print(f"⚠️  MISSING_WAREHOUSES: {len(missing)} warehouse(s) present on {prior_date_for_scope} but absent today: {', '.join(missing)}")
     print(f"    ACTION: re-export the missing warehouse(s) from Bevco, drop into 'Warehouse stock/', and re-run.")
+
+# Partial-drop guard (added 24 Sep 2026). A drop holding a handful of the
+# network's warehouses used to be filed as the day: the history took it, and
+# every figure drawn off that date - network stock, cover days, the stock
+# trend - read a fraction of the real position as if it were the whole of it.
+# A warning nobody reads is not enough protection for a figure a director
+# acts on. The raws stay where they are, so exporting the rest and uploading
+# them for the SAME date merges with what is already here and this runs
+# through on the full set.
+if prior_wh_set and len(today_wh_set) < 0.8 * len(prior_wh_set):
+    print(f"ERROR_PARTIAL_DAY: this drop holds {len(today_wh_set)} of the "
+          f"{len(prior_wh_set)} warehouses that reported on {prior_date_for_scope}. "
+          "Filing it would understate network stock for the day.")
+    print(f"    MISSING: {', '.join(missing)}")
+    print("    ACTION: export the missing warehouse(s) and upload them for the "
+          "same date - they join the ones already uploaded - then this runs "
+          "again on the full set.")
+    sys.exit(5)
 if newly_added:
     print(f"NEW_WAREHOUSES: {len(newly_added)} warehouse(s) appearing today that weren't on {prior_date_for_scope}: {', '.join(newly_added)}")
 if not missing and not newly_added and prior_date_for_scope:
@@ -466,6 +530,14 @@ if HIST_CSV.exists():
                 had_date = True
                 continue
             prior_hist_rows.append(row)
+# Belt and braces on top of the nothing-parsed guard above: an empty parse
+# must never reach this rewrite, because the rewrite drops the date's existing
+# rows before writing the new ones. Zero new rows there is not "a day with no
+# stock" - it is a day erased.
+if not new_rows:
+    print(f"HIST_SKIPPED: nothing parsed for {report_iso}; history left untouched")
+    sys.exit(4)
+
 _tmp = HIST_CSV.with_suffix('.csv.tmp')
 with _tmp.open('w', newline='') as f:
     w = csv.writer(f)

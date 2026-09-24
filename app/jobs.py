@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -318,11 +319,27 @@ def _explain(step: Step, result: StepResult, stdout: str, stderr: str,
     to the log to find it. So the script's own last word is the error, with the
     exit code kept as a suffix for anyone debugging.
     """
+    lines = ((stdout or "") + "\n" + (stderr or "")).splitlines()
     said = ""
-    for line in reversed(((stdout or "") + "\n" + (stderr or "")).splitlines()):
-        text = line.strip()
-        if text.upper().startswith(("ERROR:", "ABORT:", "FATAL:")):
+    action = ""
+    for i in range(len(lines) - 1, -1, -1):
+        text = lines[i].strip()
+        # The scripts name their failures - ERROR_MIXED_DATES,
+        # ERROR_NO_ROWS_PARSED, ERROR_PARTIAL_DAY - not just "ERROR:". The
+        # narrower test matched none of those, so the most useful sentence the
+        # script printed was thrown away and the operator got the last line of
+        # a traceback instead.
+        if re.match(r"^(ERROR|ABORT|FATAL)[A-Z_]*\s*:", text, re.IGNORECASE):
             said = text.split(":", 1)[1].strip()
+            # The ACTION line under it says what to do about it, which is the
+            # half the operator actually needs.
+            for follow in lines[i + 1:]:
+                nxt = follow.strip()
+                if nxt.upper().startswith("ACTION:"):
+                    action = nxt.split(":", 1)[1].strip()
+                    break
+                if re.match(r"^[A-Z_]+\s*:", nxt):
+                    break
             break
     if not said:
         for line in reversed((stderr or "").splitlines()):
@@ -336,14 +353,24 @@ def _explain(step: Step, result: StepResult, stdout: str, stderr: str,
     # folder and appends the history CSVs as it goes, so by the time a step
     # fails the live data may already have changed - and telling the operator
     # otherwise sends them away without checking.
-    if stream_key == "warehouse_stock":
+    if stream_key == "warehouse_stock" and result.returncode in (2, 3, 4, 5):
+        # Every one of those guards stops before the workbook is saved and
+        # before the history is touched, and the day's files are left where
+        # they are. Saying "check the folder" after a clean refusal sends the
+        # operator looking for damage that cannot be there.
+        tail = ("Nothing was written and the day's files are still uploaded, so "
+                "fixing this and uploading again is all it takes.")
+    elif stream_key == "warehouse_stock":
         tail = ("The warehouse stock workbook and history are written in place, "
                 "so check the stream folder before retrying — this run may have "
                 "changed them.")
     else:
         tail = "The live workbook was NOT modified."
     if said:
-        return f"{head}: {said} (exit {result.returncode}) — {tail}"
+        body = f"{head}: {said}"
+        if action:
+            body += f" What to do: {action}"
+        return f"{body} (exit {result.returncode}) — {tail}"
     return (f"{head} (exit {result.returncode}). {tail} "
             "See the build log for what the script printed.")
 

@@ -300,7 +300,14 @@ WAREHOUSE_STOCK = Stream(
         # brand_pack_history.csv, and calls maintain_inbound_history.py as a
         # non-fatal hook.
         Step("build_warehouse_stock.py",
-             label="Build stock dashboard + append history"),
+             label="Build stock dashboard + append history",
+             # The script treats an empty folder as a quiet no-op, because a
+             # re-fire of the Mac's scheduled task on an already-built day is
+             # one. A run behind an upload is not: files have just been
+             # written into that folder, so finding none means they are not
+             # files the script reads - and exiting 0 there reported the day
+             # as built when nothing had been.
+             env=lambda ctx: {"KSD_EXPECT_RAWS": "1"}),
     ),
 )
 
