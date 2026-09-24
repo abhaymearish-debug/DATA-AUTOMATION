@@ -353,7 +353,7 @@ def _explain(step: Step, result: StepResult, stdout: str, stderr: str,
     # folder and appends the history CSVs as it goes, so by the time a step
     # fails the live data may already have changed - and telling the operator
     # otherwise sends them away without checking.
-    if stream_key == "warehouse_stock" and result.returncode in (2, 3, 4, 5):
+    if stream_key == "warehouse_stock" and result.returncode in (2, 3, 4, 5, 6):
         # Every one of those guards stops before the workbook is saved and
         # before the history is touched, and the day's files are left where
         # they are. Saying "check the folder" after a clean refusal sends the

@@ -159,6 +159,7 @@ report_date = None
 report_dates_seen = {}   # date-string -> count of files carrying it
 unreadable = []
 printed_seen = set()
+periods_seen = set()   # Report Period ONLY - never the print stamp
 for p in raw_files:
     txt = p.read_text(errors='replace')
     if 'Warehouse :' not in txt:
@@ -176,6 +177,10 @@ for p in raw_files:
     pulled = extract_printed_date(txt)
     if pulled:
         printed_seen.add(pulled)
+    _per = _RE_PERIOD.search(txt)
+    if _per:
+        _pd = datetime.strptime(_per.group(1), "%d-%b-%Y")
+        periods_seen.add(f"{_pd.day}-{_pd.strftime('%b')}-{_pd.year}")
     rows = parse_rows(txt)
     if wh and rows:
         warehouse_rows[wh] = rows
@@ -217,6 +222,29 @@ if unreadable:
 if _num_warnings:
     sample = ', '.join(sorted({str(x) for x in _num_warnings})[:5])
     print(f"⚠️  NUMERIC_COERCE_WARN: {len(_num_warnings)} non-numeric stock cell(s) read as 0 (e.g. {sample})")
+
+# THE DATE PICKED ON UPLOAD IS THE DATE (24 Sep 2026). The office chooses the
+# day in the upload dialog and pulls that day's export for it; the app passes
+# that choice here as KSD_REPORT_DATE and the stock is filed under it. The
+# files are only asked to agree: their Report Period must be the same day, so
+# picking the 20th and dropping in the 4th's folder is stopped here rather than
+# filing one day's stock under another. What this script used to do instead -
+# read a date of its own out of the export, and the wrong one, the print stamp
+# - is how five back-dated September days were written into the 23rd.
+_picked = os.environ.get("KSD_REPORT_DATE", "").strip()
+if _picked:
+    _pdt = datetime.strptime(_picked, "%Y-%m-%d")
+    _picked_txt = f"{_pdt.day}-{_pdt.strftime('%b')}-{_pdt.year}"
+    # Checked against the Report Period alone. The print stamp is the day the
+    # file came down and has no say in which day it is for.
+    _inside = sorted(periods_seen)
+    if _inside and _inside != [_picked_txt]:
+        print(f"ERROR_DATE_MISMATCH: the upload was for {_picked_txt}, but the files' "
+              f"Report Period says {', '.join(_inside)}.")
+        print(f"    ACTION: upload the {_picked_txt} export for {_picked_txt}, or pick "
+              f"{', '.join(_inside)} as the date.")
+        sys.exit(6)
+    report_date = _picked_txt
 
 if not report_date:
     # fallback from filename

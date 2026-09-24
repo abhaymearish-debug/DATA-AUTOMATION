@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import calendar
 import gzip
+import json
 import os
 import re
 import shutil
@@ -319,6 +320,12 @@ def _startup() -> None:
     # one thread, because both are openpyxl and the GIL makes racing them
     # slower than taking turns.
     def _warm() -> None:
+        # Ahead of the warm-up: the repair rewrites stock history, and warming
+        # the reports first would only mean warming them twice.
+        try:
+            run_stock_repair()
+        except Exception as exc:
+            print(f"[repair] PROBLEM: {type(exc).__name__}: {exc}")
         reports_api.warm_cache(pause=_yield_to_requests)
         liq_live.warm(pause=_yield_to_requests)
 
@@ -836,91 +843,64 @@ async def build(
                 )
 
         if stream_key == "warehouse_stock":
-            # Which day this drop is for, settled BEFORE a byte is written.
-            # Everything downstream turns on it: the folder the raws share,
-            # what gets moved out of the way, what the history is keyed on and
-            # what a later delete would take.
-            # Filed FIRST, before any check can refuse this upload. A refusal
-            # used to leave covers empty, and the history screen groups a run
-            # by the day it covers - so a refused attempt on the 4th filed
-            # itself under today, where nobody filling the 4th would look.
-            # "It doesn't show up in the history" was the refusal, sitting in
-            # the wrong place. The day the operator was filling is the day the
-            # attempt belongs to, whether or not it succeeded.
-            typed_early = _parse_date(covers_date) if covers_date else None
-            if typed_early:
-                job.covers = typed_early.isoformat()
-            by_date: dict[str, list[str]] = {}
+            # THE DATE PICKED IS THE DATE. The office chooses a day in the
+            # dialog, pulls that day's export from Bevco, and uploads it for
+            # that day - so the day it is filed under is the day that was
+            # picked, and nothing else gets a say. It is recorded before any
+            # check can refuse the upload, so even a refusal is filed on the
+            # day somebody was trying to fill.
+            #
+            # For a long time something else DID get a say. The build read a
+            # date out of the export for itself, and read the wrong one - the
+            # "Report Date & Time" print stamp, which is the day the file was
+            # DOWNLOADED - so five September days pulled back-dated on the
+            # 23rd were all filed into the 23rd. Then the upload read the
+            # filename, which Bevco also names for the download day. Neither
+            # is asked any more.
+            typed = _parse_date(covers_date) if covers_date else None
+            if not typed:
+                raise UploadRejected(
+                    "Pick the date this stock is for, then upload.")
+            job.covers = typed.isoformat()
+            ctx.meta["report_date"] = job.covers
+
+            # The files are only asked to AGREE with that choice. Each carries
+            # the day it was pulled for in its Report Period; picking the 20th
+            # and dropping in the 4th's folder would otherwise file one day's
+            # stock under another, which is the one mistake this page must not
+            # let through quietly.
+            periods: dict[str, list[str]] = {}
             printed_on: set = set()
             for upload in files:
                 shown = Path(upload.filename or "").name
-                # The Report Period inside the export is the day it is OF, and
-                # the day the build files it under, so it is what decides.
-                # The filename is only the day it was DOWNLOADED - Bevco names
-                # a back-dated pull for today - so it answers for the day only
-                # when the file itself cannot.
-                inside, printed = _warehouse_dates(upload)
-                on_name = _warehouse_covers([shown])
+                period, printed = _warehouse_dates(upload)
                 if printed:
                     printed_on.add(printed)
-                found = inside or on_name
-                if found:
-                    by_date.setdefault(found, []).append(shown)
-            if not job.covers and by_date:
-                job.covers = min(by_date)
-            if len(by_date) > 1:
-                # A batch spanning two days cannot be built: the script refuses
-                # to sum two report dates under one, so the whole upload failed
-                # and left every file of it sitting in the folder, where it
-                # then failed the NEXT day's build too. Caught here, nothing is
-                # written and nothing is poisoned.
-                spread = "; ".join(
-                    f"{d} ({len(v)} file{'s' if len(v) > 1 else ''})"
-                    for d, v in sorted(by_date.items()))
+                if period:
+                    periods.setdefault(period, []).append(shown)
+            wrong = {d: v for d, v in periods.items() if d != job.covers}
+            if wrong:
+                n = sum(len(v) for v in wrong.values())
+                which = " and ".join(_pretty_day(d) for d in sorted(wrong))
                 raise UploadRejected(
-                    f"Those files are from more than one report date - {spread}. "
-                    "A day's stock is built on its own, so upload one date at a "
-                    "time.")
-            real = next(iter(by_date), "")
-            typed = _parse_date(covers_date) if covers_date else None
-            # A date in the dialog is the operator saying which day they are
-            # filling, and it has to match the day the file is of, because the
-            # file is what gets filed. Letting a filename stand in for that -
-            # the filename is the day it was DOWNLOADED, not the day it is for
-            # - is how a mislabelled export files itself somewhere nobody
-            # asked for. The dialog no longer prefills from the filename, so
-            # a date here is a real answer and a disagreement is a real
-            # disagreement.
-            if typed and real and typed.isoformat() != real:
-                raise UploadRejected(
-                    f"These files are the {_pretty_day(real)} stock export - "
-                    f"that is the Report Period printed inside them - but the "
-                    f"dialog is set to {_pretty_day(typed.isoformat())}. Set the "
-                    f"date to {_pretty_day(real)}, or pick the "
-                    f"{_pretty_day(typed.isoformat())} export.")
-            job.covers = real or (typed.isoformat() if typed else "")
-            # Worth recording: a back-dated pull is filed under the day it is
-            # OF, not the day it came down, and the two being different is the
-            # thing that used to go wrong in silence.
+                    f"You picked {_pretty_day(job.covers)}, but "
+                    f"{'this file is' if n == 1 else f'{n} of these files are'} "
+                    f"the export for {which} (see 'Report Period' in the file). "
+                    f"Pick the files pulled for {_pretty_day(job.covers)}, or "
+                    f"change the date to {which}.")
+            # Worth keeping: which day these were pulled on, when it was not
+            # the day they are for. A back-dated fill is normal; it just should
+            # never again be the thing that decides where the stock goes.
             back_dated = sorted(d for d in printed_on if d and d != job.covers)
             if back_dated:
                 job.summary["pulled_on"] = back_dated
-            if not job.covers:
-                # An empty covers date falls back to the upload day everywhere
-                # downstream, so a renamed export filed itself under today and
-                # collided with the day's real upload - two different report
-                # dates sharing one, and a delete that takes both. Which day
-                # the stock is for is not a detail this can guess.
-                raise UploadRejected(
-                    "No report date could be read from those filenames. Pick the "
-                    "date the stock is for in the dialog and upload again.")
             # Raws are only deleted after a build that SUCCEEDS, so one day that
             # failed left its files behind - and every later day then aborted on
             # ERROR_MIXED_DATES against them, with no way to clear the folder
             # from the app. Uploading a new day now parks the older day's
             # leftovers instead, so a single bad day stops with itself. Same
-            # date is left alone: those are the warehouses already uploaded for
-            # this day, and the build is meant to see them together.
+            # day is left alone: those are warehouses already uploaded for it,
+            # and the build is meant to see them together.
             parked = _park_stale_raws(job.covers)
             if parked:
                 job.summary["parked_raws"] = parked
@@ -1217,8 +1197,10 @@ def _warehouse_dates(upload: UploadFile) -> tuple[str, str]:
         head = head.decode("utf-8", "replace")
     period = _WH_PERIOD_RE.search(head)
     printed = _WH_PRINTED_RE.search(head)
-    best = period or printed
-    return (_warehouse_covers([f"Report {best.group(1)}"]) if best else "",
+    # No fallback from one to the other. A file without a Report Period says
+    # nothing about which day it is for, and the print stamp standing in for
+    # it is precisely the mistake that filed five days into the 23rd.
+    return (_warehouse_covers([f"Report {period.group(1)}"]) if period else "",
             _warehouse_covers([f"Report {printed.group(1)}"]) if printed else "")
 
 
@@ -1232,6 +1214,22 @@ def _pretty_day(iso: str) -> str:
     except (TypeError, ValueError):
         return iso
     return f"{d.day} {MONTH_NAMES[d.month - 1][:3].title()} {d.year}"
+
+
+def _raw_period(path: Path) -> str:
+    """The Report Period of a raw already on disk, as ISO. '' if unreadable.
+
+    Leftovers are sorted by what day they are FOR. Their names are the day
+    they came down, which for a back-dated pull is some other day entirely,
+    so a name would park half of a day's own drop out from under it.
+    """
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(262_144).decode("utf-8", "replace")
+    except OSError:
+        return ""
+    m = _WH_PERIOD_RE.search(head)
+    return _warehouse_covers([f"Report {m.group(1)}"]) if m else ""
 
 
 def _park_stale_raws(keep: str) -> list[str]:
@@ -1251,7 +1249,7 @@ def _park_stale_raws(keep: str) -> list[str]:
     for path in sorted(folder.iterdir()):
         if not path.is_file() or not _WH_DATE_RE.match(path.name):
             continue
-        found = _warehouse_covers([path.name])
+        found = _raw_period(path) or _warehouse_covers([path.name])
         if not found or found == keep:
             continue
         bin_dir = folder / "_stale" / found
@@ -1596,6 +1594,177 @@ def _retire_derived(stream_key: str, day: str) -> list[str]:
 def _uploads_left(stream_key: str) -> bool:
     """Is anything still uploaded for this stream?"""
     return any(j.stream_key == stream_key for j in STORE.recent(500))
+
+
+# ---------------------------------------------------------------------------
+# One-time repair: warehouse stock filed under the day it was DOWNLOADED
+# ---------------------------------------------------------------------------
+#
+# Until 24 Sep 2026 the stock build read the day out of the export for itself,
+# and read the print stamp ("Report Date & Time") - the day the file came down -
+# instead of the day it was pulled FOR. A same-day pull is the same day either
+# way, so nothing showed; but the office back-filled September by pulling past
+# days on the 23rd, and every one of those was written into the 23rd, each
+# replacing the last, while the days they were for stayed empty.
+#
+# Every upload keeps its own files (jobs/<id>/raw), so the server can put this
+# right by itself: find the uploads that were pulled on one day FOR another,
+# rebuild every day they touched from that day's own upload - the latest one,
+# the same rule as uploading it again - and clear a day that has no upload of
+# its own behind the stock it is showing. It runs once, on the first boot of a
+# build that carries it, and leaves a report the status calendar shows.
+
+STOCK_REPAIR_ID = "stock-filed-by-download-day-2026-09-24"
+REPAIR_USER = "repaired-automatically@ksd"
+
+
+def _stock_repair_report_path() -> Path:
+    return config.WORKSPACE_ROOT / "_repairs" / f"{STOCK_REPAIR_ID}.json"
+
+
+def stock_repair_report() -> dict | None:
+    f = _stock_repair_report_path()
+    try:
+        return json.loads(f.read_text()) if f.is_file() else None
+    except (OSError, ValueError):
+        return None
+
+
+def _raw_dates(folder: Path) -> tuple[set, set, list[Path]]:
+    """(Report Periods, print days, the files) of an upload's kept raws."""
+    periods: set = set()
+    printed: set = set()
+    files = sorted(p for p in folder.iterdir()
+                   if p.is_file() and _WH_DATE_RE.match(p.name)) if folder.is_dir() else []
+    for f in files:
+        try:
+            head = f.read_bytes()[:262_144].decode("utf-8", "replace")
+        except OSError:
+            continue
+        m = _WH_PERIOD_RE.search(head)
+        if m:
+            periods.add(_warehouse_covers([f"Report {m.group(1)}"]))
+        m = _WH_PRINTED_RE.search(head)
+        if m:
+            printed.add(_warehouse_covers([f"Report {m.group(1)}"]))
+    periods.discard("")
+    printed.discard("")
+    return periods, printed, files
+
+
+def _stock_day_totals(day: str) -> dict | None:
+    import csv
+    hist = config.CLAUDE_ROOT / "Warehouse stock" / "_history" / "stock_history.csv"
+    try:
+        rows = [r for r in csv.DictReader(hist.open(newline="", encoding="utf-8-sig"))
+                if r.get("date") == day]
+    except OSError:
+        return None
+    if not rows:
+        return None
+    num = lambda k: sum(int(float(r.get(k) or 0)) for r in rows)
+    return {"warehouses": len(rows), "physical": num("physical"),
+            "allotable": num("allotable"), "pending": num("pending")}
+
+
+def plan_stock_repair() -> dict:
+    """What the repair would do, without doing it."""
+    uploads = []
+    for job in STORE.recent(100000):
+        if job.stream_key != "warehouse_stock" or job.status != JobStatus.PROMOTED:
+            continue
+        periods, printed, files = _raw_dates(STORE.dir_for(job) / "raw")
+        if len(periods) != 1 or not files:
+            continue
+        uploads.append({"job": job, "period": next(iter(periods)),
+                        "printed": printed, "files": files})
+    uploads.sort(key=lambda u: u["job"].created_at)
+
+    # The upload a day should be built from: its latest one, as re-uploading
+    # would have it.
+    own: dict = {}
+    for u in uploads:
+        own[u["period"]] = u
+
+    # Pulled on one day FOR another. The old build filed these under the day
+    # they were printed, so that day holds the wrong stock and the day they
+    # were for has none of its own.
+    back = [u for u in uploads if u["printed"] - {u["period"]}]
+    hurt = sorted({d for u in back for d in u["printed"] if d != u["period"]})
+    owed = sorted({u["period"] for u in back})
+
+    steps = []
+    for day in sorted(set(hurt) | set(owed)):
+        src = own.get(day)
+        if src:
+            steps.append({"day": day, "do": "rebuild", "from": src["job"].id,
+                          "uploaded": src["job"].created_at,
+                          "by": (src["job"].user_email or "").split("@")[0],
+                          "files": len(src["files"]),
+                          "why": ("held another day's stock" if day in hurt
+                                  else "was pulled back-dated and filed elsewhere")})
+        else:
+            steps.append({"day": day, "do": "clear",
+                          "why": "held another day's stock, and has no upload of its own"})
+    return {"steps": steps, "_own": own}
+
+
+def run_stock_repair(force: bool = False) -> dict | None:
+    """Put every warehouse stock day back under the day it is for. Once."""
+    if stock_repair_report() and not force:
+        return None
+    plan = plan_stock_repair()
+    own = plan.pop("_own")
+    done = []
+    for step in plan["steps"]:
+        day = step["day"]
+        before = _stock_day_totals(day)
+        entry = dict(step, before=before)
+        try:
+            if step["do"] == "clear":
+                rows, books = _purge_stock_date(day)
+                entry["ok"] = True
+                entry["note"] = f"removed {rows} row(s)"
+            else:
+                src = own[day]
+                job = STORE.create("warehouse_stock", REPAIR_USER)
+                job.covers = day
+                job.summary["repair"] = (
+                    f"Re-filed from the upload of {src['job'].created_at[:10]} "
+                    f"({len(src['files'])} files) - {step['why']}.")
+                ctx = JobContext(job_id=job.id, stream_key="warehouse_stock",
+                                 scratch_dir=STORE.dir_for(job))
+                ctx.meta["report_date"] = day
+                folder = STREAMS["warehouse_stock"].input_path()
+                folder.mkdir(parents=True, exist_ok=True)
+                _park_stale_raws(day)
+                placed = []
+                for f in src["files"]:
+                    dest = folder / f.name
+                    shutil.copy2(f, dest)
+                    placed.append(dest)
+                job.uploaded_names = [p.name for p in placed]
+                _archive_raws(job, placed)
+                STORE.persist(job)
+                run_pipeline(job, ctx)
+                entry["job"] = job.id
+                entry["ok"] = job.status == JobStatus.PROMOTED
+                if not entry["ok"]:
+                    entry["note"] = job.error or "build failed"
+        except Exception as exc:          # never let a repair take the service down
+            entry["ok"] = False
+            entry["note"] = f"{type(exc).__name__}: {exc}"
+        entry["after"] = _stock_day_totals(day)
+        done.append(entry)
+        print(f"[repair] {day}: {step['do']} -> "
+              f"{'ok' if entry.get('ok') else 'FAILED ' + str(entry.get('note'))}")
+
+    report = {"id": STOCK_REPAIR_ID, "ran_at": datetime.now().isoformat(timespec="seconds"),
+              "steps": done}
+    f = _stock_repair_report_path()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(report, indent=2))
+    return report
 
 
 def _purge_stock_date(day: str) -> tuple[int, int]:
@@ -2197,6 +2366,7 @@ def status_calendar(request: Request):
     user = require_user(request)
     cal = reports_api.upload_calendar()
     cal["tried"] = _attempts_that_failed(cal.get("days") or {})
+    cal["repair"] = stock_repair_report()
     return templates.TemplateResponse(
         request, "status_calendar.html",
         {"user": user, "page": "calendar", "started_at": STARTED_AT,

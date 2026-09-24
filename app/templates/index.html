@@ -689,7 +689,7 @@ function openUpload(c){
   upHint.textContent =
       wantsPeriod(c)     ? 'One consolidation per warehouse \u2014 the whole pull'
     : c.mode === 'batch' ? 'Every shop\u2019s instruction for one month \u2014 the whole folder'
-    : c.mode === 'files' ? 'One or more Bevco exports (.xlsx)'
+    : c.mode === 'files' ? 'The Bevco exports pulled for that date (.xls)'
     : c.mode === 'range' ? 'One KSBC export covering this window (.xlsx)'
                          : 'One KSBC export for this date (.xlsx)';
   showPicked();
@@ -708,7 +708,7 @@ function openUpload(c){
   if (!upMonth.hidden) initMonth();
   upDayLabel.textContent =
       (c.mode === 'range' || wantsPeriod(c)) ? 'Days this pull covers'
-    : c.mode === 'files' ? 'Date this export covers (leave blank to read it from the file)'
+    : c.mode === 'files' ? 'Date this stock is for'
     : 'Date this export covers';
 
   if (c.mode === 'range' || wantsPeriod(c)){
@@ -942,7 +942,12 @@ async function submitUpload(ev){
     fd.append('covers_date', upTo.value);
   }
   if (card.mode === 'day') fd.append('covers_date', upDate.value);
-  if (card.mode === 'files' && upDate.value) fd.append('covers_date', upDate.value);
+  // The day picked here is the day the stock is filed under - so it has to
+  // be picked. Nothing is read off the file or its name to stand in for it.
+  if (card.mode === 'files'){
+    if (!upDate.value){ upErr.textContent = 'Pick the date this stock is for.'; return false; }
+    fd.append('covers_date', upDate.value);
+  }
   if (card.mode === 'range'){
     const a = upFrom.value, b = upTo.value;
     if (!a || !b){ upErr.textContent = 'Pick the days this file covers.'; return false; }

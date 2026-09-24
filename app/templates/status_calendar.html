@@ -485,6 +485,19 @@
     .daypop { width:calc(100vw - 30px); max-width:306px; }
     .dows span { font-size:8.5px; letter-spacing:.4px; }
   }
+  /* What the stock repair changed, said once, where the days it changed are. */
+  .fixnote { margin:0 18px 12px; padding:11px 14px; border-radius:12px; font-size:12.5px;
+             line-height:1.5; color:var(--ink);
+             background:color-mix(in srgb, var(--ok) 8%, var(--card));
+             box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ok) 30%, transparent); }
+  .fixnote.bad { background:color-mix(in srgb, var(--bad) 7%, var(--card));
+                 box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--bad) 30%, transparent); }
+  .fixnote b { font-weight:700; }
+  .fixnote ul { margin:6px 0 0; padding-left:18px; }
+  .fixnote li { margin:2px 0; }
+  .fixnote .x { float:right; border:0; background:none; font-size:16px; line-height:1;
+                color:var(--muted); cursor:pointer; }
+  @media (max-width:760px){ .fixnote { margin:0 12px 10px; } }
 </style>
 {% endblock %}
 
@@ -498,6 +511,7 @@
     </div>
     <div class="sum" id="lede"></div>
   </div>
+  <div class="fixnote" id="fixnote" hidden></div>
   <div class="key" id="key"></div>
   <div class="cal" id="cal">
     <div class="dows"><span>S</span><span>M</span><span>T</span><span>W</span
@@ -514,6 +528,40 @@
    four of five is normal, not a fault, so the tile shows the shape of what
    it has rather than shouting a count at you. */
 const CAL = {{ calendar | tojson }};
+
+/* Stock days the one-time repair re-filed. Shown until dismissed, because
+   the whole point is that you can see which days changed and check them. */
+(function(){
+  const r = CAL.repair, box = document.getElementById('fixnote');
+  if (!r || !r.steps || !r.steps.length || !box) return;
+  let seen = null;
+  try { seen = localStorage.getItem('fixnote:' + r.id); } catch (e) {}
+  if (seen) return;
+  const e = t => { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; };
+  const day = iso => { const [y,m,d] = iso.split('-').map(Number);
+    return `${d} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]}`; };
+  const n = v => v == null ? '—' : Number(v).toLocaleString('en-IN');
+  const bad = r.steps.filter(s => !s.ok);
+  const rows = r.steps.map(s => {
+    const b = s.before, a = s.after;
+    const what = s.do === 'clear'
+      ? `cleared — it ${e(s.why)}. Upload its own export to fill it.`
+      : `rebuilt from its own upload (${e(s.why)})`;
+    const nums = s.do === 'clear' ? '' :
+      ` — physical <b>${n(b && b.physical)}</b> \u2192 <b>${n(a && a.physical)}</b>`;
+    return `<li><b>${day(s.day)}</b>: ${s.ok ? what + nums : 'could not be rebuilt — ' + e(s.note)}</li>`;
+  }).join('');
+  box.className = 'fixnote' + (bad.length ? ' bad' : '');
+  box.innerHTML = `<button class="x" type="button" aria-label="Dismiss">\u00d7</button>` +
+    `<b>Warehouse stock was corrected.</b> Back-dated exports had been filed under the ` +
+    `day they were downloaded. Each day below is now built from the upload made for it:` +
+    `<ul>${rows}</ul>`;
+  box.hidden = false;
+  box.querySelector('.x').onclick = () => {
+    box.hidden = true;
+    try { localStorage.setItem('fixnote:' + r.id, '1'); } catch (e) {}
+  };
+})();
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
 const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun',

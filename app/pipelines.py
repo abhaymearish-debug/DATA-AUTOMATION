@@ -307,7 +307,10 @@ WAREHOUSE_STOCK = Stream(
              # written into that folder, so finding none means they are not
              # files the script reads - and exiting 0 there reported the day
              # as built when nothing had been.
-             env=lambda ctx: {"KSD_EXPECT_RAWS": "1"}),
+             # And the day to file it under is the day that was PICKED on
+             # upload - never one the script works out for itself.
+             env=lambda ctx: {"KSD_EXPECT_RAWS": "1",
+                              "KSD_REPORT_DATE": str(ctx.meta.get("report_date") or "")}),
     ),
 )
 
