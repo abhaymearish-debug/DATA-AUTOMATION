@@ -1508,10 +1508,12 @@ def build_item_issue_pdf(data: dict, out_path: Path, *, round_off: bool = True,
 
     ds = data.get("day_sale") or {}
     feet = [("DAY SALE", ds.get("cur"), ds.get("prior"), ds.get("diff"), ds.get("pct"))]
+    # Always there, as it is on the page - an industry total nobody has typed
+    # in yet reads 0, which is what the page says too, rather than the row
+    # quietly going missing from the PDF.
     ind = data.get("industry") or {}
-    if ind.get("cases") or ind.get("prior"):
-        a, b = ind.get("cases") or 0, ind.get("prior") or 0
-        feet.append(("INDUSTRY TOTAL", a, b, a - b, ((a - b) / b * 100) if b else None))
+    a, b = ind.get("cases") or 0, ind.get("prior") or 0
+    feet.append(("INDUSTRY TOTAL", a, b, a - b, ((a - b) / b * 100) if b else None))
 
     heads = (["STN", "GTN", "TOTAL", "C FED", "BAR", _ii_short(data.get("as_on", ""))]
              + ["STN", "GTN", "TOTAL", "C FED", "BAR", _ii_short(data.get("prior_as_on", ""))]
@@ -1556,7 +1558,7 @@ def build_item_issue_pdf(data: dict, out_path: Path, *, round_off: bool = True,
         page_w = xs[-1]
 
     page_h = (II_TITLE_H + II_SUB_H + II_GROUP_H + II_HEAD_H
-              + II_ROW_H * len(table) + II_GAP + II_ROW_H * len(feet) + II_NOTE_H)
+              + II_ROW_H * len(table) + II_GAP + II_ROW_H * len(feet) + 3.0)
     c = pdfcanvas.Canvas(str(out_path), pagesize=(page_w, page_h))
     c.setTitle(out_path.stem)
 
@@ -1690,11 +1692,6 @@ def build_item_issue_pdf(data: dict, out_path: Path, *, round_off: bool = True,
     c.setLineWidth(0.5)
     c.rect(0, y, page_w, foot_top - y, stroke=1, fill=0)
 
-    c.setFillColor(II_NOTE)
-    c.setFont(BOOK, 6.8)
-    period, prior = str(data.get("period_label") or ""), str(data.get("prior_label") or "")
-    c.drawString(II_PAD + 2, 5.5,
-                 f"Period {period}" + (f" against {prior}" if prior else "") + "  ·  cases")
     c.showPage()
     c.save()
     return out_path

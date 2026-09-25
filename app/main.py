@@ -4616,6 +4616,39 @@ def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
                 c.number_format = "#,##0" if round_off else "#,##0.##"
         ws.row_dimensions[r].height = 17
 
+    # Day sale and industry total, set apart under the sheet as the page and
+    # the PDF have them: neither comes from the export, so neither belongs
+    # among its rows. Each figure sits across the block it belongs to.
+    r += 1
+    ds = data.get("day_sale") or {}
+    ind = data.get("industry") or {}
+    ia, ib = ind.get("cases") or 0, ind.get("prior") or 0
+    feet = [("DAY SALE", ds.get("cur"), ds.get("prior"), ds.get("diff"), ds.get("pct")),
+            ("INDUSTRY TOTAL", ia, ib, ia - ib, ((ia - ib) / ib * 100) if ib else None)]
+    for label, cur_v, pri_v, diff_v, pct_v in feet:
+        r += 1
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=cur_v)
+        ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=7)
+        ws.cell(row=r, column=8, value=pri_v)
+        ws.merge_cells(start_row=r, start_column=8, end_row=r, end_column=13)
+        ws.cell(row=r, column=14, value=diff_v)
+        ws.cell(row=r, column=15, value=(pct_v / 100) if pct_v is not None else None)
+        for col in range(1, span + 1):
+            c = ws.cell(row=r, column=col)
+            c.border = BOX
+            c.alignment = Alignment(horizontal="left" if col == 1 else "center",
+                                    vertical="center")
+            colour = INK
+            if col in (14, 15) and isinstance(diff_v, (int, float)):
+                colour = GREEN if diff_v > 0 else RED if diff_v < 0 else INK
+            c.font = Font(bold=True, size=10, color=colour)
+            if col == 15:
+                c.number_format = "0%" if round_off else "0.00%"
+            elif col > 1:
+                c.number_format = "#,##0" if round_off else "#,##0.##"
+        ws.row_dimensions[r].height = 17
+
     ws.column_dimensions["A"].width = 22
     for i in range(2, span + 1):
         ws.column_dimensions[get_column_letter(i)].width = 11
