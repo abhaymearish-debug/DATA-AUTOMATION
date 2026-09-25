@@ -4479,6 +4479,24 @@ async def item_issue_industry(request: Request):
     return JSONResponse(saved)
 
 
+@app.get("/reports/secondary-analysis/export.pdf")
+def item_issue_pdf(request: Request, period: str = "", prior: str = "",
+                   cluster: int = 0, round_off: str = ""):
+    """The sheet on screen as one page: same pulls, same cluster, same rounding."""
+    require_user(request)
+    round_off = _rounded(round_off)
+    data = reports_api.item_issue(period=period, prior=prior, cluster=cluster or None)
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+    import tempfile
+    scope = f"Cluster {cluster}" if cluster in (1, 2, 3) else ""
+    name = (f"SECONDARY SALES ANALYSIS ({data['period_label']}"
+            + (f", {scope}" if scope else "") + ").pdf")
+    out = Path(tempfile.mkdtemp()) / name
+    reports_pdf.build_item_issue_pdf(data, out, round_off=round_off, scope=scope)
+    return FileResponse(out, filename=out.name, media_type="application/pdf")
+
+
 @app.get("/reports/secondary-analysis/export.xlsx")
 def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
                     cluster: int = 0, round_off: str = ""):

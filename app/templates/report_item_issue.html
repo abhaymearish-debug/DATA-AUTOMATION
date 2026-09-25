@@ -152,6 +152,7 @@
     <label class="chk"><input type="checkbox" id="round" checked onchange="load()"><span class="sw"></span><span class="t">Round off</span></label>
     <div class="sp">
       <a class="act xl" id="xl" href="#">Download Excel</a>
+      <a class="act pdf" id="pdf" href="#">Download PDF</a>
     </div>
   </div>
 </div>
@@ -329,6 +330,7 @@ async function load(){
   msg.innerHTML = notes.length ? `<div class="warn">${esc(notes.join(' '))}</div>` : '';
 
   xl.href = '/reports/secondary-analysis/export.xlsx?' + params().toString();
+  document.getElementById('pdf').href = '/reports/secondary-analysis/export.pdf?' + params().toString();
   render(d);
   ksdSource(d.source_block);
 }

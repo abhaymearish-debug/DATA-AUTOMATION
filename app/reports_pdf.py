@@ -1414,3 +1414,246 @@ def build_pi_group_pdf(group: str, month_label: str, brands: list,
     c.showPage()
     c.save()
     return out_path
+
+
+# ---------------------------------------------------------------------------
+# Secondary Sales - Analysis
+#
+# The on-screen sheet, one page: this pull against the one before it, the
+# difference, and last month taken whole. House bands and tiers - navy title,
+# gold period band, navy header, warehouses on the body with the comparison
+# block on cream, a cluster on gold, the total on navy with gold figures - so
+# it reads like every other sheet the office forwards. A4 landscape wide,
+# as tall as the rows it has.
+# ---------------------------------------------------------------------------
+
+II_W = 841.89
+II_INSET = 12.0
+II_TITLE_H = 34.0
+II_SUB_H = 26.0
+II_GROUP_H = 20.0
+II_HEAD_H = 18.0
+II_ROW_H = 15.0
+II_FOOT_GAP = 6.0
+II_NAME_W = 118.0
+II_TAIL = 24.0
+
+II_CREAM = colors.Color(1.0, 0.988, 0.941)
+II_ZEBRA = colors.Color(0.965, 0.972, 0.988)
+II_LINE = colors.Color(0.80, 0.82, 0.86)
+II_INK = colors.Color(0.106, 0.165, 0.29)
+II_UP = colors.Color(0.106, 0.498, 0.231)
+II_DOWN = colors.Color(0.706, 0.137, 0.094)
+II_WHITE = colors.Color(1, 1, 1)
+II_NOTE = colors.Color(0.40, 0.44, 0.52)
+
+
+def _ii_day(iso: str, long: bool = False) -> str:
+    if not iso:
+        return ""
+    y, m, d = int(iso[:4]), int(iso[5:7]), int(iso[8:10])
+    if long:
+        months = ["January", "February", "March", "April", "May", "June", "July",
+                  "August", "September", "October", "November", "December"]
+        return f"{d} {months[m - 1]} {y}"
+    return f"{d}{_MONTH_ABBR[m - 1].upper()}"
+
+
+def _ii_num(v, round_off: bool) -> str:
+    if v is None:
+        return "-"
+    return _fmt(float(v), round_off) if v else "0"
+
+
+def build_item_issue_pdf(data: dict, out_path: Path, *, round_off: bool = True,
+                         scope: str = "") -> Path:
+    rows = data["rows"]
+    ds = data.get("day_sale") or {}
+    ind = data.get("industry") or {}
+    has_ind = bool(ind.get("cases") or ind.get("prior"))
+    foot_n = 1 + (1 if has_ind else 0)
+
+    # sixteen columns: name, two blocks of six, difference (cases, %), last month
+    n_fig = 15
+    # edge to edge, like the bands above it
+    fig_w = (II_W - II_NAME_W) / n_fig
+    xs = [0.0, II_NAME_W]
+    for i in range(n_fig):
+        xs.append(xs[-1] + fig_w)
+
+    body_h = II_ROW_H * (len(rows) + foot_n) + II_FOOT_GAP
+    page_h = II_TITLE_H + II_SUB_H + II_GROUP_H + II_HEAD_H + body_h + II_TAIL
+    c = pdfcanvas.Canvas(str(out_path), pagesize=(II_W, page_h))
+    c.setTitle(out_path.stem)
+
+    def centre(x0, x1, y, text, font, size):
+        c.setFont(font, size)
+        c.drawString((x0 + x1) / 2 - _w(text, font, size) / 2, y, text)
+
+    # ---- title and period bands ----
+    top = page_h
+    c.setFillColor(NAVY)
+    c.rect(0, top - II_TITLE_H, II_W, II_TITLE_H, stroke=0, fill=1)
+    c.setFillColor(GOLD)
+    centre(0, II_W, top - 22.5, "K.S DISTILLERY", BOLD, F_TITLE)
+
+    sub_top = top - II_TITLE_H
+    c.setFillColor(GOLD)
+    c.rect(0, sub_top - II_SUB_H, II_W, II_SUB_H, stroke=0, fill=1)
+    c.setFillColor(NAVY)
+    c.setFont(BOLD, 10.0)
+    title = "SECONDARY SALES - ANALYSIS" + (f" - {scope.upper()}" if scope else "")
+    base = sub_top - 16.5
+    c.drawString(II_INSET, base, title)
+    as_on = f"AS ON {_ii_day(data.get('as_on', ''), long=True).upper()}"
+    c.drawString(II_W - II_INSET - _w(as_on, BOLD, 10.0), base, as_on)
+
+    # ---- the two header rows ----
+    g_top = sub_top - II_SUB_H
+    g_bot = g_top - II_GROUP_H
+    h_bot = g_bot - II_HEAD_H
+    c.setFillColor(NAVY)
+    c.rect(0, h_bot, II_W, II_GROUP_H + II_HEAD_H, stroke=0, fill=1)
+
+    def month_of(iso):
+        if not iso:
+            return ""
+        months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY",
+                  "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"]
+        return f"{months[int(iso[5:7]) - 1]} {iso[:4]}"
+
+    cur_head = f"{month_of(data.get('as_on'))} - AS ON {_ii_day(data.get('as_on', ''), long=True).upper()}"
+    pri_head = (f"{month_of(data.get('prior_as_on'))} - AS ON "
+                f"{_ii_day(data.get('prior_as_on', ''), long=True).upper()}"
+                if data.get("prior_as_on") else "NO PRIOR PULL")
+    groups = [(1, 7, cur_head), (7, 13, pri_head), (13, 15, "DIFFERENCE")]
+    c.setFillColor(GOLD)
+    for a, b, text in groups:
+        centre(xs[a], xs[b], g_bot + 6.5, _fit(text, BOLD, 7.6, xs[b] - xs[a] - 6), BOLD, 7.6)
+    last_word = "LAST MONTH"
+    last_sub = f"({_ii_day(data['last_key'].split('_')[1])})" if data.get("last_key") else ""
+    # spans both header rows, so it is centred on the two of them together
+    mid = h_bot + (II_GROUP_H + II_HEAD_H) / 2
+    c.setFillColor(GOLD)
+    if last_sub:
+        centre(xs[15], xs[16], mid + 1.5, last_word, BOLD, 7.0)
+        centre(xs[15], xs[16], mid - 7.5, last_sub, BOLD, 7.0)
+    else:
+        centre(xs[15], xs[16], mid - 2.5, last_word, BOLD, 7.0)
+    centre(xs[0], xs[1], h_bot + (II_GROUP_H + II_HEAD_H) / 2 - 2.5, "WAREHOUSE", BOLD, 8.0)
+
+    labels = (["STN", "GTN", "TOTAL", "C FED", "BAR", _ii_day(data.get("as_on", ""))]
+              + ["STN", "GTN", "TOTAL", "C FED", "BAR", _ii_day(data.get("prior_as_on", "")) or "-"]
+              + ["CASES", "%"])
+    c.setFillColor(II_WHITE)
+    for i, label in enumerate(labels):
+        centre(xs[1 + i], xs[2 + i], h_bot + 6.0, label, BOLD, 7.0)
+
+    c.setStrokeColor(RULE_HEAD)
+    c.setLineWidth(0.5)
+    for i in (1, 7, 13, 15):
+        c.line(xs[i], g_top, xs[i], h_bot)
+    c.line(xs[1], g_bot, xs[15], g_bot)
+    c.setFillColor(GOLD)
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(1.4)
+    c.line(0, h_bot, II_W, h_bot)
+
+    # ---- the rows ----
+    y = h_bot
+    zebra = False
+    for row in rows:
+        kind = row.get("kind")
+        top_y, bot_y = y, y - II_ROW_H
+        if kind == "grand":
+            fill_main = fill_prior = NAVY
+            ink = GOLD
+        elif kind == "cluster":
+            fill_main = fill_prior = GOLD
+            ink = NAVY
+        else:
+            zebra = not zebra
+            fill_main = II_ZEBRA if zebra else II_WHITE
+            fill_prior = II_CREAM
+            ink = II_INK
+        c.setFillColor(fill_main)
+        c.rect(xs[0], bot_y, xs[7] - xs[0], II_ROW_H, stroke=0, fill=1)
+        c.rect(xs[13], bot_y, xs[15] - xs[13], II_ROW_H, stroke=0, fill=1)
+        c.setFillColor(fill_prior)
+        c.rect(xs[7], bot_y, xs[13] - xs[7], II_ROW_H, stroke=0, fill=1)
+        c.rect(xs[15], bot_y, xs[16] - xs[15], II_ROW_H, stroke=0, fill=1)
+
+        strong = kind in ("grand", "cluster")
+        base_y = bot_y + 4.6
+        c.setFillColor(ink)
+        c.setFont(BOLD, 8.2)
+        c.drawString(xs[0] + II_INSET, base_y,
+                     _fit(str(row.get("label", "")), BOLD, 8.2, II_NAME_W - II_INSET - 4))
+
+        cur, pri = row.get("cur") or {}, row.get("prior") or {}
+        figs = ([cur.get(k) for k in ("stn", "gtn", "total", "cfed", "bar", "all")]
+                + [pri.get(k) for k in ("stn", "gtn", "total", "cfed", "bar", "all")])
+        for i, v in enumerate(figs):
+            is_run = i in (5, 11)
+            font = BOLD if (strong or is_run) else BOOK
+            if not strong and not v:
+                c.setFillColor(ZERO_GREY)
+            else:
+                c.setFillColor(ink)
+            centre(xs[1 + i], xs[2 + i], base_y, _ii_num(v, round_off), font, 8.2)
+
+        diff, pct = row.get("diff"), row.get("pct")
+        tone = ink if strong else (II_UP if (diff or 0) > 0 else II_DOWN if (diff or 0) < 0 else II_INK)
+        c.setFillColor(tone)
+        centre(xs[13], xs[14], base_y, _ii_num(diff, round_off), BOLD, 8.2)
+        centre(xs[14], xs[15], base_y,
+               "-" if pct is None else f"{pct:.{1 if round_off else 2}f}%", BOLD, 8.2)
+        c.setFillColor(ink)
+        centre(xs[15], xs[16], base_y, _ii_num(row.get("last_month"), round_off),
+               BOLD if strong else BOOK, 8.2)
+
+        c.setStrokeColor(II_LINE if not strong else (GOLD if kind == "grand" else NAVY))
+        c.setLineWidth(0.3 if not strong else 0.8)
+        c.line(xs[0], bot_y, xs[16], bot_y)
+        y = bot_y
+
+    # separators down the body
+    c.setStrokeColor(II_LINE)
+    c.setLineWidth(0.4)
+    for i in (1, 7, 13, 15):
+        c.line(xs[i], h_bot, xs[i], y)
+
+    # ---- day sale and industry: not in the export, so set apart under it ----
+    y -= II_FOOT_GAP
+    feet = [("DAY SALE", ds.get("cur"), ds.get("prior"), ds.get("diff"), ds.get("pct"))]
+    if has_ind:
+        a, b = ind.get("cases") or 0, ind.get("prior") or 0
+        feet.append(("INDUSTRY TOTAL", a, b, a - b, ((a - b) / b * 100) if b else None))
+    for label, a, b, dff, pc in feet:
+        top_y, bot_y = y, y - II_ROW_H
+        c.setFillColor(II_ZEBRA)
+        c.rect(xs[0], bot_y, xs[16] - xs[0], II_ROW_H, stroke=0, fill=1)
+        base_y = bot_y + 4.6
+        c.setFillColor(II_INK)
+        c.setFont(BOLD, 8.2)
+        c.drawString(xs[0] + II_INSET, base_y, label)
+        centre(xs[1], xs[7], base_y, _ii_num(a, round_off), BOLD, 8.2)
+        centre(xs[7], xs[13], base_y, _ii_num(b, round_off), BOLD, 8.2)
+        c.setFillColor(II_UP if (dff or 0) > 0 else II_DOWN if (dff or 0) < 0 else II_INK)
+        centre(xs[13], xs[14], base_y, _ii_num(dff, round_off), BOLD, 8.2)
+        centre(xs[14], xs[15], base_y, "-" if pc is None else f"{pc:.{1 if round_off else 2}f}%", BOLD, 8.2)
+        c.setStrokeColor(II_LINE)
+        c.setLineWidth(0.3)
+        c.line(xs[0], bot_y, xs[16], bot_y)
+        y = bot_y
+
+    c.setFillColor(II_NOTE)
+    c.setFont(BOOK, 6.8)
+    period = str(data.get("period_label") or "")
+    prior = str(data.get("prior_label") or "")
+    note = f"Period {period}" + (f" against {prior}" if prior else "") + "  ·  cases"
+    c.drawString(II_INSET, 9.0, note)
+
+    c.showPage()
+    c.save()
+    return out_path
