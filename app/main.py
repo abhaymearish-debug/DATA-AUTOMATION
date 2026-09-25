@@ -2820,7 +2820,9 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     # column to the left of its figures - CLUSTER's 1 under WAREHOUSE, the shop
     # name under OPENING - and CLOSING spilled into a bare, unformatted
     # column H. The screen groups warehouses under their clusters too.
-    headings = ["CLUSTER", grouping, "SHOP CODE", "SHOP",
+    # No SHOP CODE column: the shop name already carries its number
+    # ("4001-ANDHAKARANAZHI"), so the code was the same fact printed twice.
+    headings = ["CLUSTER", grouping, "SHOP",
                 "OPENING", "RECEIPT", "SALES", "CLOSING"]
     last_col = get_column_letter(len(headings))
 
@@ -2895,7 +2897,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
         keyed, plain, figure = LOOKS[name]
         for col in range(1, wide + 1):
             ws.cell(row=row, column=col)._style = _copy(
-                figure if col >= figures_at else keyed if col < 4 else plain)
+                figure if col >= figures_at else keyed if col < 3 else plain)
         if level:
             ws.row_dimensions[row].outlineLevel = level
 
@@ -2910,9 +2912,7 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     for g in data["bonds"]:
         for i, shop in enumerate(g["shops"]):
             code = shop["code"]
-            ws.append([g["cluster"] or "", g["bond"],
-                       int(code) if code.isdigit() and not code.startswith("0") else code,
-                       shop["name"], *shop["values"]])
+            ws.append([g["cluster"] or "", g["bond"], shop["name"], *shop["values"]])
             at += 1
             # Three collapsible levels, the way the screen folds: bond, then
             # shop, then the brand and pack lines under it.
@@ -2921,32 +2921,32 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
             for brand in sorted(by_shop.get(code, {})):
                 packs = by_shop[code][brand]
                 sub = [sum(packs[pk][k] for pk in packs) for k in range(4)]
-                ws.append(["", "", "", f"    {brand}", *[round(v, 2) for v in sub]])
+                ws.append(["", "", f"    {brand}", *[round(v, 2) for v in sub]])
                 at += 1
                 dress(at, "brand", 2)
                 for pack in sorted(packs):
-                    ws.append(["", "", "", f"        {pack}",
+                    ws.append(["", "", f"        {pack}",
                                *[round(v, 2) for v in packs[pack]]])
                     at += 1
                     dress(at, "pack", 3)
 
-        ws.append([g["cluster"] or "", g["bond"], "", f"{g['bond'].title()} total",
+        ws.append([g["cluster"] or "", g["bond"], f"{g['bond'].title()} total",
                    *g["totals"]])
         at += 1
         dress(at, "band")
 
     # The grand total rounds once from the unrounded figures, never from the
     # bond totals - adding fifteen rounded numbers drifts.
-    ws.append(["", "", "", "GRAND TOTAL", *data["total"]])
+    ws.append(["", "", "GRAND TOTAL", *data["total"]])
     at += 1
     dress(at, "grand")
 
     # Wide enough for each heading AND the filter button Excel draws on it.
-    widths = {"A": 12, "B": 20, "C": 14, "D": 40, "E": 13, "F": 13, "G": 13, "H": 13}
+    widths = {"A": 12, "B": 20, "C": 40, "D": 13, "E": 13, "F": 13, "G": 13}
     for col, wide in widths.items():
         ws.column_dimensions[col].width = wide
     wb.remove(scratch)
-    ws.freeze_panes = "E4"
+    ws.freeze_panes = "D4"
     ws.auto_filter.ref = f"A3:{last_col}{at - 1}"
     ws.sheet_properties.outlinePr.summaryBelow = True
     ws.sheet_view.showGridLines = False
