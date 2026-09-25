@@ -255,7 +255,10 @@ function openPull(ev, which){
       if (!got) return;
       if (isCur){
         PERIOD_KEY = got.key;
-        if (PRIOR_KEY === got.key) PRIOR_KEY = '';
+        // A new period gets its own like-for-like comparison - the same
+        // stretch of the month before - picked by the server, rather than
+        // keeping whatever the last period was set against.
+        PRIOR_KEY = '';
       } else {
         PRIOR_KEY = got.key;
       }

@@ -3102,6 +3102,11 @@ def _ii_row(label: str, kind: str, members: list[str], cur: dict, prior: dict,
             "diff": diff, "pct": pct, "last_month": lastmonth}
 
 
+def period_key_of(start: date, end: date) -> str:
+    from . import itemissue as ii
+    return ii.period_key(start, end)
+
+
 def item_issue(period: str = "", prior: str = "", cluster: int | None = None) -> dict:
     """The secondary sales analysis: one pull against the month before it."""
     from . import itemissue as ii
@@ -3112,15 +3117,54 @@ def item_issue(period: str = "", prior: str = "", cluster: int | None = None) ->
                          "pull on the Raw Data Upload page."}
 
     keys = [p["key"] for p in have]
-    period = period if period in keys else keys[0]
+    if period not in keys:
+        # The latest pull: the one reaching furthest, and between two that end
+        # on the same day, the one uploaded last - then the longer of them.
+        newest = have[0]["end"]
+
+        def uploaded(p):
+            folder = ii.root() / p["key"]
+            return max((f.stat().st_mtime for f in folder.glob("*.xls")), default=0.0)
+
+        tied = [p for p in have if p["end"] == newest]
+        period = max(tied, key=lambda p: (uploaded(p), -date.fromisoformat(p["start"]).toordinal()))["key"]
     span = ii.period_of(period)
     cur_end = span[1] if span else None
 
-    # Default comparison: the newest stored pull that ended before this one's
-    # month began - which is last month, however far into it they pulled.
+    # Default comparison: the same stretch of last month - 1-24 September
+    # against 1-24 August - because a month-to-date set against a whole month
+    # always looks like a fall. Failing an exact match, last month's pull that
+    # starts on the same day and runs furthest without passing this one's end
+    # day; failing that, the newest pull that ended before this month began.
     if prior not in keys:
         prior = ""
-        if cur_end:
+        if span:
+            import calendar as _cal
+            cur_start, cur_end_d = span
+            py, pm = ((cur_start.year - 1, 12) if cur_start.month == 1
+                      else (cur_start.year, cur_start.month - 1))
+            last_day = _cal.monthrange(py, pm)[1]
+            want_start = date(py, pm, min(cur_start.day, last_day))
+            # a pull to the end of its month is set against the whole of the
+            # month before - 1-30 September against 1-31 August, not 1-30
+            month_end = _cal.monthrange(cur_end_d.year, cur_end_d.month)[1]
+            want_end = date(py, pm, last_day if cur_end_d.day == month_end
+                            else min(cur_end_d.day, last_day))
+            exact = period_key_of(want_start, want_end)
+            if exact in keys and exact != period:
+                prior = exact
+            else:
+                best = None
+                for p in have:
+                    if p["key"] == period:
+                        continue
+                    ps, pe = date.fromisoformat(p["start"]), date.fromisoformat(p["end"])
+                    if ps == want_start and pe.month == pm and pe.year == py and pe <= want_end:
+                        if best is None or pe > best[0]:
+                            best = (pe, p["key"])
+                if best:
+                    prior = best[1]
+        if not prior and cur_end:
             first_of_month = cur_end.replace(day=1)
             for p in have:
                 if p["key"] == period:
