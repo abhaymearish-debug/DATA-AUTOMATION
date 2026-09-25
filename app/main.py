@@ -4611,7 +4611,7 @@ def item_issue_xlsx(request: Request, period: str = "", prior: str = "",
                 c.font = Font(bold=(i in (7, 13)), size=10, color=colour)
             if i == 15:
                 if value is not None:
-                    c.number_format = "0.0%" if round_off else "0.00%"
+                    c.number_format = "0%" if round_off else "0.00%"
             elif i > 1:
                 c.number_format = "#,##0" if round_off else "#,##0.##"
         ws.row_dimensions[r].height = 17

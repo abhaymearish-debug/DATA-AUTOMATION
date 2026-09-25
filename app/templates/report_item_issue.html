@@ -45,7 +45,11 @@
              border-bottom:1px solid #22407F;
              border-left:1px solid rgba(255,255,255,.10); }
   thead tr:first-child th { top:0; z-index:3; }
-  thead tr:nth-child(2) th { top:32px; z-index:3; }
+  /* Pinned to the first row's MEASURED height (set by syncHead), overlapping
+     it by a pixel. A fixed 32px left a sub-pixel strip between the two rows
+     whenever the first rendered at 31.x px, and the rows scrolling underneath
+     showed through it as a white line. */
+  thead tr:nth-child(2) th { top:calc(var(--h1, 32px) - 1px); z-index:3; }
   thead tr:first-child th:first-child { left:0; z-index:5; text-align:left;
                                         padding-left:16px; border-left:0;
                                         box-shadow:7px 0 9px -7px rgba(0,0,0,.45); }
@@ -362,12 +366,34 @@ function block(b, cls){
        + `<td${c}>${num(b.cfed)}</td><td${c}>${num(b.bar)}</td><td${r}>${num(b.all)}</td>`;
 }
 
+// A percentage follows Round off like every other figure on the sheet: whole
+// when it is on (half away from zero, as the office rounds), two places off.
+const pctTxt = v => {
+  if (v === null || v === undefined) return '<span class="nil">&ndash;</span>';
+  if (!round.checked) return v.toFixed(2) + '%';
+  const w = Math.sign(v) * Math.round(Math.abs(v));
+  return (w === 0 ? 0 : w) + '%';
+};
+
 function movement(r){
   const cls = r.diff > 0 ? 'up' : r.diff < 0 ? 'dn' : '';
-  const pct = (r.pct === null || r.pct === undefined)
-    ? '<span class="nil">&ndash;</span>'
-    : `${r.pct > 0 ? '' : ''}${r.pct.toFixed(2)}%`;
+  const pct = pctTxt(r.pct);
   return `<td class="edge ${cls}">${num(r.diff)}</td><td class="${cls}">${pct}</td>`;
+}
+
+// The second header row sticks directly under the first, at whatever height
+// the first actually renders - it wraps to two lines on a narrow screen.
+let headObs = null;
+function syncHead(){
+  const r1 = grid.querySelector('thead tr');
+  if (!r1) return;
+  const set = () => grid.style.setProperty('--h1', r1.getBoundingClientRect().height + 'px');
+  set();
+  if (window.ResizeObserver){
+    if (headObs) headObs.disconnect();
+    headObs = new ResizeObserver(set);
+    headObs.observe(r1);
+  }
 }
 
 function render(d){
@@ -376,6 +402,7 @@ function render(d){
     + `<col class="c-tot"><col class="c-pct"><col class="c-last">`;
   grid.style.minWidth = (190 + 12 * 82 + 92 + 92 + 100) + 'px';
   grid.querySelector('thead').innerHTML = head(d);
+  syncHead();
 
   let html = '';
   for (const r of d.rows){
@@ -393,8 +420,7 @@ function render(d){
       <td colspan="6">${num(ds.cur)}</td>
       <td class="prior" colspan="6">${num(ds.prior)}</td>
       <td class="edge ${dsCls}">${num(ds.diff)}</td>
-      <td class="${dsCls}">${ds.pct === null || ds.pct === undefined
-          ? '<span class="nil">&ndash;</span>' : ds.pct.toFixed(2) + '%'}</td>
+      <td class="${dsCls}">${pctTxt(ds.pct)}</td>
       <td class="prior"></td></tr>`;
 
   const ind = d.industry || {};
@@ -406,8 +432,7 @@ function render(d){
       <td colspan="6">${num(ind.cases || 0)}</td>
       <td class="prior" colspan="6">${num(ind.prior || 0)}</td>
       <td class="edge ${iCls}">${num(iDiff)}</td>
-      <td class="${iCls}">${iPct === null ? '<span class="nil">&ndash;</span>'
-          : iPct.toFixed(2) + '%'}</td>
+      <td class="${iCls}">${pctTxt(iPct)}</td>
       <td class="prior"></td></tr>`;
 
   grid.querySelector('tbody').innerHTML = html;
