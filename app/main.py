@@ -2792,50 +2792,49 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.page import PageMargins
 
-    NAVY, GOLD, PAPER = "FF0A294F", "FFFFBD30", "FFF5F7FC"
-    INK, HAIR = "FF28324A", "FFD9DEE9"
-    thin = Side(style="thin", color=HAIR)
-    box = Border(left=thin, right=thin, top=thin, bottom=thin)
-    # Eight thousand rows is sixty-five thousand cells, and openpyxl charges
-    # for every style OBJECT, not for every cell it is put on: building a new
-    # Font per cell took twenty-six seconds to write this book. Built once
-    # here and shared, it is a couple.
-    F_SHOP = Font(bold=True, size=10, color=INK)
-    F_BRAND = Font(bold=True, size=9, color=INK)
-    F_PACK = Font(size=9, color="FF6B7280")
-    F_BAND = Font(bold=True, color=GOLD, size=10)
-    F_GRAND = Font(bold=True, color=NAVY, size=11)
-    FILL_PAPER = PatternFill("solid", fgColor=PAPER)
-    FILL_NAVY = PatternFill("solid", fgColor=NAVY)
-    FILL_GOLD = PatternFill("solid", fgColor=GOLD)
-    AL_RIGHT = Alignment(horizontal="right")
-    AL_MID = Alignment(horizontal="center")
+    # --- the look -----------------------------------------------------------
+    # Four levels, each with its own colour, so the eye finds its place
+    # without reading a word: a navy band per bond (its totals on it, the way
+    # the screen shows them), a blue band per shop (the shop's totals), a pale
+    # band per brand, and the pack lines plain white underneath. SALES - the
+    # figure people come for - runs down the sheet in a gold lane.
+    #
+    # The earlier sheet dressed a shop line and its brand lines almost alike -
+    # bold on white, bold on off-white - so a shop's own total got lost among
+    # its brands and one shop ran into the next.
+    NAVY, GOLD = "FF0A294F", "FFFFBD30"
+    INK, MUTED, HAIR = "FF1F2A44", "FF5B6475", "FFD9DEE9"
+    SHOP_FILL, SHOP_EDGE = "FFCCDDF2", "FF2F5597"
+    BRAND_FILL = "FFF2F5FA"
+    LANE = {"group": "FF0A294F", "shop": "FFFFD966", "brand": "FFFFF0C7",
+            "pack": "FFFFF8E3", "grand": "FFFFBD30"}
+
+    def side(color, style="thin"):
+        return Side(style=style, color=color)
 
     wb = Workbook()
     ws = wb.active
     ws.title = "SHOP SALES CUMULATIVE"
     grouping = "WAREHOUSE" if group_by == "warehouse" else "BOND"
-    # CLUSTER stays in both views. It was dropped from the headings in the
-    # warehouse view while every row still wrote it, so each heading sat one
-    # column to the left of its figures - CLUSTER's 1 under WAREHOUSE, the shop
-    # name under OPENING - and CLOSING spilled into a bare, unformatted
-    # column H. The screen groups warehouses under their clusters too.
-    # No SHOP CODE column: the shop name already carries its number
-    # ("4001-ANDHAKARANAZHI"), so the code was the same fact printed twice.
+    by_wh = grouping == "WAREHOUSE"
+    # CLUSTER stays in both views, and there is no SHOP CODE column - the shop
+    # name already carries its number ("4001-ANDHAKARANAZHI").
     headings = ["CLUSTER", grouping, "SHOP",
                 "OPENING", "RECEIPT", "SALES", "CLOSING"]
-    last_col = get_column_letter(len(headings))
+    wide = len(headings)
+    last_col = get_column_letter(wide)
+    SALES_COL = headings.index("SALES") + 1
+    FIG_FROM = headings.index("OPENING") + 1
 
     # A title anyone can read six months later, without opening the filename.
     ws.merge_cells(f"A1:{last_col}1")
     t = ws["A1"]
     t.value = f"SHOP SALES CUMULATIVE   ·   {chosen['long']}"
     t.fill = PatternFill("solid", fgColor=NAVY)
-    t.font = Font(bold=True, color=GOLD, size=13)
+    t.font = Font(bold=True, color=GOLD, size=14)
     t.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 28
+    ws.row_dimensions[1].height = 30
 
-    by_wh = grouping == "WAREHOUSE"
     unit = "warehouses" if by_wh else "bonds"
     scope = (warehouse.title() if by_wh and warehouse
              else bond.title() if not by_wh and bond
@@ -2846,61 +2845,93 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     sub.value = (f"{scope}   ·   {data['shop_count']} shops in {n_groups} "
                  f"{unit if n_groups != 1 else unit[:-1]}   ·   cases")
     sub.fill = PatternFill("solid", fgColor=GOLD)
-    sub.font = Font(bold=True, color=NAVY, size=10)
+    sub.font = Font(bold=True, color=NAVY, size=10.5)
     sub.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[2].height = 20
+    ws.row_dimensions[2].height = 21
 
     ws.append(headings)
-    for cell in ws[3]:
-        cell.fill = PatternFill("solid", fgColor=NAVY)
-        cell.font = Font(bold=True, color=GOLD, size=10)
+    for col, cell in enumerate(ws[3], start=1):
+        lane = col == SALES_COL
+        cell.fill = PatternFill("solid", fgColor=GOLD if lane else NAVY)
+        cell.font = Font(bold=True, color=NAVY if lane else GOLD, size=10.5)
         cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = box
-    ws.row_dimensions[3].height = 22
+        cell.border = Border(left=side(NAVY), right=side(NAVY), top=side(NAVY),
+                             bottom=side(GOLD, "medium"))
+    ws.row_dimensions[3].height = 24
 
-    # ws[ws.max_row] looks harmless and is quadratic: max_row walks the sheet,
-    # so dressing eight thousand rows one at a time took twenty-two seconds to
-    # write this book. The row number is known - it is counted here - and the
-    # cells are addressed directly, which is the same work done once.
-    wide = len(headings)
-    figures_at = wide - 3          # the four measures always close the row
-    figures = "#,##0" if round_off else "#,##0.##"
-    at = 3
+    # Zero reads as a dash (greyed below), so the lines that moved stand out
+    # from the ones that did not; a negative reads red. Off, a figure keeps
+    # its decimals only where it has them, as on the screen - "#,##0.##"
+    # printed 5 as "5.".
+    def fmt(whole: bool) -> str:
+        num = "#,##0" if whole else "#,##0.00"
+        return f'{num};[Red]-{num};"–"'
 
     # Setting a cell's font, fill, border and format costs a recursive hash of
     # each of those objects - openpyxl looks them up in the workbook's style
-    # tables - and sixty-five thousand cells is a hundred and eighty thousand
-    # of those hashes, which was the whole two seconds. Each distinct look is
-    # therefore built once, on a scratch sheet, and what the cells are handed
-    # afterwards is the finished index, not the objects.
+    # tables - and eight thousand rows of them took seconds. Each distinct look
+    # is therefore built once, on a scratch sheet, and the cells are handed
+    # the finished index, not the objects.
     from copy import copy as _copy
     scratch = wb.create_sheet("_styles")
+    AL = Alignment(horizontal="center", vertical="center")
 
-    def look(font, fill=None, align=None, fmt="General"):
+    def look(font, fill, border, number="General"):
         c = scratch.cell(row=1, column=1)
-        c.border = box
-        c.font = font
-        c.fill = fill if fill is not None else PatternFill()
-        c.alignment = align if align is not None else Alignment()
-        c.number_format = fmt
+        c.font, c.border, c.alignment, c.number_format = font, border, AL, number
+        c.fill = PatternFill("solid", fgColor=fill) if fill else PatternFill()
         return _copy(c._style)
 
-    LOOKS = {}
-    for name, font, fill in (("shop", F_SHOP, None), ("shopband", F_SHOP, FILL_PAPER),
-                             ("brand", F_BRAND, None), ("pack", F_PACK, None),
-                             ("band", F_BAND, FILL_NAVY), ("grand", F_GRAND, FILL_GOLD)):
-        LOOKS[name] = (look(font, fill, AL_MID),            # the key columns
-                       look(font, fill),                    # the shop name
-                       look(font, fill, AL_RIGHT, figures)) # the four measures
+    LEVELS = {
+        #          name font, key font, fill, border colour, top edge
+        "group": (Font(bold=True, size=11.5, color=GOLD),
+                  Font(bold=True, size=11.5, color=GOLD), NAVY, NAVY, None),
+        "shop":  (Font(bold=True, size=11, color=NAVY),
+                  Font(bold=True, size=10, color=SHOP_EDGE), SHOP_FILL, HAIR,
+                  side(SHOP_EDGE, "medium")),
+        "brand": (Font(bold=True, size=10, color=INK),
+                  None, BRAND_FILL, HAIR, None),
+        "pack":  (Font(size=9.5, color=MUTED), None, None, HAIR, None),
+        "grand": (Font(bold=True, size=12, color=NAVY),
+                  Font(bold=True, size=12, color=NAVY), GOLD, NAVY,
+                  side(NAVY, "medium")),
+    }
+    HIDDEN = ";;;"      # the value is there for the filter, the eye skips it
+    LOOKS: dict = {}
+    for level, (f_name, f_key, fill, edge, top) in LEVELS.items():
+        border = Border(left=side(edge), right=side(edge),
+                        top=top or side(edge), bottom=side(edge))
+        # On a brand or pack line the cluster and bond are written but not
+        # shown: filtering on BOND used to drop every brand and pack line,
+        # because those cells were empty.
+        key = (look(f_key, fill, border) if f_key
+               else look(f_name, fill, border, HIDDEN))
+        name = look(f_name, fill, border)
+        figs = {}
+        for whole in (True, False):
+            figs[(whole, False)] = look(f_name, fill, border, fmt(whole))
+            lane_fill = LANE[level]
+            lane_font = (Font(bold=True, size=f_name.sz, color=GOLD)
+                         if level == "group" else
+                         Font(bold=True, size=f_name.sz, color=NAVY))
+            figs[(whole, True)] = look(lane_font, lane_fill, border, fmt(whole))
+        LOOKS[level] = (key, name, figs)
 
-    def dress(row: int, name: str, level: int = 0) -> None:
-        keyed, plain, figure = LOOKS[name]
-        for col in range(1, wide + 1):
-            ws.cell(row=row, column=col)._style = _copy(
-                figure if col >= figures_at else keyed if col < 3 else plain)
+    def put(row: int, level: int | None, kind: str, values: list) -> None:
+        key, name, figs = LOOKS[kind]
+        for col, v in enumerate(values, start=1):
+            c = ws.cell(row=row, column=col, value=v)
+            if col < 3:
+                c._style = _copy(key)
+            elif col < FIG_FROM:
+                c._style = _copy(name)
+            else:
+                whole = round_off or float(v or 0).is_integer()
+                c._style = _copy(figs[(whole, col == SALES_COL)])
         if level:
             ws.row_dimensions[row].outlineLevel = level
 
+    HEIGHT = {"group": 24, "shop": 21, "brand": 16.5, "pack": 15, "grand": 26}
 
     detail = reports_api.window_lines(chosen["start"], chosen["end"])
     lines = {} if "error" in detail else detail["lines"]
@@ -2909,50 +2940,74 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
         shop_code, brand, pack = key.split("|", 2)
         by_shop.setdefault(shop_code, {}).setdefault(brand, {})[pack] = values
 
+    at = 3
     for g in data["bonds"]:
-        for i, shop in enumerate(g["shops"]):
+        cl = g["cluster"] or ""
+        n = len(g["shops"])
+        # The bond's own band, with its totals, before its shops - as the
+        # screen reads - so a folded sheet is a bond summary on its own.
+        at += 1
+        put(at, 0, "group", [cl, g["bond"],
+                             f"{grouping} TOTAL   ·   {n} SHOP{'' if n == 1 else 'S'}",
+                             *g["totals"]])
+        ws.row_dimensions[at].height = HEIGHT["group"]
+
+        for shop in g["shops"]:
             code = shop["code"]
-            ws.append([g["cluster"] or "", g["bond"], shop["name"], *shop["values"]])
             at += 1
-            # Three collapsible levels, the way the screen folds: bond, then
-            # shop, then the brand and pack lines under it.
-            dress(at, "shopband" if i % 2 else "shop", 1)
+            put(at, 1, "shop", [cl, g["bond"], shop["name"], *shop["values"]])
+            ws.row_dimensions[at].height = HEIGHT["shop"]
 
             for brand in sorted(by_shop.get(code, {})):
                 packs = by_shop[code][brand]
-                sub = [sum(packs[pk][k] for pk in packs) for k in range(4)]
-                ws.append(["", "", f"    {brand}", *[round(v, 2) for v in sub]])
+                sub_t = [round(sum(packs[pk][k] for pk in packs), 2) for k in range(4)]
                 at += 1
-                dress(at, "brand", 2)
+                put(at, 2, "brand", [cl, g["bond"], brand, *sub_t])
+                ws.row_dimensions[at].height = HEIGHT["brand"]
                 for pack in sorted(packs):
-                    ws.append(["", "", f"        {pack}",
-                               *[round(v, 2) for v in packs[pack]]])
                     at += 1
-                    dress(at, "pack", 3)
-
-        ws.append([g["cluster"] or "", g["bond"], f"{g['bond'].title()} total",
-                   *g["totals"]])
-        at += 1
-        dress(at, "band")
+                    put(at, 3, "pack", [cl, g["bond"], pack,
+                                        *[round(v, 2) for v in packs[pack]]])
+                    ws.row_dimensions[at].height = HEIGHT["pack"]
 
     # The grand total rounds once from the unrounded figures, never from the
     # bond totals - adding fifteen rounded numbers drifts.
-    ws.append(["", "", "GRAND TOTAL", *data["total"]])
     at += 1
-    dress(at, "grand")
+    put(at, 0, "grand", ["", "", "GRAND TOTAL", *data["total"]])
+    ws.row_dimensions[at].height = HEIGHT["grand"]
 
     # Wide enough for each heading AND the filter button Excel draws on it.
-    widths = {"A": 12, "B": 20, "C": 40, "D": 13, "E": 13, "F": 13, "G": 13}
-    for col, wide in widths.items():
-        ws.column_dimensions[col].width = wide
+    widths = {"A": 11, "B": 19, "C": 44, "D": 14, "E": 14, "F": 14, "G": 14}
+    for col, w_ in widths.items():
+        ws.column_dimensions[col].width = w_
     wb.remove(scratch)
+    # The dash for a zero, greyed. A palette colour in the number format did
+    # this in Excel and printed orange elsewhere; a rule reads the same in both.
+    from openpyxl.formatting.rule import CellIsRule
+    ws.conditional_formatting.add(
+        f"{get_column_letter(FIG_FROM)}4:{last_col}{at - 1}",
+        CellIsRule(operator="equal", formula=["0"], font=Font(color="FFB4BCC8")))
     ws.freeze_panes = "D4"
     ws.auto_filter.ref = f"A3:{last_col}{at - 1}"
-    ws.sheet_properties.outlinePr.summaryBelow = True
+    # Bands carry their totals ABOVE their lines, so the outline folds upward:
+    # Data > Group > level 1 leaves the bonds, level 2 the shops.
+    ws.sheet_properties.outlinePr.summaryBelow = False
     ws.sheet_view.showGridLines = False
+    ws.sheet_view.showOutlineSymbols = False
+    ws.sheet_view.zoomScale = 110
 
+    # Printed: landscape, one page wide, the headings on every page.
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.print_title_rows = "1:3"
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4)
+
+    # Every cell is already centred, which is the office's rule for these
+    # books - centre_all() is not run over it a second time: re-dressing
+    # eight thousand rows cell by cell is where the time went.
     tmp = Path(tempfile.mkdtemp()) / f"Shop Sales Cumulative - {scope} ({chosen['short']}).xlsx"
-    centre_all(wb)
     wb.save(tmp)
     return FileResponse(tmp, filename=tmp.name)
 
