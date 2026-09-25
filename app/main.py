@@ -2815,8 +2815,13 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     ws = wb.active
     ws.title = "SHOP SALES CUMULATIVE"
     grouping = "WAREHOUSE" if group_by == "warehouse" else "BOND"
-    headings = (["CLUSTER"] if grouping == "BOND" else []) + [
-        grouping, "SHOP CODE", "SHOP", "OPENING", "RECEIPT", "SALES", "CLOSING"]
+    # CLUSTER stays in both views. It was dropped from the headings in the
+    # warehouse view while every row still wrote it, so each heading sat one
+    # column to the left of its figures - CLUSTER's 1 under WAREHOUSE, the shop
+    # name under OPENING - and CLOSING spilled into a bare, unformatted
+    # column H. The screen groups warehouses under their clusters too.
+    headings = ["CLUSTER", grouping, "SHOP CODE", "SHOP",
+                "OPENING", "RECEIPT", "SALES", "CLOSING"]
     last_col = get_column_letter(len(headings))
 
     # A title anyone can read six months later, without opening the filename.
@@ -2828,12 +2833,16 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     t.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 28
 
-    scope = (bond.title() if bond else warehouse.title() if warehouse
-             else f"Cluster {cluster}" if cluster else "All bonds")
+    by_wh = grouping == "WAREHOUSE"
+    unit = "warehouses" if by_wh else "bonds"
+    scope = (warehouse.title() if by_wh and warehouse
+             else bond.title() if not by_wh and bond
+             else f"Cluster {cluster}" if cluster else f"All {unit}")
+    n_groups = len(data["bonds"])
     ws.merge_cells(f"A2:{last_col}2")
     sub = ws["A2"]
-    sub.value = (f"{scope}   ·   {data['shop_count']} shops in {len(data['bonds'])} bonds"
-                 f"   ·   cases")
+    sub.value = (f"{scope}   ·   {data['shop_count']} shops in {n_groups} "
+                 f"{unit if n_groups != 1 else unit[:-1]}   ·   cases")
     sub.fill = PatternFill("solid", fgColor=GOLD)
     sub.font = Font(bold=True, color=NAVY, size=10)
     sub.alignment = Alignment(horizontal="center", vertical="center")
@@ -2932,7 +2941,8 @@ def shop_cumulative_xlsx(request: Request, date_from: str = "", date_to: str = "
     at += 1
     dress(at, "grand")
 
-    widths = {"A": 9, "B": 18, "C": 12, "D": 36, "E": 13, "F": 13, "G": 13, "H": 13}
+    # Wide enough for each heading AND the filter button Excel draws on it.
+    widths = {"A": 12, "B": 20, "C": 14, "D": 40, "E": 13, "F": 13, "G": 13, "H": 13}
     for col, wide in widths.items():
         ws.column_dimensions[col].width = wide
     wb.remove(scratch)
@@ -2971,9 +2981,12 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
 
     outdir = Path(tempfile.mkdtemp())
 
+    by_wh = group_by == "warehouse"
+    unit = "warehouses" if by_wh else "bonds"
     if scope == "current":
-        label = (bond.title() if bond else warehouse.title() if warehouse
-                 else f"Cluster {cluster}" if cluster else "All bonds")
+        label = (warehouse.title() if by_wh and warehouse
+                 else bond.title() if not by_wh and bond
+                 else f"Cluster {cluster}" if cluster else f"All {unit}")
         data = _window_data(win, cluster, bond, warehouse, group_by)
         if "error" in data or not data.get("bonds"):
             raise HTTPException(404, data.get("error", "Nothing matches that filter."))
@@ -2998,6 +3011,19 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
             chosen["start"], chosen["end"])))
         argv += ["--lines", str(feed)]
 
+    if by_wh:
+        # Warehouse view: one book per warehouse. The screen's own grouping
+        # decides which shop goes in which book - cluster and warehouse
+        # filters included - so the download holds exactly the warehouses
+        # and shops the page is showing.
+        view = _window_data(win, cluster, "", warehouse, "warehouse")
+        if "error" in view or not view.get("bonds"):
+            raise HTTPException(404, view.get("error", "Nothing matches that filter."))
+        cut = outdir / "_groups.json"
+        cut.write_text(json.dumps({s["code"]: g["bond"] for g in view["bonds"]
+                                   for s in g["shops"]}))
+        argv += ["--groups", str(cut)]
+
     proc = subprocess.run(argv, capture_output=True, text=True,
                           timeout=config.STEP_TIMEOUT_SECONDS)
     if proc.returncode != 0:
@@ -3006,6 +3032,17 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
     pdfs = sorted(outdir.glob("*.pdf"))
     if not pdfs:
         raise HTTPException(404, "Nothing in that period mapped to a bond.")
+
+    stamp = f"{chosen['start'].isoformat()} to {chosen['end'].isoformat()}"
+    if by_wh:
+        if warehouse and len(pdfs) == 1:
+            return FileResponse(pdfs[0], filename=pdfs[0].name)
+        label = f"Cluster {cluster} warehouses " if cluster else "All warehouses "
+        bundle = outdir / f"Shop Sales Cumulative {label}({stamp}).zip"
+        with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in pdfs:
+                z.write(f, f.name)
+        return FileResponse(bundle, filename=bundle.name)
 
     if bond and bond.lower() != "all":
         want = f"Shop Sales Cumulative - {bond.title()}.pdf"
@@ -3036,7 +3073,6 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
             raise HTTPException(
                 404, f"No shops in {warehouse.title()} for that period.")
 
-    stamp = f"{chosen['start'].isoformat()} to {chosen['end'].isoformat()}"
     label = f"Cluster {cluster} " if cluster else ""
     bundle = outdir / f"Shop Sales Cumulative {label}({stamp}).zip"
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:

@@ -435,8 +435,20 @@ document.addEventListener('click', e => {
 function syncLinks(){
   const q = params().toString();
   dlXl.href    = '/reports/shop-cumulative/export.xlsx?' + q;
+  // The books follow Group by. They were cut by bond whatever the screen
+  // showed, so the warehouse view offered "All bonds" - a download that did
+  // not match the page it was on. Now each side gets its own books, and the
+  // label says which, and how many files are coming.
+  const byBond = groupBy === 'bond';
+  const unit = byBond ? 'bond' : 'warehouse';
+  const sel = byBond ? fBond : fWh;
+  const picked = sel.value ? sel.selectedOptions[0].textContent : '';
   dlBooks.href = '/reports/shop-cumulative/export.pdf?' + q +
-                 (fBond.value ? '' : '&bond=all');
+                 (byBond && !fBond.value ? '&bond=all' : '');
+  dlBooks.innerHTML = esc(picked || (fCluster.value ? `Cluster ${fCluster.value} ${unit}s`
+                                                      : `All ${unit}s`)) +
+    `<span class="sub">${picked ? 'one file, a page per shop'
+                                : `one file per ${unit}, a page per shop`}</span>`;
   dlView.href  = '/reports/shop-cumulative/export.pdf?' + q + '&scope=current';
 }
 
@@ -552,6 +564,7 @@ async function load(){
     };
     fill(fBond, DATA.all_bonds, DATA.bond);
     fill(fWh, DATA.all_warehouses, DATA.warehouse);
+    syncLinks();
   }
   try { render(); }
   catch (e) { fail('Could not draw this period: ' + esc(String(e && e.message || e))); }

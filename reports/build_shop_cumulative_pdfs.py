@@ -100,7 +100,20 @@ def money(value: float, round_off: bool | None = None) -> str:
 
 
 # -------------------------------------------------------------------- data --
-def read_lines(path: Path):
+def _group_of(master: dict, groups: dict | None):
+    """Which book a shop goes in: its bond, or whatever the caller cut by.
+
+    The books were always cut by bond. The screen can group by warehouse too,
+    and a warehouse view that downloaded bond books did not match the page it
+    came from - so the caller may hand over its own shop -> group map (the
+    warehouses, already narrowed to the screen's filters) and that wins.
+    """
+    if groups is not None:
+        return lambda code: str(groups.get(code, "")).strip().upper()
+    return lambda code: str(master.get(code, {}).get("bond", "")).strip().upper()
+
+
+def read_lines(path: Path, groups: dict | None = None):
     """A window rebuilt from the daily exports, handed over as JSON.
 
     Same shape as reading a cumulative file, so everything downstream - the
@@ -113,9 +126,10 @@ def read_lines(path: Path):
     data: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(
         lambda: [0.0, 0.0, 0.0, 0.0]))))
     names = {k: v for k, v in blob["names"].items()}
+    group = _group_of(master, groups)
     for key, values in blob["lines"].items():
         code, brand, pack = key.split("|", 2)
-        bond = str(master.get(code, {}).get("bond", "")).strip().upper()
+        bond = group(code)
         if not bond:
             continue
         cell = data[bond][code][brand][pack]
@@ -124,9 +138,10 @@ def read_lines(path: Path):
     return data, names
 
 
-def read_cumulative(path: Path):
+def read_cumulative(path: Path, groups: dict | None = None):
     """bond -> shop code -> brand -> pack -> [opening, receipt, sales, closing]."""
     master = reports_api.load_master()
+    group = _group_of(master, groups)
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
     rows = ws.iter_rows(values_only=True)
@@ -146,7 +161,7 @@ def read_cumulative(path: Path):
         if r is None or r[ix["Shop Code"]] is None:
             continue
         code = str(r[ix["Shop Code"]]).strip()
-        bond = str(master.get(code, {}).get("bond", "")).strip().upper()
+        bond = group(code)
         if not bond:
             continue
         names[code] = str(r[ix["Shop Name"]] or "").strip().upper()
@@ -375,6 +390,8 @@ def main() -> int:
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--round-off", action="store_true",
                     help="whole cases, the way the screen shows them with the switch on")
+    ap.add_argument("--groups", default="",
+                    help="JSON {shop code: group} - cut the books by this instead of bond")
     a = ap.parse_args()
 
     # money() reads this, so every figure on every page follows the switch
@@ -389,19 +406,27 @@ def main() -> int:
     outdir = Path(a.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
+    groups = None
+    if a.groups:
+        import json
+        groups = json.loads(Path(a.groups).read_text())
+
     if a.lines:
         raw = Path(a.lines)
         if not raw.is_file():
             print(f"ERROR: window file not found: {raw}")
             return 2
-        data, names = read_lines(raw)
+        data, names = read_lines(raw, groups)
     else:
         raw = Path(a.raw)
         if not raw.is_file():
             print(f"ERROR: cumulative raw not found: {raw}")
             return 2
-        data, names = read_cumulative(raw)
+        data, names = read_cumulative(raw, groups)
     if not data:
+        if groups is not None:
+            print("ERROR: none of the shops asked for have lines in this period.")
+            return 3
         print("ERROR: no rows in this file map to a bond - check Bond Mapping in Settings.")
         return 3
 
