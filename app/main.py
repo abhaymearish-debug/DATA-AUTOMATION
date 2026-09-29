@@ -2177,7 +2177,7 @@ def brandwise_pdf(
     # by the same script the pipeline runs. The current view renders from the
     # figures already on screen, which the raws alone can answer for.
     workbook = reports_api.find_secondary_workbook()
-    if workbook is None and scope != "current":
+    if workbook is None and scope != "current" and view != "bond":
         raise HTTPException(404, "No secondary-sales workbook has been built yet. "
                                  "The current view still exports.")
 
@@ -2212,6 +2212,21 @@ def brandwise_pdf(
     if any(c not in (1, 2, 3) for c in wanted):
         raise HTTPException(400, "Cluster must be 1, 2 or 3.")
 
+    # The cluster books follow the view. They were always the warehouse books
+    # - a page per warehouse - so the Bond view handed out warehouse pages
+    # under a bond heading on the screen. In the Bond view each cluster's PDF
+    # is now a page per bond, its shops down the side, built from the same
+    # dispatch lines the screen reads.
+    if view == "bond":
+        f, t = _report_args(date_from, date_to)
+        built = _brandwise_bond_books(outdir, wanted, f, t, bool(round_off))
+        if not built:
+            where = "any cluster" if len(wanted) > 1 else f"cluster {wanted[0]}"
+            raise HTTPException(404, f"No dispatches for {where} in the selected range.")
+        span = _asked_period(date_from, date_to, "")
+        label = f" ({span['short']})" if span else ""
+        return _as_folder(built, f"Secondary Sales - Cumulative - Bond View{label}")
+
     # A file per cluster, because that is how they go out: each ASM cluster's
     # PDF sent to its own people. They travel together in one archive, which
     # opens as one folder with the three named files in it.
@@ -2240,6 +2255,91 @@ def brandwise_pdf(
     label = f" ({span['short']})" if span else ""
     return _as_folder(built, f"Secondary Sales - Cumulative{label}")
 
+
+
+def _brandwise_bond_books(outdir: Path, clusters: list, date_from, date_to,
+                          round_off: bool) -> list:
+    """Secondary Sales - Cumulative, Bond view: a PDF per cluster, a page per bond.
+
+    The same page as the warehouse books - shops down the side, the brands
+    that bond actually dispatched across the top, a TOTAL under them - with
+    the bond in the heading where the warehouse was. Figures are the exact
+    sums; rounding happens once, when a figure is printed.
+    """
+    from collections import defaultdict
+    from reportlab.pdfgen import canvas as pdfcanvas
+
+    lines, _sources = reports_api.secondary_lines()
+    if not lines:
+        return []
+    # No window asked for means the window the screen opens on - worked out
+    # the way the screen works it out, nil days included, so the period line
+    # reads 1-30 August rather than the first and last day something moved.
+    if not date_from and not date_to:
+        days = sorted({l["date"] for l in lines if l["date"]}
+                      | reports_api.secondary_covered_days())
+        if days:
+            date_from, date_to = reports_api._latest_month(days)
+
+    of_cluster = reports_api.cluster_of_bond()
+    books: dict = defaultdict(lambda: defaultdict(
+        lambda: {"name": "", "brands": defaultdict(float)}))
+    for l in lines:
+        if date_from and l["date"] and l["date"] < date_from:
+            continue
+        if date_to and l["date"] and l["date"] > date_to:
+            continue
+        if not l["bond"] or not l["cases"]:
+            continue
+        code = l["shop_code"] or l["shop"]
+        entry = books[l["bond"]][code]
+        name = l["shop"] or code
+        if len(name) > len(entry["name"]):
+            entry["name"] = name
+        entry["brands"][l["brand"]] += l["cases"]
+
+    period = ""
+    if date_from and date_to:
+        period = (f"{date_from.day} {date_from:%B %Y} - "
+                  f"{date_to.day} {date_to:%B %Y}")
+
+    built = []
+    for cl in clusters:
+        bonds = sorted(b for b in books if of_cluster.get(b) == cl)
+        if not bonds:
+            continue
+        out = outdir / f"Secondary Sales - Cumulative (Cluster {cl}).pdf"
+        c = pdfcanvas.Canvas(str(out))
+        c.setTitle(f"Secondary Sales - Cumulative - Cluster {cl} - Bond View")
+        for page_no, b in enumerate(bonds, start=1):
+            shops = books[b]
+            brands = sorted({br for s in shops.values()
+                             for br, v in s["brands"].items() if v})
+            ordered = sorted(shops.items(),
+                             key=lambda kv: -sum(kv[1]["brands"].values()))
+            rows, totals = [], defaultdict(float)
+            for code, shop in ordered:
+                cells = {br: shop["brands"].get(br, 0.0) for br in brands}
+                row_total = sum(cells.values())
+                rows.append({"name": shop["name"] or code, "cells": cells,
+                             "total": row_total})
+                for br in brands:
+                    totals[br] += cells[br]
+                totals["__total__"] += row_total
+            width, height, label_w = reports_pdf.page_size(
+                [r["name"] for r in rows], brands, len(rows))
+            c.setPageSize((width, height))
+            reports_pdf.draw_page(
+                c, width=width, height=height, label_w=label_w,
+                report_title="SECONDARY SALES - CUMULATIVE",
+                period=period, group_line="BOND - " + b,
+                label_heading="SHOP NAME", columns=brands,
+                rows=rows, totals=totals,
+                page_no=page_no, pages=len(bonds), round_off=round_off,
+            )
+        c.save()
+        built.append(out)
+    return built
 
 
 def _as_folder(files: list, name: str):

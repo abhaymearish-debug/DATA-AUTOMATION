@@ -163,7 +163,7 @@
       <div class="menu" id="pdfMenu">
         <button type="button" class="act pdf" onclick="toggleMenu('pdfMenu')">Download PDF &#9662;</button>
         <div class="items">
-          <a onclick="dlPdf('clusters')">All clusters<span class="sub">one folder, a PDF per ASM cluster</span></a>
+          <a onclick="dlPdf('clusters')">All clusters<span class="sub" id="clusterSub">a PDF per ASM cluster, a page per bond</span></a>
           <a onclick="dlPdf('current')">Current view<span class="sub">exactly what is on screen</span></a>
         </div>
       </div>
@@ -204,6 +204,8 @@ function setView(v){
   wrapBond.hidden = !byBond;
   wrapWh.hidden = byBond;
   if (byBond) fWh.value = ''; else fBond.value = '';
+  // The cluster PDFs follow the view: a page per bond, or a page per warehouse.
+  clusterSub.textContent = 'a PDF per ASM cluster, a page per ' + (byBond ? 'bond' : 'warehouse');
   openGroups.clear(); shopCache = {};
   load();
 }
