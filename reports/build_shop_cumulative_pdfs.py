@@ -357,6 +357,17 @@ def draw_grid(c, cols, width, placed) -> None:
         for x in edges:
             c.line(x, y - rh, x, y)
 
+    # The total rows - each shop's TOTAL and the book's closing BOND /
+    # WAREHOUSE TOTAL - are ruled in gold, the way the header is: gold column
+    # lines at the header's weight, inside the gold rules above and below.
+    c.setLineWidth(RULE_V)
+    c.setStrokeColor(GOLD)
+    for row, y, rh in placed:
+        if row["kind"] != "total":
+            continue
+        for x in edges:
+            c.line(x, y - rh, x, y)
+
     c.setLineWidth(RULE_H)
     c.setStrokeColor(GOLD)
     for row, y, rh in placed:
