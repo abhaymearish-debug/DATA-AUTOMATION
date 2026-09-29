@@ -3077,7 +3077,7 @@ def shop_cumulative_pdf(request: Request, date_from: str = "", date_to: str = ""
         cut = outdir / "_groups.json"
         cut.write_text(json.dumps({s["code"]: g["bond"] for g in view["bonds"]
                                    for s in g["shops"]}))
-        argv += ["--groups", str(cut)]
+        argv += ["--groups", str(cut), "--unit", "warehouse"]
 
     proc = subprocess.run(argv, capture_output=True, text=True,
                           timeout=config.STEP_TIMEOUT_SECONDS)

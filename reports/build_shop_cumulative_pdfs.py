@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Shop Sales - Cumulative: one PDF per bond, one page per shop.
+"""Shop Sales - Cumulative: one PDF per bond, one page per shop, and a
+closing page with the bond's own total.
 
 Nothing here is guessed. Every band height, column width, font size, colour,
 baseline and pagination rule was read out of the office's own PDFs with a
@@ -202,6 +203,26 @@ def shop_lines(brands: dict):
     return out, totals
 
 
+def book_lines(shops: dict, label: str) -> list[dict]:
+    """Every shop in the book added together, laid out as one more shop.
+
+    The closing page of a bond (or warehouse) book: the same brand and pack
+    lines a shop page has, summed across its shops, ending on the book's own
+    total - so the bond's figure is printed rather than left to be added up
+    across twenty pages.
+    """
+    merged: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0.0, 0.0]))
+    for brands in shops.values():
+        for brand, packs in brands.items():
+            for pack, values in packs.items():
+                cell = merged[brand][pack]
+                for k in range(4):
+                    cell[k] += values[k]
+    lines = shop_lines(merged)[0]
+    lines[-1]["label"] = label
+    return lines
+
+
 def shop_order(codes, master, names):
     """Master-data order first - that list is the office's own sequence."""
     rank = {code: i for i, code in enumerate(master)}
@@ -335,11 +356,11 @@ def draw_grid(c, cols, width, placed) -> None:
             c.line(0, y - rh, width, y - rh)
 
 
-def paginate(shops, h):
+def paginate(shops, h, first: bool = True):
     """Greedy fill, exactly as the office's own files break."""
     pages = []
     for i, lines in enumerate(shops):
-        top = BODY_TOP_FIRST if i == 0 else BODY_TOP_REST
+        top = BODY_TOP_FIRST if i == 0 and first else BODY_TOP_REST
         y, current = top, []
         for row in lines:
             need = max(h, TOTAL_MIN) if row["kind"] == "total" else h
@@ -352,20 +373,35 @@ def paginate(shops, h):
     return pages
 
 
-def build_bond_pdf(bond, shops, names, master, period, out) -> tuple[int, float]:
+def build_bond_pdf(bond, shops, names, master, period, out,
+                   unit: str = "BOND") -> tuple[int, float]:
     codes = shop_order(list(shops), master, names)
     laid = [shop_lines(shops[code])[0] for code in codes]
     sold = sum(lines[-1]["values"][2] for lines in laid)
 
+    # The book closes on its own total: one more page, laid out like a shop,
+    # every shop's brand and pack lines added together and the bond's total
+    # under them. It gets its own row height - it can run longer than any
+    # single shop, and squeezing every shop page to suit it would shrink the
+    # whole book for the sake of its last page.
+    closing = book_lines(shops, f"{unit} TOTAL")
+    avail = BODY_TOP_REST - BOTTOM
     h = row_height(laid)
-    width, cols = page_width(laid)
-    pages = paginate(laid, h)
+    fit = (avail - max(h, TOTAL_MIN)) / max(1, len(closing) - 1)
+    h_close = max(ROW_MIN, min(h, fit))
+
+    width, cols = page_width(laid + [closing])
+    pages = [(ix, rows, h) for ix, rows in paginate(laid, h)]
+    pages += [(-1, rows, h_close) for _, rows in paginate([closing], h_close, first=False)]
+    n_shops = len(codes)
+    close_band = f"{unit} TOTAL  ·  {n_shops} SHOP{'' if n_shops == 1 else 'S'}"
 
     c = pdfcanvas.Canvas(str(out), pagesize=(width, PAGE_H))
     c.setTitle(f"Shop Sales Cumulative - {bond.title()}")
-    for n, (shop_ix, rows) in enumerate(pages):
-        y = draw_bands(c, cols, width, n == 0, names.get(codes[shop_ix], codes[shop_ix]),
-                       bond, period)
+    for n, (shop_ix, rows, h) in enumerate(pages):
+        label = (close_band if shop_ix < 0
+                 else names.get(codes[shop_ix], codes[shop_ix]))
+        y = draw_bands(c, cols, width, n == 0, label, bond, period)
         placed = []
         for i, row in enumerate(rows):
             rh = max(h, TOTAL_MIN) if row["kind"] == "total" else h
@@ -392,6 +428,8 @@ def main() -> int:
                     help="whole cases, the way the screen shows them with the switch on")
     ap.add_argument("--groups", default="",
                     help="JSON {shop code: group} - cut the books by this instead of bond")
+    ap.add_argument("--unit", default="bond", choices=["bond", "warehouse"],
+                    help="what one book is - names the closing total page")
     a = ap.parse_args()
 
     # money() reads this, so every figure on every page follows the switch
@@ -435,7 +473,8 @@ def main() -> int:
     grand = 0.0
     for bond in sorted(data):
         out = outdir / f"Shop Sales Cumulative - {bond.title()}.pdf"
-        pages, sold = build_bond_pdf(bond, data[bond], names, master, period, out)
+        pages, sold = build_bond_pdf(bond, data[bond], names, master, period, out,
+                                     unit=a.unit.upper())
         grand += sold
         print(f"{bond}: {len(data[bond])} shop(s), {pages} page(s), "
               f"{money(sold)} cs sold  ->  {out.name}")
