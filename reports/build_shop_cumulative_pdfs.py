@@ -332,8 +332,8 @@ def draw_grid(c, cols, width, placed) -> None:
 
     A pack row is ruled into cells the way the stock report rules its body:
     hairline columns, and a hairline closing each row. A brand row is a navy
-    band and stays solid - it is the heading for the packs under it, not a
-    row of cells. The shop's total is lined in gold above and below, which is
+    band carrying the same hairline columns, so the figures line up under
+    their headings all the way down. The shop's total is lined in gold above and below, which is
     how the stock report closes its own total and is what tells you, at a
     glance down a page of shops, where one shop ends and the next begins.
     """
@@ -347,6 +347,15 @@ def draw_grid(c, cols, width, placed) -> None:
         for x in edges:
             c.line(x, y - rh, x, y)
         c.line(0, y - rh, width, y - rh)
+
+    # The brand rows carry the same column lines, so each column reads as one
+    # straight line from the header to the total. Only the columns are ruled:
+    # the band itself stays solid navy, with no line across it.
+    for row, y, rh in placed:
+        if row["kind"] != "brand":
+            continue
+        for x in edges:
+            c.line(x, y - rh, x, y)
 
     c.setLineWidth(RULE_H)
     c.setStrokeColor(GOLD)
