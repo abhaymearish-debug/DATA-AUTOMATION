@@ -234,7 +234,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import reports_pdf as layout  # noqa: E402
 
 
-def build_cluster_pdf(cluster, extracted, outdir):
+def build_cluster_pdf(cluster, extracted, outdir, round_off: bool = False):
     """One cluster, one file. Each ASM cluster's PDF goes to its own people."""
     data = extracted["data"]
     warehouses = [w for w in CLUSTERS[cluster] if w in data and data[w]]
@@ -267,7 +267,7 @@ def build_cluster_pdf(cluster, extracted, outdir):
             totals["__total__"] += rt
             rows.append({"name": shop["name"] or lic, "cells": cells, "total": rt})
 
-        width, height, label_w = layout.page_size(
+        width, height, label_w, scale = layout.page_layout(
             [r["name"] for r in rows], brands, len(rows))
         c.setPageSize((width, height))
         layout.draw_page(
@@ -276,7 +276,7 @@ def build_cluster_pdf(cluster, extracted, outdir):
             period=period, group_line="WH - " + wh,
             label_heading="SHOP NAME", columns=brands,
             rows=rows, totals=totals,
-            page_no=page_no, pages=total_pages,
+            page_no=page_no, pages=total_pages, scale=scale, round_off=round_off,
         )
 
     c.save()
@@ -330,6 +330,10 @@ def main() -> int:
     ap.add_argument("--to", dest="date_to", default=None,
                     help="ISO date; only dispatches on or before this are counted")
     ap.add_argument("--verify", action="store_true")
+    # The screen's Round off switch. These books never heard it, so a page
+    # read 204.23 with the switch on while the screen beside it said 204.
+    ap.add_argument("--round-off", action="store_true",
+                    help="whole cases, the way the screen shows them with the switch on")
     args = ap.parse_args()
 
     base = Path(args.base) if args.base else Path(__file__).resolve().parent.parent.parent
@@ -352,7 +356,7 @@ def main() -> int:
 
     wanted = [args.cluster] if args.cluster else [1, 2, 3]
     for cl in wanted:
-        out = build_cluster_pdf(cl, extracted, outdir)
+        out = build_cluster_pdf(cl, extracted, outdir, round_off=args.round_off)
         if out is None:
             print(f"Cluster {cl}: no dispatches in the period — no PDF written.")
             continue

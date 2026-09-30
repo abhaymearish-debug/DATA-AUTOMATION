@@ -136,13 +136,20 @@ def _fmt(v: float, round_off: bool) -> str:
 
 
 def page_size(labels: list[str], columns: list[str], rows: int) -> tuple[float, float, float]:
-    """Kept for callers with a single page shape."""
-    return document_size([{"labels": labels, "columns": columns, "rows": rows}])
+    """Kept for callers with a single page shape, at the office's own sizes."""
+    width, height, label_w, _scale = page_layout(labels, columns, rows)
+    return width, height, label_w
 
 
-def label_need(labels: list[str]) -> float:
+def page_layout(labels: list[str], columns: list[str],
+                rows: int) -> tuple[float, float, float, float]:
+    """One page's width, height, label column and print scale."""
+    return document_layout([{"labels": labels, "columns": columns, "rows": rows}])
+
+
+def label_need(labels: list[str], scale: float = 1.0) -> float:
     """What the longest label would like: its own width, plus its padding."""
-    widest = max((pdfmetrics.stringWidth(str(l), "Helvetica", F_ROW)
+    widest = max((pdfmetrics.stringWidth(str(l), "Helvetica", F_ROW * scale)
                   for l in labels), default=0.0)
     return widest + 2 * PAD_L
 
@@ -172,88 +179,186 @@ def label_width_for(width: float, n_columns: int, wanted: float = 0.0) -> float:
     return width - columns_width(n_columns + 1, wanted) * (n_columns + 1)
 
 
-def document_size(pages: list[dict]) -> tuple[float, float, float]:
-    """One page size for the WHOLE document.
+# ---- print scale ----------------------------------------------------------
+#
+# The page is always DOC_W wide, and a phone shows it fitted to its screen, so
+# the only way to make the writing bigger on a phone is to make it bigger on
+# the page. Every font, row and band is drawn at `scale` times the office's
+# own size - as large as MAX_SCALE when the page has room for it, stepping
+# down as brands crowd in, and at the office's exact sizes (scale 1) when a
+# page is too full for anything else. The width never changes.
+MAX_SCALE = 1.4
+SCALE_STEP = 0.05
+
+
+def _column_need(columns: list[str], scale: float) -> float:
+    """The narrowest a numeric column may be at this scale.
+
+    Wide enough for the longest single word in any heading (headings wrap
+    between words, never inside one) and for a four-digit total in bold.
+    """
+    heads = list(columns) + ["TOTAL"]
+    word = max((pdfmetrics.stringWidth(w, "Helvetica-Bold", F_HEAD * scale)
+                for h in heads for w in str(h).split()), default=0.0)
+    figure = pdfmetrics.stringWidth("8,888", "Helvetica-Bold", F_TOTAL * scale)
+    return max(word + 6 * scale, figure + 10 * scale)
+
+
+def _fits(page: dict, scale: float) -> bool:
+    """Headings and figures fit at this scale, and every shop name fits at
+    least at the office's own size. A long name that cannot take the full
+    enlargement prints a little smaller than the figures beside it - never
+    smaller than it does today - rather than holding the whole page back."""
+    n = len(page["columns"]) + 1
+    room = DOC_W - n * _column_need(page["columns"], scale)
+    # What the names get today: all they need, or - for a name too long even
+    # for that - the room the office's own layout gives it.
+    today = min(label_need(page["labels"], 1.0),
+                label_width_for(DOC_W, len(page["columns"]),
+                                label_need(page["labels"], 1.0)))
+    return room >= max(today, LABEL_MIN_HARD)
+
+
+def best_scale(pages: list[dict]) -> float:
+    """The largest scale at which every page's names and headings still fit."""
+    steps = int(round((MAX_SCALE - 1.0) / SCALE_STEP))
+    for k in range(steps, 0, -1):
+        scale = round(1.0 + k * SCALE_STEP, 2)
+        if all(_fits(p, scale) for p in pages):
+            return scale
+    return 1.0
+
+
+def _scaled_widths(pages: list[dict], scale: float) -> tuple[float, float]:
+    """(label column, numeric column) for a document drawn at `scale`."""
+    max_cols = max(len(p["columns"]) for p in pages)
+    wanted = max((label_need(p["labels"], scale) for p in pages if p["labels"]),
+                 default=0.0)
+    if scale <= 1.0:
+        label_w = label_width_for(DOC_W, max_cols, wanted)
+        return label_w, (DOC_W - label_w) / (max_cols + 1)
+    n = max_cols + 1
+    need = max(_column_need(p["columns"], scale) for p in pages)
+    # The names get what they need; the figures share the rest, up to the
+    # office's column width at this scale; anything left goes back to names.
+    col_w = max(need, min(COL_W * scale, (DOC_W - wanted) / n))
+    return DOC_W - n * col_w, col_w
+
+
+def head_band_h(columns: list[str], col_w: float, scale: float = 1.0) -> float:
+    """The navy heading band: the office's 38.4pt, taller only when a brand
+    heading wraps onto more lines than that holds."""
+    lines = max((len(_wrap(str(h), F_HEAD * scale, col_w - 4))
+                 for h in list(columns) + ["TOTAL"]), default=1)
+    return max(HEAD_BAND_H, lines * HEAD_PITCH + 8.0) * scale
+
+
+def document_layout(pages: list[dict]) -> tuple[float, float, float, float]:
+    """One page size, label column and scale for the WHOLE document.
 
     Width is a constant: every PDF the office receives is 453.114pt wide
     whatever the cluster or the brand count, which is what makes them readable
-    on a phone. Height is 150.4pt of banding plus 15pt per row, sized for the
+    on a phone. Height is the banding plus a row per shop, sized for the
     busiest page so the document never changes shape as you scroll.
     """
-    max_cols = max(len(p["columns"]) for p in pages)
+    scale = best_scale(pages)
+    label_w, col_w = _scaled_widths(pages, scale)
     max_rows = max(p["rows"] for p in pages)
-    wanted = max((label_need(p["labels"]) for p in pages if p["labels"]), default=0.0)
-    height = (TITLE_BAND_H + SUB_BAND_H + HEAD_BAND_H
-              + ROW_H * max_rows + RULE_H + TOTAL_BAND_H + RULE_H + FOOTER_H)
-    return DOC_W, height, label_width_for(DOC_W, max_cols, wanted)
+    cols = max((p["columns"] for p in pages), key=len)
+    height = ((TITLE_BAND_H + SUB_BAND_H) * scale + head_band_h(cols, col_w, scale)
+              + ROW_H * scale * max_rows + RULE_H + TOTAL_BAND_H * scale + RULE_H
+              + FOOTER_H * scale)
+    return DOC_W, height, label_w, scale
+
+
+def document_size(pages: list[dict]) -> tuple[float, float, float]:
+    """document_layout without the scale, for callers at the office's sizes."""
+    width, height, label_w, _scale = document_layout(pages)
+    return width, height, label_w
 
 
 def draw_page(c, *, width: float, height: float, label_w: float,
               report_title: str, period: str, group_line: str,
               label_heading: str, columns: list[str],
               rows: list[dict], totals: dict, total_label: str = "TOTAL",
-              page_no: int = 1, pages: int = 1, round_off: bool = False) -> None:
-    """Draw one page. `rows` are {'name': str, 'cells': {col: value}, 'total': v}."""
+              page_no: int = 1, pages: int = 1, round_off: bool = False,
+              scale: float = 1.0) -> None:
+    """Draw one page. `rows` are {'name': str, 'cells': {col: value}, 'total': v}.
+
+    `scale` enlarges every font, row and band together (see MAX_SCALE); at 1
+    this is the office's own page, point for point.
+    """
+    k = scale
     all_cols = list(columns) + ["TOTAL"]
     # Taken from the label column the caller settled on, not worked out again
     # here: the two used to be computed separately and a page whose labels had
     # claimed extra room drew its headings out of line with its figures.
     col_w = (width - label_w) / len(all_cols)
+    f_head, f_row, f_total = F_HEAD * k, F_ROW * k, F_TOTAL * k
+    pitch = HEAD_PITCH * k
 
     # ---- title band ----
     y = height
     c.setFillColor(NAVY)
-    c.rect(0, y - TITLE_BAND_H, width, TITLE_BAND_H, stroke=0, fill=1)
+    c.rect(0, y - TITLE_BAND_H * k, width, TITLE_BAND_H * k, stroke=0, fill=1)
     c.setFillColor(GOLD)
-    c.setFont("Helvetica-Bold", F_TITLE)
-    c.drawCentredString(width / 2, y - 22.0, "K.S DISTILLERY")
-    y -= TITLE_BAND_H
+    c.setFont("Helvetica-Bold", F_TITLE * k)
+    c.drawCentredString(width / 2, y - 22.0 * k, "K.S DISTILLERY")
+    y -= TITLE_BAND_H * k
 
     # ---- gold band ----
+    # The report name and the period share a line. At a larger scale the two
+    # can meet in the middle, so they come down together until they clear.
+    f_sub, f_period = F_SUB * k, F_PERIOD * k
+    while f_sub > F_SUB and (
+            pdfmetrics.stringWidth(report_title, "Helvetica-Bold", f_sub)
+            + pdfmetrics.stringWidth(period, "Helvetica-Bold", f_period) + 28 > width):
+        f_sub -= 0.2
+        f_period -= 0.2
     c.setFillColor(GOLD)
-    c.rect(0, y - SUB_BAND_H, width, SUB_BAND_H, stroke=0, fill=1)
+    c.rect(0, y - SUB_BAND_H * k, width, SUB_BAND_H * k, stroke=0, fill=1)
     c.setFillColor(NAVY)
-    c.setFont("Helvetica-Bold", F_SUB)
-    c.drawString(8.0, y - 15.0, report_title)
-    c.setFont("Helvetica-Bold", F_PERIOD)
-    c.drawRightString(width - 8.0, y - 15.0, period)
-    c.setFont("Helvetica-Bold", F_SUB)
-    c.drawCentredString(width / 2, y - 28.0, group_line)
-    y -= SUB_BAND_H
+    c.setFont("Helvetica-Bold", f_sub)
+    c.drawString(8.0, y - 15.0 * k, report_title)
+    c.setFont("Helvetica-Bold", f_period)
+    c.drawRightString(width - 8.0, y - 15.0 * k, period)
+    c.setFont("Helvetica-Bold", F_SUB * k)
+    c.drawCentredString(width / 2, y - 28.0 * k, group_line)
+    y -= SUB_BAND_H * k
 
     # ---- column header band ----
+    head_h = head_band_h(columns, col_w, k)
+    mid = y - head_h / 2
     c.setFillColor(NAVY)
-    c.rect(0, y - HEAD_BAND_H, width, HEAD_BAND_H, stroke=0, fill=1)
+    c.rect(0, y - head_h, width, head_h, stroke=0, fill=1)
     c.setFillColor(GOLD)
-    c.setFont("Helvetica-Bold", F_HEAD)
-    c.drawString(PAD_L, y - 21.7, label_heading)
+    c.setFont("Helvetica-Bold", f_head)
+    c.drawString(PAD_L, mid - 0.36 * f_head, label_heading)
 
-    wrapped = [_wrap(col, F_HEAD, col_w - 4) for col in all_cols]
-    n_lines = max(len(w) for w in wrapped)
-    first = y - (21.4 - (n_lines - 1) * (HEAD_PITCH / 2))
+    wrapped = [_wrap(col, f_head, col_w - 4) for col in all_cols]
     for i, lines in enumerate(wrapped):
         cx = label_w + col_w * i + col_w / 2
         # Each label's own block stays vertically centred in the band.
-        start = y - (21.4 - (len(lines) - 1) * (HEAD_PITCH / 2))
+        start = mid - 0.31 * f_head + (len(lines) - 1) * pitch / 2
         for j, line in enumerate(lines):
-            c.drawCentredString(cx, start - j * HEAD_PITCH, line)
+            c.drawCentredString(cx, start - j * pitch, line)
     c.setStrokeColor(RULE_HEAD)
     c.setLineWidth(GRID_W)
     for i in range(len(all_cols) + 1):
         x = label_w + col_w * i
-        c.line(x, y - HEAD_BAND_H, x, y)
-    head_bottom = y - HEAD_BAND_H
-    y -= HEAD_BAND_H
+        c.line(x, y - head_h, x, y)
+    head_bottom = y - head_h
+    y -= head_h
 
     # ---- data rows ----
+    row_h = ROW_H * k
     for i, r in enumerate(rows):
         if i % 2 == 0:
             c.setFillColor(ZEBRA)
-            c.rect(0, y - ROW_H, width, ROW_H, stroke=0, fill=1)
+            c.rect(0, y - row_h, width, row_h, stroke=0, fill=1)
 
-        base = y - 10.5
+        base = y - 10.5 * k
         c.setFillColor(colors.black)
-        c.setFont("Helvetica", F_ROW)
         # Cut with an ellipsis, so a shortened label reads as shortened. Bare
         # truncation produced '2016-KARUNAGAPALLY SOUT' and
         # '2016-KARUNAGAPALLY SOUTH' as the same string, which is two
@@ -264,13 +369,13 @@ def draw_page(c, *, width: float, height: float, label_w: float,
         # and only then to an ellipsis.
         room = label_w - 2 * PAD_L
         raw = str(r["name"])
-        size = F_ROW
+        size = f_row
         while (size > F_ROW_MIN
                and pdfmetrics.stringWidth(raw, "Helvetica", size) > room):
             size -= 0.25
         c.setFont("Helvetica", size)
         c.drawString(PAD_L, base, _fit(raw, "Helvetica", size, room))
-        c.setFont("Helvetica", F_ROW)
+        c.setFont("Helvetica", f_row)
 
         for j, col in enumerate(columns):
             v = r["cells"].get(col, 0) or 0
@@ -280,7 +385,7 @@ def draw_page(c, *, width: float, height: float, label_w: float,
         c.setFillColor(colors.black)
         c.drawCentredString(label_w + col_w * len(columns) + col_w / 2, base,
                             _fmt(r.get("total", 0), round_off))
-        y -= ROW_H
+        y -= row_h
 
     if rows:
         c.setStrokeColor(RULE_BODY)
@@ -290,27 +395,28 @@ def draw_page(c, *, width: float, height: float, label_w: float,
             c.line(x, y, x, head_bottom)
 
     # ---- total band ----
+    total_h = TOTAL_BAND_H * k
     c.setFillColor(GOLD)
     c.rect(0, y - RULE_H, width, RULE_H, stroke=0, fill=1)
     y -= RULE_H
     c.setFillColor(NAVY)
-    c.rect(0, y - TOTAL_BAND_H, width, TOTAL_BAND_H, stroke=0, fill=1)
+    c.rect(0, y - total_h, width, total_h, stroke=0, fill=1)
     c.setFillColor(GOLD)
-    c.setFont("Helvetica-Bold", F_TOTAL)
-    c.drawString(PAD_L, y - 12.5, total_label)
+    c.setFont("Helvetica-Bold", f_total)
+    c.drawString(PAD_L, y - 12.5 * k, total_label)
     for j, col in enumerate(columns):
-        c.drawCentredString(label_w + col_w * j + col_w / 2, y - 12.5,
+        c.drawCentredString(label_w + col_w * j + col_w / 2, y - 12.5 * k,
                             _fmt(totals.get(col, 0), round_off))
-    c.drawCentredString(label_w + col_w * len(columns) + col_w / 2, y - 12.5,
+    c.drawCentredString(label_w + col_w * len(columns) + col_w / 2, y - 12.5 * k,
                         _fmt(totals.get("__total__", 0), round_off))
-    y -= TOTAL_BAND_H
+    y -= total_h
     c.setFillColor(GOLD)
     c.rect(0, y - RULE_H, width, RULE_H, stroke=0, fill=1)
 
     # ---- footer ----
     c.setFillColor(colors.Color(0.45, 0.48, 0.55))
-    c.setFont("Helvetica", 7)
-    c.drawRightString(width - PAD_L, 16.0, f"Page {page_no} of {pages}")
+    c.setFont("Helvetica", 7 * k)
+    c.drawRightString(width - PAD_L, 16.0 * k, f"Page {page_no} of {pages}")
     c.showPage()
 
 
@@ -328,7 +434,7 @@ def build_view_pdf(data: dict, out_path: Path, *, round_off: bool = False,
     brands = data["brands"]
 
     chunks = [rows[i:i + ROWS_PER_PAGE] for i in range(0, len(rows), ROWS_PER_PAGE)] or [[]]
-    width, height, label_w = document_size([
+    width, height, label_w, scale = document_layout([
         {"labels": [r["name"] for r in rows], "columns": brands,
          "rows": max(len(ch) for ch in chunks)}])
 
@@ -365,7 +471,7 @@ def build_view_pdf(data: dict, out_path: Path, *, round_off: bool = False,
             period=period, group_line=scope,
             label_heading=data["label"].upper(), columns=brands,
             rows=chunk, totals=totals, total_label="GRAND TOTAL",
-            page_no=i, pages=len(chunks), round_off=round_off,
+            page_no=i, pages=len(chunks), round_off=round_off, scale=scale,
         )
     c.save()
     return out_path

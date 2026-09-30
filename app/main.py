@@ -2241,6 +2241,8 @@ def brandwise_pdf(
             argv += ["--from", date_from]
         if date_to:
             argv += ["--to", date_to]
+        if round_off:
+            argv.append("--round-off")
 
         proc = subprocess.run(argv, capture_output=True, text=True,
                               timeout=config.STEP_TIMEOUT_SECONDS)
@@ -2326,7 +2328,7 @@ def _brandwise_bond_books(outdir: Path, clusters: list, date_from, date_to,
                 for br in brands:
                     totals[br] += cells[br]
                 totals["__total__"] += row_total
-            width, height, label_w = reports_pdf.page_size(
+            width, height, label_w, scale = reports_pdf.page_layout(
                 [r["name"] for r in rows], brands, len(rows))
             c.setPageSize((width, height))
             reports_pdf.draw_page(
@@ -2336,6 +2338,7 @@ def _brandwise_bond_books(outdir: Path, clusters: list, date_from, date_to,
                 label_heading="SHOP NAME", columns=brands,
                 rows=rows, totals=totals,
                 page_no=page_no, pages=len(bonds), round_off=round_off,
+                scale=scale,
             )
         c.save()
         built.append(out)
