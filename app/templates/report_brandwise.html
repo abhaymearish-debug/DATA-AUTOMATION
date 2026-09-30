@@ -382,11 +382,14 @@ function closeMenus(){
   document.querySelectorAll('.menu').forEach(m => m.classList.remove('open'));
 }
 
-function grab(url, filename){
-  // A hidden anchor rather than window.location, so three of them can be
-  // fired in a row without each one cancelling the last.
+function grab(url){
+  // A hidden anchor rather than window.location, so a download never
+  // navigates the page away. No `download` attribute: with it, Safari saved
+  // the cluster bundle as a bare .zip instead of opening it into a folder the
+  // way it does for Target vs Achievement, which is linked plainly like this.
+  // The server already marks every export as an attachment.
   const a = document.createElement('a');
-  a.href = url; a.download = filename || '';
+  a.href = url;
   document.body.appendChild(a); a.click(); a.remove();
 }
 

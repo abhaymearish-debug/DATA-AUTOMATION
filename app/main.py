@@ -2361,12 +2361,16 @@ def _as_folder(files: list, name: str):
     if len(keep) == 1:
         return FileResponse(keep[0], filename=keep[0].name)
 
+    # Built exactly like the Target vs Achievement bundle, which Safari opens
+    # straight into a folder: the PDFs at the top of the archive (the folder
+    # takes the archive's own name when it opens) and sent as application/zip.
+    # These used to sit one folder deeper inside the archive.
     safe = _safe_name(name)
     bundle = Path(tempfile.mkdtemp()) / f"{safe}.zip"
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(keep, key=lambda x: x.name):
-            z.write(f, f"{safe}/{f.name}")
-    return FileResponse(bundle, filename=bundle.name)
+            z.write(f, f.name)
+    return FileResponse(bundle, filename=bundle.name, media_type="application/zip")
 
 
 @app.get("/api/jobs")
