@@ -70,6 +70,7 @@ AMBER_T = colors.Color(0.902, 0.318, 0.0)
 RED_T   = colors.Color(0.776, 0.157, 0.157)
 AMBER_C = colors.Color(1.0, 0.718, 0.302)      # on a navy cluster row
 PINK_C  = colors.Color(0.898, 0.451, 0.451)
+FALL_RED = colors.HexColor("#FF0000")        # Excel's own [Red], as the workbook shows a fall
 UP      = colors.Color(0.247, 0.525, 0.0)
 DOWN    = colors.Color(0.812, 0.075, 0.133)
 UP_C    = colors.Color(0.565, 0.933, 0.565)
@@ -378,8 +379,14 @@ def draw_row(c, y, h, row, stripe):
     c.setFont(font, F_ROW)
     # No thousands separators: the office prints 2658, not 2,658.
     values = [shown(v) for v in row["cells"]] + [pct(row["net_pct"])]
+    # A stock that fell reads red - STOCK NET and STOCK NET % - on a bond row,
+    # as the workbook prints it. Judged on the figure as printed, so a fall
+    # that rounds to 0% stays in ink. The bands keep their own ink.
+    falls = {5: row["cells"][4] < 0,
+             6: row["net_pct"] is not None and whole(row["net_pct"]) < 0}
     for i, text in enumerate(values, start=1):
-        c.setFillColor(ink)
+        red = falls.get(i) and not (cluster or total)
+        c.setFillColor(FALL_RED if red else ink)
         c.drawCentredString((EDGES[i] + EDGES[i + 1]) / 2, base, text)
 
     sell_ink = colors.HexColor(tier_dark if cluster else tier_ink)
@@ -418,10 +425,21 @@ def draw_row(c, y, h, row, stripe):
 
 
 def build(rows, period, out: Path) -> None:
-    c = pdfcanvas.Canvas(str(out), pagesize=(PAGE_W, PAGE_H))
+    # The page ends where the table ends. It used to be a full A4 sheet, so
+    # under the TOTAL row there was white - a strip on the full book, and most
+    # of the page once a cluster or a bond was picked. The rows still take the
+    # office's height and squeeze to fit A4 when there are many; the sheet is
+    # then cut just under the TOTAL row's closing rule.
+    from io import BytesIO
+    probe = pdfcanvas.Canvas(BytesIO(), pagesize=(PAGE_W, PAGE_H))
+    top = draw_columns(probe, draw_period(probe, draw_head(probe), period))
+    h = min(ROW_H, (top - BOTTOM) / max(1, len(rows)))
+    cut = max(0.0, top - h * len(rows) - RULE_V / 2)
+
+    c = pdfcanvas.Canvas(str(out), pagesize=(PAGE_W, PAGE_H - cut))
+    c.translate(0, -cut)
     c.setTitle("Shop Sales - Analysis")
     y = draw_columns(c, draw_period(c, draw_head(c), period))
-    h = min(ROW_H, (y - BOTTOM) / max(1, len(rows)))
 
     for i, row in enumerate(rows):
         draw_row(c, y, h, row, i)

@@ -102,6 +102,8 @@
      No activity where there was nothing to sell - its fills and inks, and its
      brighter inks on a navy row. */
   td.sell { font-weight:700; }
+  tr.bond td.fall { color:#FF0000; }
+  :root[data-theme="dark"] tr.bond td.fall { color:#FF6B6B; }
   tr.bond td.sell.t-high     { background:#BBDEFB; color:#1565C0; }
   tr.bond td.sell.t-balanced { background:#DCEDC8; color:#2E7D32; }
   tr.bond td.sell.t-inv      { background:#FFE0B2; color:#E65100; }
@@ -289,8 +291,10 @@
       {% for r in rows %}
       <tr class="{{ 'cluster' if r.kind == 'cluster' else ('grand' if r.kind == 'total' else 'bond') }}{% if r.kind == 'bond' and loop.index0 % 2 == 1 %} alt{% endif %}">
         <td>{{ r.label }}</td>
-        {% for v in r.cells %}<td>{{ fig(v) }}</td>{% endfor %}
-        <td>{{ r.net_pct }}</td>
+        {# A stock that fell reads red on a bond row - STOCK NET and STOCK NET %,
+           judged on the figure as shown - the same as the PDF and the workbook. #}
+        {% for v in r.cells %}<td{% if loop.index == 5 and r.kind == 'bond' and v < 0 %} class="fall"{% endif %}>{{ fig(v) }}</td>{% endfor %}
+        <td{% if r.kind == 'bond' and r.net_pct.startswith('-') and r.net_pct != '-' %} class="fall"{% endif %}>{{ r.net_pct }}</td>
         <td class="sell t-{{ r.tier }}">{{ r.sell }}</td>
         <td>{{ fig(r.cm) }}</td>
         <td>{{ fig(r.lm) }}</td>
