@@ -310,7 +310,8 @@ def draw_columns(c, y) -> float:
         left, right = EDGES[i], EDGES[i + 1]
         c.setFillColor(colors.white)
         if i == 0:
-            c.drawString(INSET, base, head)
+            # BOND sits centred over its column, like every other heading.
+            c.drawCentredString((left + right) / 2, base, head)
         elif isinstance(head, list):
             for n, line in enumerate(head):
                 c.drawCentredString((left + right) / 2, base - n * LEAD, line)
@@ -374,7 +375,8 @@ def draw_row(c, y, h, row, stripe):
     while w(row["label"], font, size) > EDGES[1] - INSET - 6 and size > 7:
         size -= 0.5
     c.setFont(font, size)
-    c.drawString(INSET, base, row["label"])
+    # Centred in the BOND column, as the figures are in theirs.
+    c.drawCentredString((EDGES[0] + EDGES[1]) / 2, base, row["label"])
 
     c.setFont(font, F_ROW)
     # No thousands separators: the office prints 2658, not 2,658.
