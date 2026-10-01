@@ -3340,6 +3340,9 @@ def _analysis_rows(win: dict, cluster: int, bond: str, round_off: bool = False):
         "up": (r["trend"] or 0) >= 0,
         "trend": (None if r["trend"] is None
                   else mod.whole(abs(r["trend"]), places)),
+        # The same figures unprinted, for the workbook: a percentage there is
+        # a number Excel can sort and add, not the text "21%".
+        "net_pct_v": r["net_pct"], "sell_v": r["sell"], "trend_v": r["trend"],
     } for r in raw]
     return rows, (prev["period"] if prev else None), sorted(now), basis
 
@@ -3387,49 +3390,153 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
     if "error" in win:
         raise HTTPException(404, win["error"])
     chosen = win["period"]
-    rows, _prev, _bonds, _basis = _analysis_rows(win, cluster, bond, bool(round_off))
+    rows, prev, _bonds, _basis = _analysis_rows(win, cluster, bond, bool(round_off))
     if not rows:
         raise HTTPException(404, "Nothing matches that filter.")
 
     import tempfile
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.worksheet.page import PageMargins
 
-    navy, gold = "FF0A294F", "FFFFBD30"
+    # The PDF's own colours, so the workbook and the PDF read as one report:
+    # white and paper bond rows, navy cluster rows, the gold total, and the
+    # sell-through column picked out pink below 40% and amber at 40% and up.
+    NAVY, GOLD, PAPER, INK = "FF0A294F", "FFFFBD30", "FFF5F7FC", "FF0F192D"
+    AMBER_F, PINK_F = "FFFFE0B3", "FFFFCCD1"
+    AMBER_T, RED_T, AMBER_C, PINK_C = "FFE65100", "FFC62828", "FFFFB74D", "FFE57373"
+    UP, DOWN, UP_C, DOWN_C = "FF3F8600", "FFCF1322", "FF90EE90", "FFFFB6C1"
+    GRID, GRID_C, GRID_T = "FFDADFE7", "FF22407F", "FFD89218"
+    SELL_AMBER_AT = _analysis_module().SELL_AMBER_AT
+
+    def fill(c):
+        return PatternFill("solid", fgColor=c)
+
+    def box(c, weight="thin"):
+        side = Side(style=weight, color=c)
+        return Border(left=side, right=side, top=side, bottom=side)
+
+    AL = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    WIDE = 11                                 # A to K
+
     wb = Workbook()
     ws = wb.active
     ws.title = "SHOP SALES - ANALYSIS"
-    ws.append(["BOND", "OPENING", "RECEIPT", "SALES", "CLOSING", "STOCK NET",
-               "STOCK NET %", "SELL-THROUGH %", "AVG/DAY CM", "AVG/DAY LM", "TREND"])
-    for cell in ws[1]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(bold=True, color=gold, size=10)
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 24
 
+    # ---- title and scope ---------------------------------------------------
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=WIDE)
+    t = ws.cell(row=1, column=1, value=f"SHOP SALES - ANALYSIS   ·   {chosen['long']}")
+    t.fill, t.font, t.alignment = fill(NAVY), Font(bold=True, color=GOLD, size=14), AL
+    ws.row_dimensions[1].height = 30
+
+    scope = (bond.title() if bond else f"Cluster {cluster}" if cluster else "All bonds")
+    lm = f"LM = {prev['short']}" if prev else "no LM uploaded"
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=WIDE)
+    sub = ws.cell(row=2, column=1,
+                  value=f"{scope}   ·   CM = this period   ·   {lm}   ·   cases")
+    sub.fill, sub.font, sub.alignment = fill(GOLD), Font(bold=True, color=NAVY, size=10.5), AL
+    ws.row_dimensions[2].height = 21
+
+    # ---- two-row heading, AVERAGE SALES / DAY over CM, LM and TREND ----------
+    head_font = Font(bold=True, color=GOLD, size=10)
+    head_border = Border(left=Side(style="thin", color=GOLD), right=Side(style="thin", color=GOLD),
+                         top=Side(style="thin", color=NAVY), bottom=Side(style="medium", color=GOLD))
+    singles = ["BOND", "OPENING", "RECEIPT", "SALES", "CLOSING",
+               "STOCK NET", "STOCK NET %", "SELL-THROUGH %"]
+    for col, label in enumerate(singles, start=1):
+        ws.merge_cells(start_row=3, start_column=col, end_row=4, end_column=col)
+        ws.cell(row=3, column=col, value=label)
+    ws.merge_cells(start_row=3, start_column=9, end_row=3, end_column=11)
+    ws.cell(row=3, column=9, value="AVERAGE SALES / DAY")
+    for col, label in zip((9, 10, 11), ("CM", "LM", "TREND")):
+        ws.cell(row=4, column=col, value=label)
+    for r_ in (3, 4):
+        for col in range(1, WIDE + 1):
+            c = ws.cell(row=r_, column=col)
+            c.fill, c.font, c.alignment, c.border = fill(NAVY), head_font, AL, head_border
+        ws.row_dimensions[r_].height = 19
+
+    # ---- rows --------------------------------------------------------------
+    def num_fmt(v, red: bool) -> str:
+        # Decimals only where there are decimals ("#,##0.##" printed 5 as
+        # "5."); a fall in red on a bond row, in the row's own ink on a band.
+        whole_ = round_off or float(v or 0).is_integer()
+        base = "#,##0" if whole_ else "#,##0.00"
+        return f"{base};[Red]-{base};0" if red else base
+
+    at = 4
+    stripe = 0
     for r in rows:
-        ws.append([r["label"], *r["cells"], r["net_pct"], r["sell"],
-                   r["cm"] if r["cm"] is not None else "-",
-                   r["lm"] if r["lm"] is not None else "-",
-                   # The arrow is the sign, the same way the screen and the
-                   # PDF read it. A + or - beside it said it twice.
-                   "-" if r["trend"] is None
-                   else ("\u25b2 " if r["up"] else "\u25bc ") + str(r["trend"])])
-        if r["kind"] != "bond":
-            for cell in ws[ws.max_row]:
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(bold=True, color=gold, size=10)
-    figures = "#,##0" if round_off else "#,##0.##"
-    for row in ws.iter_rows(min_row=2, min_col=2):
-        for cell in row:
-            cell.alignment = Alignment(horizontal="center")
-            if isinstance(cell.value, (int, float)):
-                cell.number_format = figures
+        at += 1
+        cluster_row, total_row = r["kind"] == "cluster", r["kind"] not in ("bond", "cluster")
+        if cluster_row:
+            bg, ink, grid, bold = NAVY, GOLD, GRID_C, True
+        elif total_row:
+            bg, ink, grid, bold = GOLD, NAVY, GRID_T, True
+        else:
+            bg, ink, grid, bold = (PAPER if stripe % 2 == 0 else "FFFFFFFF"), INK, GRID, False
+        # Each cluster's bonds start on the paper stripe, as in the PDF.
+        stripe = 0 if bold else stripe + 1
+        font = Font(bold=bold, color=ink, size=10.5 if bold else 10)
+        border = box(grid)
 
-    ws.column_dimensions["A"].width = 22
-    for col in "BCDEFGHIJK":
-        ws.column_dimensions[col].width = 13
-    ws.freeze_panes = "B2"
+        cm = r["cm"] if r["cm"] is not None else "-"
+        lmv = r["lm"] if r["lm"] is not None else "-"
+        # Whole per cent, as the screen and the PDF print them - and stored
+        # that way, so a fall of 0.2% reads 0% rather than "-0%".
+        whole_pct = _analysis_module().whole
+        net_pct = None if r["net_pct_v"] is None else whole_pct(r["net_pct_v"]) / 100
+        sell = None if r["sell_v"] is None else whole_pct(r["sell_v"]) / 100
+        trend = r["trend_v"]
+        values = [r["label"], *r["cells"],
+                  "-" if net_pct is None else net_pct,
+                  "-" if sell is None else sell,
+                  cm, lmv, "-" if trend is None else trend]
+        for col, v in enumerate(values, start=1):
+            c = ws.cell(row=at, column=col, value=v)
+            c.fill, c.font, c.alignment, c.border = fill(bg), font, AL, border
+            if col in (2, 3, 4, 5, 6, 9, 10) and isinstance(v, (int, float)):
+                c.number_format = num_fmt(v, red=not bold)
+            elif col == 7 and isinstance(v, float):
+                c.number_format = "0%;[Red]-0%;0%" if not bold else "0%"
+
+        # Sell-through: pink below 40%, amber at 40% and above.
+        amber = r["sell_v"] is not None and r["sell_v"] >= SELL_AMBER_AT
+        c = ws.cell(row=at, column=8)
+        if isinstance(c.value, float):
+            c.number_format = "0%"
+        if cluster_row:
+            c.font = Font(bold=True, size=10.5, color=AMBER_C if amber else PINK_C)
+        elif total_row:
+            c.font = Font(bold=True, size=10.5, color=AMBER_T if amber else RED_T)
+        else:
+            c.fill = fill(AMBER_F if amber else PINK_F)
+            c.font = Font(bold=True, size=10, color=AMBER_T if amber else RED_T)
+
+        # Trend: the arrow is the sign, green up and red down - a number, so
+        # it sorts, shown as the arrow and the size of the change.
+        c = ws.cell(row=at, column=11)
+        if isinstance(c.value, (int, float)):
+            places = ("#,##0" if round_off or float(c.value).is_integer()
+                      else "#,##0.00")
+            c.number_format = f'"\u25b2 "{places};"\u25bc "{places};"\u25b2 "0'
+            rising = c.value >= 0
+            colour = (UP_C if rising else DOWN_C) if cluster_row else (UP if rising else DOWN)
+            c.font = Font(bold=True, size=10.5 if bold else 10, color=colour)
+        ws.row_dimensions[at].height = 22 if bold else 19
+
+    # ---- sheet furniture ---------------------------------------------------
+    widths = [22, 12, 12, 11, 12, 12, 13, 15, 10, 10, 11]
+    for i, w_ in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w_
+    ws.freeze_panes = "B5"
+    ws.sheet_view.showGridLines = False
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.print_title_rows = "1:4"
+    ws.page_margins = PageMargins(left=0.3, right=0.3, top=0.4, bottom=0.4)
 
     tmp = Path(tempfile.mkdtemp()) / f"Shop Sales Analysis ({chosen['short']}).xlsx"
     centre_all(wb)
