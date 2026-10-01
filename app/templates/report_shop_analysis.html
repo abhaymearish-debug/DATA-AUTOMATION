@@ -96,17 +96,27 @@
   tr.grand td { background:var(--gold); color:#1B2A4A; font-weight:700;
                 border-left-color:rgba(27,42,74,.22); }
 
-  /* Sell-through is the column the office reads first, so it keeps its own
-     wash: amber from 40 per cent, pink below. */
+  /* Sell-through is the column the office reads first, so it is rated the
+     way the KSBC Shop Sales workbook rates it: High Performance from 80%,
+     Balanced from 60%, Inventory Heavy from 40%, Critical Overstock below,
+     No activity where there was nothing to sell - its fills and inks, and its
+     brighter inks on a navy row. */
   td.sell { font-weight:700; }
-  tr.bond td.sell.hi { background:#FFE0B2; color:#E65100; }
-  tr.bond td.sell.lo { background:#FFCCD1; color:#C62828; }
-  tr.bond.alt td.sell.hi { background:#FFDCA8; }
-  tr.bond.alt td.sell.lo { background:#FFC5CB; }
-  tr.cluster td.sell.hi { color:#FFB74D; }
-  tr.cluster td.sell.lo { color:#E57373; }
-  tr.grand td.sell.hi { color:#E65100; }
-  tr.grand td.sell.lo { color:#C62828; }
+  tr.bond td.sell.t-high     { background:#BBDEFB; color:#1565C0; }
+  tr.bond td.sell.t-balanced { background:#DCEDC8; color:#2E7D32; }
+  tr.bond td.sell.t-inv      { background:#FFE0B2; color:#E65100; }
+  tr.bond td.sell.t-crit     { background:#FFCDD2; color:#C62828; }
+  tr.bond td.sell.t-none     { background:#ECEFF1; color:#6B7280; }
+  tr.cluster td.sell.t-high     { color:#4FC3F7; }
+  tr.cluster td.sell.t-balanced { color:#81C784; }
+  tr.cluster td.sell.t-inv      { color:#FFB74D; }
+  tr.cluster td.sell.t-crit     { color:#E57373; }
+  tr.cluster td.sell.t-none     { color:#B0BEC5; }
+  tr.grand td.sell.t-high     { color:#1565C0; }
+  tr.grand td.sell.t-balanced { color:#2E7D32; }
+  tr.grand td.sell.t-inv      { color:#E65100; }
+  tr.grand td.sell.t-crit     { color:#C62828; }
+  tr.grand td.sell.t-none     { color:#6B7280; }
 
   .tr { display:inline-flex; align-items:center; gap:5px; font-weight:700; }
   .tr .ar { font-size:10px; line-height:1; }
@@ -281,7 +291,7 @@
         <td>{{ r.label }}</td>
         {% for v in r.cells %}<td>{{ fig(v) }}</td>{% endfor %}
         <td>{{ r.net_pct }}</td>
-        <td class="sell {{ 'hi' if r.amber else 'lo' }}">{{ r.sell }}</td>
+        <td class="sell t-{{ r.tier }}">{{ r.sell }}</td>
         <td>{{ fig(r.cm) }}</td>
         <td>{{ fig(r.lm) }}</td>
         <td>

@@ -3335,7 +3335,8 @@ def _analysis_rows(win: dict, cluster: int, bond: str, round_off: bool = False):
     rows = [{
         "kind": r["kind"], "label": r["label"], "cells": r["cells"],
         "net_pct": mod.pct(r["net_pct"]), "sell": mod.pct(r["sell"]),
-        "amber": r["sell"] is not None and r["sell"] >= mod.SELL_AMBER_AT,
+        # The KSBC Shop Sales rating band: high / balanced / inv / crit / none.
+        "tier": mod.sell_tier(r["sell"])[0],
         "cm": r["cm"], "lm": r["lm"],
         "up": (r["trend"] or 0) >= 0,
         "trend": (None if r["trend"] is None
@@ -3400,14 +3401,16 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
     from openpyxl.worksheet.page import PageMargins
 
     # The PDF's own colours, so the workbook and the PDF read as one report:
-    # white and paper bond rows, navy cluster rows, the gold total, and the
-    # sell-through column picked out pink below 40% and amber at 40% and up.
+    # white and paper bond rows, navy cluster rows and the gold total. The
+    # sell-through column is rated the way the KSBC Shop Sales workbook rates
+    # it, as real conditional formatting on the bond rows.
     NAVY, GOLD, PAPER, INK = "FF0A294F", "FFFFBD30", "FFF5F7FC", "FF0F192D"
-    AMBER_F, PINK_F = "FFFFE0B3", "FFFFCCD1"
-    AMBER_T, RED_T, AMBER_C, PINK_C = "FFE65100", "FFC62828", "FFFFB74D", "FFE57373"
     UP, DOWN, UP_C, DOWN_C = "FF3F8600", "FFCF1322", "FF90EE90", "FFFFB6C1"
     GRID, GRID_C, GRID_T = "FFDADFE7", "FF22407F", "FFD89218"
-    SELL_AMBER_AT = _analysis_module().SELL_AMBER_AT
+    mod = _analysis_module()
+
+    def argb(hex_: str) -> str:
+        return "FF" + hex_.lstrip("#").upper()
 
     def fill(c):
         return PatternFill("solid", fgColor=c)
@@ -3466,6 +3469,7 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
 
     at = 4
     stripe = 0
+    sell_cells: list = []
     for r in rows:
         at += 1
         cluster_row, total_row = r["kind"] == "cluster", r["kind"] not in ("bond", "cluster")
@@ -3482,11 +3486,12 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
 
         cm = r["cm"] if r["cm"] is not None else "-"
         lmv = r["lm"] if r["lm"] is not None else "-"
-        # Whole per cent, as the screen and the PDF print them - and stored
-        # that way, so a fall of 0.2% reads 0% rather than "-0%".
-        whole_pct = _analysis_module().whole
-        net_pct = None if r["net_pct_v"] is None else whole_pct(r["net_pct_v"]) / 100
-        sell = None if r["sell_v"] is None else whole_pct(r["sell_v"]) / 100
+        # Stock net % whole, as the screen and the PDF print it - and stored
+        # that way, so a fall of 0.2% reads 0% rather than "-0%". Sell-through
+        # keeps its exact figure: the rating bands are read off it, and 39.6%
+        # is below 40 even though it prints as 40%.
+        net_pct = None if r["net_pct_v"] is None else mod.whole(r["net_pct_v"]) / 100
+        sell = None if r["sell_v"] is None else r["sell_v"] / 100
         trend = r["trend_v"]
         values = [r["label"], *r["cells"],
                   "-" if net_pct is None else net_pct,
@@ -3500,18 +3505,20 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
             elif col == 7 and isinstance(v, float):
                 c.number_format = "0%;[Red]-0%;0%" if not bold else "0%"
 
-        # Sell-through: pink below 40%, amber at 40% and above.
-        amber = r["sell_v"] is not None and r["sell_v"] >= SELL_AMBER_AT
+        # Sell-through. A bond's cell is left to the conditional formatting
+        # added below; a cluster or total band takes the rating's ink - the
+        # bright one on navy, as the KSBC workbook does on its dark rows.
         c = ws.cell(row=at, column=8)
         if isinstance(c.value, float):
             c.number_format = "0%"
+        _key, _fill, tier_ink, tier_dark = mod.sell_tier(r["sell_v"])
         if cluster_row:
-            c.font = Font(bold=True, size=10.5, color=AMBER_C if amber else PINK_C)
+            c.font = Font(bold=True, size=10.5, color=argb(tier_dark))
         elif total_row:
-            c.font = Font(bold=True, size=10.5, color=AMBER_T if amber else RED_T)
+            c.font = Font(bold=True, size=10.5, color=argb(tier_ink))
         else:
-            c.fill = fill(AMBER_F if amber else PINK_F)
-            c.font = Font(bold=True, size=10, color=AMBER_T if amber else RED_T)
+            c.font = Font(bold=True, size=10, color=INK)
+            sell_cells.append(c.coordinate)
 
         # Trend: the arrow is the sign, green up and red down - a number, so
         # it sorts, shown as the arrow and the size of the change.
@@ -3524,6 +3531,28 @@ def shop_analysis_xlsx(request: Request, date_from: str = "", date_to: str = "",
             colour = (UP_C if rising else DOWN_C) if cluster_row else (UP if rising else DOWN)
             c.font = Font(bold=True, size=10.5 if bold else 10, color=colour)
         ws.row_dimensions[at].height = 22 if bold else 19
+
+    # ---- sell-through rating, as conditional formatting --------------------
+    # The KSBC Shop Sales workbook's own rules, band for band: High Performance
+    # from 80%, Balanced from 60%, Inventory Heavy from 40%, Critical Overstock
+    # below, and No activity where there was nothing to sell. Real rules, so a
+    # figure edited in the sheet re-rates itself.
+    if sell_cells:
+        from openpyxl.formatting.rule import CellIsRule
+        where = " ".join(sell_cells)
+        for at_least, _k, tier_fill, tier_ink, _dark in mod.SELL_TIERS:
+            ws.conditional_formatting.add(where, CellIsRule(
+                operator="greaterThanOrEqual", formula=[str(at_least / 100)],
+                stopIfTrue=True,
+                fill=PatternFill(start_color=argb(tier_fill), end_color=argb(tier_fill),
+                                 fill_type="solid"),
+                font=Font(bold=True, color=argb(tier_ink))))
+        _k, none_fill, none_ink, _dark = mod.SELL_NONE
+        ws.conditional_formatting.add(where, CellIsRule(
+            operator="equal", formula=['"-"'], stopIfTrue=True,
+            fill=PatternFill(start_color=argb(none_fill), end_color=argb(none_fill),
+                             fill_type="solid"),
+            font=Font(bold=True, color=argb(none_ink))))
 
     # ---- sheet furniture ---------------------------------------------------
     widths = [22, 12, 12, 11, 12, 12, 13, 15, 10, 10, 11]

@@ -12,7 +12,8 @@ Geometry was read out of the office's own PDF with a content-stream parse:
     period band   34  gold, 13pt navy
     header        62  navy in two tiers, 8.5pt, gold rules 2.2 / 1.6
     body row      35.68, baseline row_top - (row_height / 2 + font * 0.35)
-    sell-through  amber cell at 40% and above, pink below
+    sell-through  rated in the KSBC Shop Sales workbook's own four bands
+                  (see SELL_TIERS), in its own fills and inks
 
 Every figure is rounded half up from its own unrounded aggregate, never from
 another rounded figure - which is why the bond column can sum to one less than
@@ -85,6 +86,30 @@ HEADINGS = ["BOND", "OPENING", "RECEIPT", "SALES", "CLOSING",
             ["STOCK", "NET"], ["STOCK", "NET %"], ["SELL-", "THROUGH %"]]
 SUBHEADS = ["CM", "LM", "TREND"]
 SELL_AMBER_AT = 40.0               # per cent, on the unrounded figure
+
+# Sell-through, rated exactly as the KSBC Shop Sales workbook rates it - its
+# BOND PERFORMANCE sheet and every region sheet: sales over opening plus
+# receipts, the same four bands, the same fill and ink for each, and its own
+# brighter inks for a dark row. The bands apply to the unrounded figure, so a
+# 39.6% that prints as 40% still rates below 40.
+SELL_TIERS = (
+    # at least %   key          fill        ink         ink on navy
+    (80.0,         "high",      "#BBDEFB",  "#1565C0",  "#4FC3F7"),   # High Performance
+    (60.0,         "balanced",  "#DCEDC8",  "#2E7D32",  "#81C784"),   # Balanced
+    (40.0,         "inv",       "#FFE0B2",  "#E65100",  "#FFB74D"),   # Inventory Heavy
+    (0.0,          "crit",      "#FFCDD2",  "#C62828",  "#E57373"),   # Critical Overstock
+)
+SELL_NONE = ("none", "#ECEFF1", "#6B7280", "#B0BEC5")                 # No activity
+
+
+def sell_tier(sell) -> tuple:
+    """(key, fill, ink, ink on navy) for a sell-through per cent."""
+    if sell is None:
+        return SELL_NONE
+    for at, key, fill, ink, dark in SELL_TIERS:
+        if sell >= at:
+            return (key, fill, ink, dark)
+    return SELL_NONE
 
 MEASURES = [("Shop Opening Cases", "Shop Opening Bottles"),
             ("Shop In Cases", "Shop In Bottles"),
@@ -327,12 +352,12 @@ def draw_row(c, y, h, row, stripe):
     else:
         bg, ink = (PAPER if stripe % 2 == 0 else colors.white), INK
 
-    amber = row["sell"] is not None and row["sell"] >= SELL_AMBER_AT
+    _key, tier_fill, tier_ink, tier_dark = sell_tier(row["sell"])
     for i in range(len(EDGES) - 1):
         left, right = EDGES[i], EDGES[i + 1]
         fill = bg
         if i == SELL_COL and not cluster and not total:
-            fill = AMBER_F if amber else PINK_F
+            fill = colors.HexColor(tier_fill)
         c.setFillColor(fill)
         c.rect(left, y - h, right - left, h, stroke=0, fill=1)
 
@@ -357,10 +382,7 @@ def draw_row(c, y, h, row, stripe):
         c.setFillColor(ink)
         c.drawCentredString((EDGES[i] + EDGES[i + 1]) / 2, base, text)
 
-    if cluster:
-        sell_ink = AMBER_C if amber else PINK_C
-    else:
-        sell_ink = AMBER_T if amber else RED_T
+    sell_ink = colors.HexColor(tier_dark if cluster else tier_ink)
     c.setFillColor(sell_ink)
     c.setFont(BOLD, F_ROW)
     c.drawCentredString((EDGES[SELL_COL] + EDGES[SELL_COL + 1]) / 2, base, pct(row["sell"]))
