@@ -327,6 +327,7 @@ for rf in raw_files:
         "file": os.path.basename(rf),
         "date_range": f"{MONTH} {min_day}–{max_day}, {YEAR}" if min_day != 99 else "(none)",
         "rows_read": rows_read,
+        "rows_for_month": rows_kept_for_month,
         "mtime": mtime,
     })
 
@@ -384,13 +385,25 @@ for _m in source_meta:
 # wipe it. Treat as a clean no-op -- exit WITHOUT saving and let the operator
 # promote / keep the existing workbook. A genuine cumulative raw always carries
 # data, so this branch only fires on an empty single-day drop.
+#
+# That no-op used to leave as a failure (SystemExit with a message is exit 1),
+# so the dry 1st of every month - KSD's day 1 is always a dry day - showed in
+# the app as a failed upload with an instruction about month-end promotion
+# that had nothing to do with it. A nil day now leaves with its own code, 10,
+# which the app records as a processed upload with nothing dispatched.
+#
+# Rows that DO exist but all belong to another month are not a nil day: that
+# is the wrong file, and it still stops as an error.
 if not retained_rows:
-    raise SystemExit(
-        "ZERO-DISPATCH RAW: 0 dispatch rows for " + MONTH + ".\n"
-        "This is a valid zero-dispatch day, but there is no month data in the raw to\n"
-        "rebuild from. The existing workbook is left UNTOUCHED (not overwritten).\n"
-        "If this is month-end, promote the live workbook to its full-month name."
-    )
+    _other_month = sum(m["rows_read"] - m.get("rows_for_month", 0) for m in source_meta)
+    if _other_month:
+        print(f"ERROR_WRONG_MONTH: the raw holds {_other_month} dispatch row(s), "
+              f"none of them dated {MONTH} {YEAR}.")
+        print("ACTION: check the file is the export for the date picked, and upload it again.")
+        raise SystemExit(1)
+    print(f"NIL_DAY: Nothing was dispatched in this {MONTH.title()} {YEAR} export (a dry day). "
+          "Recorded as uploaded - there was nothing to add to the workbook.")
+    raise SystemExit(10)
 
 # Period END = the later of (last day with dispatches) and (window end parsed from
 # the filename). This keeps trailing empty days (incl. a dry day 1) inside the

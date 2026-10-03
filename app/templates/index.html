@@ -1569,6 +1569,8 @@ function drawHistory(){
       </div>
       <div class="files">${files}<span class="by">${by}</span></div>
       ${holds}
+      ${lead.status === 'promoted' && lead.note && historyCard.stream === 'secondary_sales'
+        ? `<div class="holds">${escapeHtml(lead.note)}</div>` : ''}
       ${lead.error ? `<div class="err">${escapeHtml(lead.error)}</div>` : ''}
       <div class="acts">${actions}</div>
       ${more}

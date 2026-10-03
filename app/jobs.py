@@ -257,6 +257,19 @@ def run_pipeline(job: Job, ctx: JobContext) -> None:
 
             result.seconds = round(time.time() - started, 1)
 
+            # A dry day: the script found nothing dispatched and nothing to
+            # build. That is a finished upload, not a failed one - the raw is
+            # filed, the day counts as answered, and no workbook changes.
+            if result.returncode in step.nil_codes:
+                result.status = "ok"
+                for later in job.steps[i + 1:]:
+                    later.status = "skipped"
+                job.status = JobStatus.PROMOTED
+                job.note = _nil_note(proc.stdout)
+                log_lines.append(f"\n[nil day] {job.note}\n")
+                _finish(job, log_path, log_lines)
+                return
+
             if result.returncode != 0:
                 result.status = "failed"
                 if step.fatal:
@@ -307,6 +320,15 @@ def run_pipeline(job: Job, ctx: JobContext) -> None:
         job.error = f"The build finished but saving it failed: {exc}"
         log_lines.append(f"\n[auto-save] FAILED: {exc}\n")
     _finish(job, log_path, log_lines)
+
+
+def _nil_note(stdout: str) -> str:
+    """The script's own NIL_DAY sentence, or a plain one if it printed none."""
+    for line in reversed((stdout or "").splitlines()):
+        text = line.strip()
+        if text.upper().startswith("NIL_DAY:"):
+            return text.split(":", 1)[1].strip()
+    return "Nothing was dispatched on this day - recorded as uploaded."
 
 
 def _explain(step: Step, result: StepResult, stdout: str, stderr: str,

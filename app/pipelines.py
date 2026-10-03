@@ -85,6 +85,10 @@ class Step:
     # True when the script lives in this app's reports/ folder rather than in
     # the existing .claude/scripts pipeline.
     app_script: bool = False
+    # Exit codes that mean "nothing to build, and that is correct" - a dry day
+    # with no dispatches. The run stops there as processed, not failed, and
+    # the script's NIL_DAY line becomes the job's note.
+    nil_codes: tuple = ()
 
     def display(self) -> str:
         return self.label or self.script
@@ -271,7 +275,9 @@ SECONDARY_SALES = Stream(
         # restyle_dashboard.py itself and verifies the locked dark dashboard
         # rendered before declaring success.
         Step("build_secondary.py",
-             label="Build secondary analysis (seed + day merge + dashboard)"),
+             label="Build secondary analysis (seed + day merge + dashboard)",
+             # 10 = a dry day: the export holds no dispatches at all.
+             nil_codes=(10,)),
         # Brandwise cluster PDFs, built from the SCRATCH workbook this run just
         # produced — never from the live file — so the PDFs and the workbook
         # awaiting approval always describe the same data.
