@@ -11,12 +11,22 @@ Two different kinds of fact live here, so they are stored differently.
   * Bond -> cluster is not in any workbook; it was a constant in the code. It
     becomes a small JSON the app owns, so the ASM split can be changed without
     a deploy. The built-in split is the fallback.
+
+  * A new outlet - a KSBC shop, a Consumerfed outlet or a bar - is a new row
+    in that same master sheet, written in the layout the build scripts read by
+    position (Sl.No. first, then W Code, Warehouse, Code, Name, CAT, Field
+    Staff, Bond, Status). Until it is there, its dispatches count in the
+    network total and in no bond.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import threading
+from collections import Counter, defaultdict
+from copy import copy
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +36,15 @@ from . import config
 
 SHEET = "16-4-25"
 BOND_COL = "Bond"
+
+# Both writers rewrite the whole workbook, so two at once would lose one.
+_WRITE_LOCK = threading.Lock()
+
+# What master data's CAT column holds, and what the office calls each.
+CATS = {"KSBC": "Shop", "FED": "Consumerfed", "BAR": "Bar"}
+# KSBC's licensee numbers say what the outlet is in their first digit:
+# 1xxxxx a KSBC shop, 2xxxxx a Consumerfed outlet, 4xxxxx a bar.
+PREFIX_CAT = {"1": "KSBC", "2": "FED", "4": "BAR"}
 
 # The split as it has always been. An override file replaces it wholesale.
 DEFAULT_CLUSTERS: dict[str, list[str]] = {
@@ -141,11 +160,18 @@ def load_shops() -> dict:
     clusters = load_clusters()
     bonds = sorted({s["bond"] for s in shops if s["bond"]}
                    | {b for v in clusters.values() for b in v})
-    return {"shops": shops, "bonds": bonds, "clusters": clusters, "source": path.name}
+    return {"shops": shops, "bonds": bonds, "clusters": clusters, "source": path.name,
+            "warehouses": _warehouse_choices(shops), "staff": _staff_of_bond(shops),
+            "cats": CATS, "prefix": PREFIX_CAT}
 
 
 def save_bonds(changes: dict[str, str]) -> dict:
     """Write shop -> bond back into master data. Backs the file up first."""
+    with _WRITE_LOCK:
+        return _save_bonds(changes)
+
+
+def _save_bonds(changes: dict[str, str]) -> dict:
     path = config.MASTER_DATA
     if not path.is_file():
         return {"error": "MASTER DATA CONFIRMED.xlsx is not in the workspace."}
@@ -156,11 +182,7 @@ def save_bonds(changes: dict[str, str]) -> dict:
     if lock.exists():
         return {"error": f"'{path.name}' is open in Excel. Close it and save again."}
 
-    backups = path.parent / "_master_backups"
-    backups.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup = backups / f"{path.stem}.bak_{stamp}{path.suffix}"
-    shutil.copy2(path, backup)
+    backup = path.parent / "_master_backups" / _backup(path)
 
     # Not read_only: this one writes. openpyxl is pinned at the version the
     # build scripts use, so a round-trip here is the same round-trip they do.
@@ -192,3 +214,224 @@ def save_bonds(changes: dict[str, str]) -> dict:
     wb.save(path)
     wb.close()
     return {"changed": changed, "unknown": unknown, "backup": backup.name}
+
+
+# ---------------------------------------------------------------------------
+# Adding an outlet
+# ---------------------------------------------------------------------------
+
+
+def _wh_label(full: str) -> str:
+    """'WH-KOZHIKODE RFL9/2024/00001' -> 'KOZHIKODE', the way every report says it."""
+    from . import reports_api
+    return reports_api.canonical_warehouse(full) or str(full or "").strip()
+
+
+def _warehouse_choices(shops: list[dict]) -> list[dict]:
+    """One choice per warehouse, carrying what a new row there should say.
+
+    A warehouse is written several ways in master (a new licence number, an
+    old one), so the choice is the canonical name, and the row gets the
+    spelling and W Code most of that warehouse's outlets already carry. The
+    bond offered is the one most of them are mapped to - a suggestion, since
+    AYARKKUNNAM, THIRUVALLA and a few others feed two bonds.
+    """
+    full, bond = defaultdict(Counter), defaultdict(Counter)
+    for s in shops:
+        if not s.get("warehouse"):
+            continue
+        label = _wh_label(s["warehouse"])
+        full[label][s["warehouse"]] += 1
+        if s.get("bond"):
+            bond[label][s["bond"]] += 1
+    return [{"label": label,
+             "full": names.most_common(1)[0][0],
+             "bond": bond[label].most_common(1)[0][0] if bond[label] else ""}
+            for label, names in sorted(full.items())]
+
+
+def _staff_of_bond(shops: list[dict]) -> dict[str, str]:
+    """Field staff is assigned per bond, so a new outlet takes its bond's."""
+    seen = defaultdict(Counter)
+    for s in shops:
+        if s.get("bond"):
+            seen[s["bond"]][s.get("staff") or "VACANT"] += 1
+    return {b: c.most_common(1)[0][0] for b, c in seen.items()}
+
+
+def _extend_to(ws, last: int, new: int) -> None:
+    """Stretch the sheet's filter and its CAT colouring over the new row."""
+    tail = re.compile(r"^([A-Z]+)(\d+):([A-Z]+)(\d+)$")
+
+    def grow(ref: str) -> str:
+        m = tail.match(ref or "")
+        if not m or int(m.group(4)) < last - 2:
+            return ref
+        return f"{m.group(1)}{m.group(2)}:{m.group(3)}{max(int(m.group(4)), new)}"
+
+    if ws.auto_filter and ws.auto_filter.ref:
+        ws.auto_filter.ref = grow(ws.auto_filter.ref)
+
+    from openpyxl.formatting.formatting import ConditionalFormattingList
+    old, fresh = ws.conditional_formatting, ConditionalFormattingList()
+    for cf in old:
+        ref = " ".join(grow(str(r)) for r in str(cf.sqref).split())
+        for rule in cf.rules:
+            fresh.add(ref, rule)
+    ws.conditional_formatting = fresh
+
+
+def add_outlet(entry: dict) -> dict:
+    """Append one outlet to master data. Raises ValueError on a bad entry."""
+    if not isinstance(entry, dict):
+        raise ValueError("Expected the outlet's details.")
+    code = re.sub(r"\s+", "", str(entry.get("code") or ""))
+    if not re.fullmatch(r"\d{4,8}", code):
+        raise ValueError("The code is the outlet's Licensee No. in the KSBC raw - "
+                         "digits only, like 410013.")
+    name = " ".join(str(entry.get("name") or "").split()).upper()
+    if not name:
+        raise ValueError("Give the outlet a name.")
+    if len(name) > 80:
+        raise ValueError("That name is longer than 80 characters - shorten it.")
+    cat = str(entry.get("cat") or "").strip().upper()
+    if cat not in CATS:
+        raise ValueError("Pick what it is: Shop, Consumerfed or Bar.")
+    bond = str(entry.get("bond") or "").strip().upper()
+    wh_pick = str(entry.get("warehouse") or "").strip().upper()
+    status = "Closed" if str(entry.get("status") or "").strip().lower() == "closed" else "Active"
+
+    with _WRITE_LOCK:
+        path = config.MASTER_DATA
+        if not path.is_file():
+            raise ValueError("MASTER DATA CONFIRMED.xlsx is not in the workspace.")
+        if (path.parent / f"~${path.name}").exists():
+            raise ValueError(f"'{path.name}' is open in Excel. Close it and try again.")
+
+        current = load_shops()
+        if current.get("error"):
+            raise ValueError(current["error"])
+        clash = next((s for s in current["shops"] if s["code"] == code), None)
+        if clash:
+            raise ValueError(f"{code} is already in master data - {clash['name']}"
+                             f"{', ' + clash['bond'] + ' bond' if clash['bond'] else ''}.")
+        if bond not in current["bonds"]:
+            raise ValueError("Pick the bond it belongs to.")
+        wh = next((w for w in current["warehouses"] if w["label"] == wh_pick), None)
+        if wh is None:
+            raise ValueError("Pick the KSBC warehouse that supplies it.")
+        staff = current["staff"].get(bond, "VACANT")
+
+        wb = openpyxl.load_workbook(path)
+        ws = _sheet(wb)
+        head_row, ix = _header_row(ws)
+        need = ["Sl.No.", "W Code", "Warehouse Name", "Shop Code", "Shop Name",
+                "CAT", "Field Staff", BOND_COL, "Status"]
+        missing = [n for n in need if n not in ix]
+        if missing:
+            wb.close()
+            raise ValueError("MASTER DATA is missing column(s): " + ", ".join(missing))
+
+        last, top_sl = head_row, 0
+        wcodes = Counter()
+        for r in range(head_row + 1, ws.max_row + 1):
+            if ws.cell(row=r, column=ix["Shop Code"]).value in (None, ""):
+                continue
+            last = r
+            sl = ws.cell(row=r, column=ix["Sl.No."]).value
+            try:
+                top_sl = max(top_sl, int(sl))
+            except (TypeError, ValueError):
+                pass
+            if ws.cell(row=r, column=ix["Warehouse Name"]).value == wh["full"]:
+                wcodes[ws.cell(row=r, column=ix["W Code"]).value] += 1
+        new = last + 1
+
+        # Dress the row like the one two above it, so the banding carries on.
+        model = new - 2 if new - 2 > head_row else last
+        width = max(ix.values())
+        for col in range(1, width + 1):
+            src = ws.cell(row=model, column=col)
+            if src.has_style:
+                ws.cell(row=new, column=col)._style = copy(src._style)
+        h = ws.row_dimensions[last].height or ws.row_dimensions[model].height
+        if h:
+            ws.row_dimensions[new].height = h
+
+        values = {
+            "Sl.No.": top_sl + 1,
+            "W Code": wcodes.most_common(1)[0][0] if wcodes else "",
+            "Warehouse Name": wh["full"],
+            # Master holds codes as numbers; the readers all str() them.
+            "Shop Code": int(code) if not code.startswith("0") else code,
+            "Shop Name": name,
+            "CAT": cat,
+            "Field Staff": staff,
+            BOND_COL: bond,
+            "Status": status,
+        }
+        for k, v in values.items():
+            ws.cell(row=new, column=ix[k]).value = v
+        _extend_to(ws, last, new)
+
+        backup = _backup(path)
+        wb.save(path)
+        wb.close()
+
+    return {"shop": {"code": code, "name": name, "warehouse": wh["full"], "cat": cat,
+                     "staff": staff, "bond": bond, "status": status},
+            "backup": backup}
+
+
+def _backup(path: Path) -> str:
+    """Copy master aside before a write. Never over an earlier copy: two
+    outlets added inside the same second used to share a name, and the second
+    copy - already holding the first outlet - replaced the only clean one."""
+    backups = path.parent / "_master_backups"
+    backups.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = backups / f"{path.stem}.bak_{stamp}{path.suffix}"
+    n = 2
+    while dest.exists():
+        dest = backups / f"{path.stem}.bak_{stamp}_{n}{path.suffix}"
+        n += 1
+    shutil.copy2(path, dest)
+    return dest.name
+
+
+def unmatched_outlets() -> dict:
+    """Outlets KSBC dispatched to that master data has never heard of.
+
+    The secondary build lists them on its UNMATCHED sheet; this is the same
+    list, from the dispatch lines the app already reads, so the page can offer
+    to add each one with what the raw already says about it.
+    """
+    from . import reports_api
+    try:
+        lines, _sources = reports_api.secondary_lines()
+        known = set(reports_api.load_master())
+    except Exception as exc:  # the page still works without the hint
+        return {"outlets": [], "error": f"Could not read the dispatch data: {exc}"}
+
+    found: dict[str, dict] = {}
+    for l in lines:
+        code = str(l.get("shop_code") or "").strip()
+        if not code or code in known or not code.isdigit():
+            continue
+        o = found.setdefault(code, {"code": code, "name": "", "warehouse": "",
+                                    "cases": 0.0, "first": None, "last": None})
+        o["name"] = o["name"] or str(l.get("shop") or "").strip()
+        o["warehouse"] = o["warehouse"] or str(l.get("warehouse") or "").strip()
+        o["cases"] += float(l.get("cases") or 0)
+        d = l.get("date")
+        if d:
+            o["first"] = min(o["first"] or d, d)
+            o["last"] = max(o["last"] or d, d)
+
+    out = []
+    for o in sorted(found.values(), key=lambda o: -o["cases"]):
+        out.append({**o, "cases": round(o["cases"], 2),
+                    "cat": PREFIX_CAT.get(o["code"][:1], ""),
+                    "first": o["first"].isoformat() if o["first"] else "",
+                    "last": o["last"].isoformat() if o["last"] else ""})
+    return {"outlets": out}

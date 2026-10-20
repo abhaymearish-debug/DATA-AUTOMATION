@@ -64,7 +64,7 @@
   /* The box is base.html's; this is only how much room it gets. */
   .bar .searchwrap { flex:0 1 232px; }
   .bar .sp { margin-left:auto; display:flex; gap:9px; align-items:center; }
-  .bar .count { font-size:12.5px; color:var(--muted); }
+  .bar .count { font-size:12.5px; color:var(--muted); white-space:nowrap; }
 
   .wrap { background:var(--card); border:1px solid var(--line); border-radius:12px;
           overflow:auto; max-height:62vh; }
@@ -86,6 +86,103 @@
            border-radius:20px; padding:2px 8px; background:var(--chip); color:var(--chip-ink); }
   .pillc.closed { background:#FEF2F2; color:#991B1B; }
   .status { font-size:12.5px; color:var(--muted); margin:12px 2px 0; }
+
+  /* Outlet type, in the colours master data's own CAT column uses. */
+  .tag { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.4px;
+         border-radius:20px; padding:2px 8px; white-space:nowrap; }
+  .tag.KSBC { background:#DBEAFE; color:#1E40AF; }
+  .tag.FED  { background:#DCFCE7; color:#166534; }
+  .tag.BAR  { background:#FFEDD5; color:#9A3412; }
+  :root[data-theme="dark"] .tag.KSBC { background:rgba(96,165,250,.16); color:#93C5FD; }
+  :root[data-theme="dark"] .tag.FED  { background:rgba(74,222,128,.14); color:#86EFAC; }
+  :root[data-theme="dark"] .tag.BAR  { background:rgba(251,146,60,.16); color:#FDBA74; }
+
+  tbody tr.new td { background:color-mix(in srgb, var(--ok) 11%, var(--card)); }
+  tbody tr.new td.name::after { content:"NEW"; margin-left:8px; font-size:9.5px; font-weight:800;
+        letter-spacing:.6px; color:var(--ok); }
+
+  /* Outlets KSBC dispatched to that master has never heard of. Their cases
+     are in the network total and in no bond, so they are named, with an Add
+     beside each. */
+  .missing { border:1px solid color-mix(in srgb, var(--warn) 40%, var(--card));
+             background:color-mix(in srgb, var(--warn) 8%, var(--card));
+             border-radius:12px; padding:12px 14px; margin:4px 0 14px; font-size:13px; }
+  .missing[hidden] { display:none !important; }
+  .missing .mh { color:var(--warn); }
+  .missing .mh b { color:var(--ink); }
+  .missing .ml { display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+  .missing .mi { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+                 background:var(--card); border:1px solid var(--line); border-radius:10px;
+                 padding:8px 8px 8px 12px; }
+  .missing .mc { font-variant-numeric:tabular-nums; color:var(--muted); font-size:12.5px; }
+  .missing .mn { font-weight:650; color:var(--ink); }
+  .missing .mw { color:var(--muted); font-size:12.5px; }
+  .missing .mi .btn { margin-left:auto; padding:6px 13px; font-size:12.5px; font-weight:650; }
+
+  .added { display:flex; gap:10px; align-items:flex-start; font-size:13px; border-radius:11px;
+           padding:10px 14px; margin:4px 0 14px; color:var(--ink);
+           background:color-mix(in srgb, var(--ok) 10%, var(--card));
+           border:1px solid color-mix(in srgb, var(--ok) 38%, var(--card)); }
+  .added[hidden] { display:none !important; }
+  .added .ck { color:var(--ok); font-weight:800; }
+  .added .sub { color:var(--muted); }
+
+  /* The add form: a card in the same house style as the cluster cards. */
+  .addp { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          overflow:hidden; box-shadow:0 6px 22px rgba(16,24,40,.08); margin:0 0 14px;
+          animation:drop .18s ease-out; }
+  .addp[hidden] { display:none !important; }
+  @keyframes drop { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+  .addp h4 { margin:0; padding:10px 8px 10px 15px; background:var(--navy); color:var(--gold);
+             font-size:10px; font-weight:700; letter-spacing:.9px; text-transform:uppercase;
+             display:flex; align-items:center; }
+  .addp h4 .x { margin-left:auto; border:0; background:none; color:rgba(255,255,255,.7);
+                font-size:18px; line-height:1; cursor:pointer; padding:2px 8px; border-radius:6px; }
+  .addp h4 .x:hover { color:#fff; background:rgba(255,255,255,.12); }
+  .addp .in { display:grid; gap:14px 16px; padding:16px 15px 6px;
+              grid-template-columns:repeat(4, minmax(0,1fr)); }
+  .addp .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .addp .f.full { grid-column:1 / -1; }
+  .addp .f.two { grid-column:span 2; }
+  .addp .f.three { grid-column:span 3; }
+  .addp label { font-size:10.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+                color:var(--muted); }
+  .addp input, .addp select { border:1px solid var(--line); border-radius:9px; padding:9px 11px;
+                font:inherit; font-size:13.5px; background:var(--card); color:var(--ink);
+                width:100%; box-sizing:border-box; }
+  .addp input:focus, .addp select:focus { outline:none; border-color:var(--blue);
+                box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  .addp small { font-size:11.5px; color:var(--muted); min-height:14px; }
+  .addp small b { color:var(--ink); font-weight:650; }
+  .kind { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; max-width:560px; }
+  .kind button { border:1px solid var(--line); background:var(--card); color:var(--ink);
+                 border-radius:10px; padding:9px 12px; cursor:pointer; text-align:left;
+                 display:flex; flex-direction:column; gap:2px; font:inherit;
+                 transition:border-color .14s, background .14s, box-shadow .14s; }
+  .kind button b { font-size:13.5px; font-weight:650; }
+  .kind button span { font-size:11px; color:var(--muted); }
+  .kind button:hover { border-color:var(--blue); background:var(--hover); }
+  .kind button.on { border-color:var(--blue); background:var(--hover);
+                    box-shadow:0 0 0 2px color-mix(in srgb, var(--blue) 30%, transparent); }
+  .kind button.on b { color:var(--blue); }
+  .addp .foot { display:flex; align-items:center; gap:9px; padding:10px 15px 14px; }
+  .addp .foot .err { margin-right:auto; font-size:12.5px; color:var(--bad); }
+  .addp .foot .err.warn { color:var(--warn); }
+  @media (max-width:760px) {
+    .addp .in { grid-template-columns:1fr 1fr; }
+    .addp .f.two, .addp .f.three { grid-column:1 / -1; }
+    .bar .sp { margin-left:0; width:100%; }
+    .bar .sp .count { margin-right:auto; }
+    .bar .sp .btn { white-space:nowrap; }
+  }
+  @media (max-width:480px) {
+    .addp .in { grid-template-columns:1fr; }
+    .kind { gap:6px; }
+    .kind button { padding:8px 9px; }
+    .kind button span { font-size:10.5px; }
+    .addp .foot { flex-wrap:wrap; }
+    .addp .foot .err { flex-basis:100%; }
+  }
 </style>
 {% endblock %}
 
@@ -97,9 +194,18 @@
 <div class="clusters" id="clusters"></div>
 <div class="spare" id="spare" hidden></div>
 
-<h3 class="sec">Shops</h3>
+<h3 class="sec">Outlets</h3>
+<p class="lead">Every KSBC shop, Consumerfed outlet and bar in master data, and the bond it reports under.</p>
+<div class="missing" id="missing" hidden></div>
+<div class="added" id="added" hidden></div>
 <div class="bar">
-  <input type="search" id="q" placeholder="Search shops" autocomplete="off">
+  <input type="search" id="q" placeholder="Search outlets" autocomplete="off">
+  <select id="fCat">
+    <option value="">All types</option>
+    <option value="KSBC">KSBC shops</option>
+    <option value="FED">Consumerfed</option>
+    <option value="BAR">Bars</option>
+  </select>
   <select id="fBond"><option value="">All bonds</option></select>
   <select id="fStatus">
     <option value="">Active and closed</option>
@@ -108,13 +214,53 @@
   </select>
   <div class="sp">
     <span class="count" id="count"></span>
+    <button class="btn gold" onclick="openAdd()" id="addBtn">+&ensp;Add outlet</button>
     <button class="btn" onclick="resetEdits()" id="undoBtn" disabled>Undo changes</button>
     <button class="btn primary" onclick="save()" id="saveBtn" disabled>Save</button>
   </div>
 </div>
 
+<form class="addp" id="addp" hidden onsubmit="addOutlet(event)" autocomplete="off">
+  <h4>Add an outlet to master data<button type="button" class="x" title="Close" onclick="closeAdd()">&times;</button></h4>
+  <div class="in">
+    <div class="f full">
+      <label>Type</label>
+      <div class="kind" id="kind">
+        <button type="button" data-cat="KSBC"><b>KSBC shop</b><span>Code 1xxxxx</span></button>
+        <button type="button" data-cat="FED"><b>Consumerfed</b><span>Code 2xxxxx</span></button>
+        <button type="button" data-cat="BAR"><b>Bar</b><span>Code 4xxxxx</span></button>
+      </div>
+    </div>
+    <div class="f">
+      <label for="aCode">Code</label>
+      <input id="aCode" inputmode="numeric" placeholder="e.g. 410013" maxlength="8">
+      <small>Licensee No. in the KSBC raw</small>
+    </div>
+    <div class="f three">
+      <label for="aName">Name</label>
+      <input id="aName" placeholder="e.g. HOTEL PUSHPAK GRANDE" maxlength="80">
+      <small>As it should read on the reports</small>
+    </div>
+    <div class="f two">
+      <label for="aWh">Warehouse</label>
+      <select id="aWh"></select>
+      <small>The KSBC warehouse that supplies it</small>
+    </div>
+    <div class="f two">
+      <label for="aBond">Bond</label>
+      <select id="aBond"></select>
+      <small id="aStaff"></small>
+    </div>
+  </div>
+  <div class="foot">
+    <span class="err" id="aErr"></span>
+    <button type="button" class="btn" onclick="closeAdd()">Cancel</button>
+    <button type="submit" class="btn primary" id="aGo">Add to master data</button>
+  </div>
+</form>
+
 <div class="wrap"><table id="grid">
-  <thead><tr><th>Code</th><th>Shop</th><th>Warehouse</th><th>Cat</th>
+  <thead><tr><th>Code</th><th>Shop</th><th>Warehouse</th><th>Type</th>
     <th>Field staff</th><th>Bond</th><th>Status</th></tr></thead>
   <tbody><tr><td colspan="7">Loading…</td></tr></tbody>
 </table></div>
@@ -204,6 +350,7 @@ function visible(){
     if (fBond.value && bondOf(s) !== fBond.value) return false;
     if (fStatus.value && (s.status || '') !== fStatus.value) return false;
     if (!q) return true;
+    if (fCat.value && (s.cat || '') !== fCat.value) return false;
     // Not s.code: that is the internal key, and the shop's own number is
     // already in its name. Searching it pulled up shops whose row shows no
     // sign of what you typed.
@@ -217,11 +364,11 @@ function render(){
   const opts = DATA.bonds.map(b => `<option value="${b}">${escapeHtml(b)}</option>`).join('');
   grid.querySelector('tbody').innerHTML = rows.length ? rows.map(s => {
     const b = bondOf(s), moved = edits.has(s.code);
-    return `<tr class="${moved ? 'dirty' : ''}">
+    return `<tr class="${moved ? 'dirty' : ''}${fresh.has(s.code) ? ' new' : ''}" data-code="${escapeHtml(s.code)}">
       <td class="code">${escapeHtml(s.code)}</td>
       <td class="name">${escapeHtml(s.name)}</td>
       <td class="small">${escapeHtml(s.warehouse.replace(/^WH-/, ''))}</td>
-      <td class="small">${escapeHtml(s.cat)}</td>
+      <td class="small">${s.cat ? `<span class="tag ${escapeHtml(s.cat)}">${escapeHtml(s.cat)}</span>` : ''}</td>
       <td class="small">${escapeHtml(s.staff)}</td>
       <td><select onchange="setBond('${s.code}', this.value)">
             <option value=""${b ? '' : ' selected'}>— unmapped —</option>
@@ -231,7 +378,7 @@ function render(){
     </tr>`;
   }).join('') : '<tr><td colspan="7">Nothing matches that.</td></tr>';
 
-  count.textContent = `${rows.length} of ${DATA.shops.length} shops`;
+  count.textContent = `${rows.length} of ${DATA.shops.length} outlets`;
   foot.textContent = edits.size
     ? `${edits.size} shop${edits.size === 1 ? '' : 's'} moved — not saved yet.`
     : `Mapping read from ${DATA.source}.`;
@@ -282,10 +429,167 @@ async function save(){
   }
 }
 
+/* ---------------- adding an outlet ---------------- */
+const AS_A = { KSBC:'a KSBC shop', FED:'a Consumerfed outlet', BAR:'a bar' };
+const PLURAL = { KSBC:'KSBC shops', FED:'Consumerfed outlets', BAR:'bars' };
+const fresh = new Set();          // codes added on this visit, lit in the table
+let MISSING = [];                 // in the dispatches, not in master
+let aCat = '', kindPicked = false, bondPicked = false;
+
+async function loadMissing(){
+  try {
+    const d = await (await fetch('/api/bond-mapping/unmatched')).json();
+    MISSING = d.outlets || [];
+  } catch { MISSING = []; }
+  drawMissing();
+}
+function shortDay(iso){
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
+function cs(v){ return (Math.round(v * 100) / 100).toLocaleString('en-IN') + ' cs'; }
+function drawMissing(){
+  const el = document.getElementById('missing');
+  const known = new Set(DATA ? DATA.shops.map(s => s.code) : []);
+  const list = MISSING.filter(o => !known.has(o.code));
+  el.hidden = !list.length;
+  if (!list.length){ el.innerHTML = ''; return; }
+  const n = list.length;
+  el.innerHTML = `<div class="mh"><b>${n} outlet${n === 1 ? '' : 's'} in this month\u2019s dispatches ${n === 1 ? 'is' : 'are'} not in master data.</b>`
+    + ` ${n === 1 ? 'Its' : 'Their'} cases count in the network total but in no bond until ${n === 1 ? 'it is' : 'they are'} added.</div>`
+    + `<div class="ml">${list.map(o => {
+        const when = o.first && o.first !== o.last ? `${shortDay(o.first)} \u2013 ${shortDay(o.last)}` : shortDay(o.last);
+        return `<div class="mi">
+          ${o.cat ? `<span class="tag ${o.cat}">${o.cat}</span>` : ''}
+          <span class="mc">${escapeHtml(o.code)}</span>
+          <span class="mn">${escapeHtml(o.name)}</span>
+          <span class="mw">${escapeHtml(o.warehouse)} warehouse \u00b7 ${cs(o.cases)}${when ? ' \u00b7 ' + when : ''}</span>
+          <button class="btn" type="button" onclick="openAdd('${escapeHtml(o.code)}')">Add</button>
+        </div>`; }).join('')}</div>`;
+}
+
+function setKind(cat, byHand){
+  aCat = cat || '';
+  if (byHand) kindPicked = true;
+  document.querySelectorAll('#kind button').forEach(b => b.classList.toggle('on', b.dataset.cat === aCat));
+  check();
+}
+document.querySelectorAll('#kind button').forEach(b => b.addEventListener('click', () => setKind(b.dataset.cat, true)));
+
+function staffNote(){
+  const b = aBond.value;
+  aStaff.innerHTML = b ? `Field staff: <b>${escapeHtml(DATA.staff[b] || 'VACANT')}</b> \u2014 follows the bond` : '';
+}
+
+function openAdd(code){
+  if (!DATA) return;
+  const pre = code ? MISSING.find(o => o.code === code) : null;
+  aWh.innerHTML = '<option value="">Pick a warehouse</option>'
+    + DATA.warehouses.map(w => `<option value="${escapeHtml(w.label)}">${escapeHtml(w.label)}</option>`).join('');
+  aBond.innerHTML = '<option value="">Pick a bond</option>'
+    + DATA.bonds.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+  kindPicked = false; bondPicked = false;
+  aCode.value = pre ? pre.code : '';
+  aName.value = pre ? pre.name.toUpperCase() : '';
+  aWh.value = pre && DATA.warehouses.some(w => w.label === pre.warehouse) ? pre.warehouse : '';
+  setKind(pre ? pre.cat : '');
+  onWh();
+  aErr.textContent = ''; aErr.className = 'err';
+  addp.hidden = false;
+  check();
+  addp.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  (pre ? aName : aCode).focus({ preventScroll:true });
+  if (pre) aName.select();
+}
+function closeAdd(){ addp.hidden = true; }
+
+function onWh(){
+  const w = DATA.warehouses.find(w => w.label === aWh.value);
+  if (w && !bondPicked) aBond.value = w.bond || '';
+  staffNote();
+}
+aWh.addEventListener('change', onWh);
+aBond.addEventListener('change', () => { bondPicked = true; staffNote(); });
+aCode.addEventListener('input', () => {
+  const clean = aCode.value.replace(/\D/g, '');
+  if (clean !== aCode.value) aCode.value = clean;
+  const guess = DATA.prefix[clean[0]];
+  if (guess && !kindPicked) setKind(guess); else check();
+});
+aName.addEventListener('input', check);
+
+// Live notes under the form. A clash stops the add; a code whose first digit
+// says a different type only asks you to look again.
+function check(){
+  const code = aCode.value.trim();
+  const clash = code && DATA.shops.find(s => s.code === code);
+  aErr.className = 'err';
+  if (clash){
+    aErr.textContent = `${code} is already in master data \u2014 ${clash.name}${clash.bond ? ', ' + clash.bond : ''}.`;
+    return false;
+  }
+  const guess = DATA.prefix[code[0]];
+  if (code && aCat && guess && guess !== aCat){
+    aErr.className = 'err warn';
+    aErr.textContent = `Codes starting with ${code[0]} are ${PLURAL[guess]} in KSBC\u2019s numbering \u2014 check the type.`;
+    return true;
+  }
+  aErr.textContent = '';
+  return true;
+}
+
+async function addOutlet(e){
+  e.preventDefault();
+  if (!check()) { aCode.focus(); return; }
+  const say = (m, el) => { aErr.className = 'err'; aErr.textContent = m; if (el) el.focus(); };
+  if (!aCat) return say('Pick what it is: KSBC shop, Consumerfed or Bar.');
+  if (!/^\d{4,8}$/.test(aCode.value)) return say('The code is the Licensee No. \u2014 digits only, like 410013.', aCode);
+  if (!aName.value.trim()) return say('Give the outlet a name.', aName);
+  if (!aWh.value) return say('Pick the warehouse that supplies it.', aWh);
+  if (!aBond.value) return say('Pick the bond it reports under.', aBond);
+
+  aGo.disabled = true; aGo.textContent = 'Adding\u2026';
+  try {
+    const res = await fetch('/api/bond-mapping/outlet', {
+      method:'POST', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ code:aCode.value, name:aName.value, cat:aCat,
+                             warehouse:aWh.value, bond:aBond.value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not add it.');
+    const s = data.shop;
+    DATA.shops.push(s);
+    fresh.add(s.code);
+    closeAdd();
+    drawMissing();
+    // If the filters on screen would hide the new row, clear them.
+    if (!visible().some(x => x.code === s.code)){
+      document.getElementById('q').value = '';
+      fCat.value = ''; fBond.value = ''; fStatus.value = '';
+    }
+    render();
+    const row = grid.querySelector(`tr[data-code="${CSS.escape(s.code)}"]`);
+    if (row) row.scrollIntoView({ behavior:'smooth', block:'center' });
+    const note = document.getElementById('added');
+    note.hidden = false;
+    note.innerHTML = `<span class="ck">\u2713</span><div><b>${escapeHtml(s.name)}</b> (${escapeHtml(s.code)}) added as `
+      + `${AS_A[s.cat]} under <b>${escapeHtml(s.bond)}</b> \u2014 field staff ${escapeHtml(s.staff)}.`
+      + `<div class="sub">The reports here pick it up straight away; the Secondary Sales workbook maps it on its next upload.`
+      + `${data.backup ? ' Master was backed up first.' : ''}</div></div>`;
+  } catch(err){
+    say(err.message);
+  } finally {
+    aGo.disabled = false; aGo.textContent = 'Add to master data';
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !addp.hidden) closeAdd(); });
+
 let t = null;
 document.getElementById('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 130); });
 fBond.addEventListener('change', render);
+fCat.addEventListener('change', render);
 fStatus.addEventListener('change', render);
-load();
+load().then(loadMissing);
 </script>
 {% endblock %}

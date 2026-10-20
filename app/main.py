@@ -4454,6 +4454,30 @@ async def bond_mapping_save(request: Request):
     return JSONResponse({"ok": True, **result})
 
 
+@app.post("/api/bond-mapping/outlet")
+async def bond_mapping_add_outlet(request: Request):
+    """Add a shop, Consumerfed outlet or bar to master data."""
+    require_user(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "That request body is not JSON.")
+    try:
+        # A whole-workbook read and write: off the event loop.
+        from starlette.concurrency import run_in_threadpool
+        added = await run_in_threadpool(bondmap.add_outlet, body)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return JSONResponse({"ok": True, **added})
+
+
+@app.get("/api/bond-mapping/unmatched")
+def bond_mapping_unmatched(request: Request):
+    """Outlets in the dispatch data that master data does not have yet."""
+    require_user(request)
+    return JSONResponse(bondmap.unmatched_outlets())
+
+
 # ---------------------------------------------------------------------------
 # Target vs achievement
 # ---------------------------------------------------------------------------
