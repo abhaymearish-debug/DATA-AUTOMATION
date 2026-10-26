@@ -1915,107 +1915,28 @@ def previous_cumulative(period: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 # Is this upload the period it was filed under?
 #
-# The period is the one picked in the upload dialog - never the file's name
-# (Abhay, 26 Oct 2026). A KSBC shop-stock export carries no dates inside it,
-# but it does carry the stock it opens and closes on. On 26 Oct 2026 the 17-25
-# Oct pull was filed as 1-16 Oct (the dialog opened on 1-16), so every bond
-# book counted 17-25 twice and printed 1-25 Oct sales 813 cs short. So the
-# stock is checked: a file identical to another period already stored, or one
-# that does not follow on from the uploads either side of it, is refused.
-
-# Lines whose opening may differ from the previous pull's closing before the
-# pair is called a mismatch. Genuine back-to-back pulls differ on a few dozen
-# (31 lines for 1-16 / 17-25 Oct 2026: KSBC's own adjustments); one file
-# joined to itself differs on about a thousand.
-CONTINUITY_LIMIT = 150
+# An upload is stored as exactly the period picked in the dialog - not read
+# off the file's name, and not compared with any other upload (Abhay, 26 Oct
+# 2026). KSBC's exports do not join up cleanly from one pull to the next -
+# September's closing is not always October's opening - so each period is
+# taken as it is. The one thing checked is that the file IS a KSBC shop stock
+# export, so a wrong report is turned away at upload rather than at the PDF.
 
 
 def _span_words(a: date, b: date) -> str:
-    return f"{a.day}–{b.day} {b.strftime('%b')}" if a != b else f"{a.day} {a.strftime('%b')}"
-
-
-def _neighbour(day: date, starting: bool, skip: tuple) -> tuple[str, dict] | None:
-    """The stored file that ends on `day` (or starts on it), already read.
-
-    A cumulative period is preferred to a single day's export: it is what the
-    books are built from. The period being replaced is never its own neighbour.
-    """
-    best = None
-    for p in cumulative_periods():
-        if (p["start"], p["end"]) == skip:
-            continue
-        hit = p["start"] == day if starting else p["end"] == day
-        if hit and (best is None or (p["end"] - p["start"]) > (best["end"] - best["start"])):
-            best = p
-    if best is not None:
-        return f"the {_span_words(best['start'], best['end'])} upload", cumulative_lines(best["path"])
-    path = shop_day_files().get(day)
-    if path is not None:
-        return f"the {_span_words(day, day)} daily export", _day_lines(path, load_master())
-    return None
-
-
-def _disagree(earlier: dict, later: dict) -> int:
-    """Lines where the later file does not open on the earlier one's close."""
-    keys = set(earlier) | set(later)
-    return sum(1 for k in keys
-               if abs((earlier.get(k) or [0, 0, 0, 0])[3] - (later.get(k) or [0, 0, 0, 0])[0]) > 0.01)
+    return f"{a.day}\u2013{b.day} {b.strftime('%b')}" if a != b else f"{a.day} {a.strftime('%b')}"
 
 
 def cumulative_upload_problem(path: Path, start: date, end: date) -> str:
-    """Why this file cannot be stored as start..end - or "" when it can.
-
-    The days picked in the dialog ARE the period; the file's name is never
-    read. What is checked is the stock inside the file against the uploads
-    already either side of it.
-    """
+    """Why this file cannot be stored as start..end - or "" when it can."""
     picked = _span_words(start, end)
-
     try:
-        new = _cumulative_lines_read(path)["lines"]
+        lines = _cumulative_lines_read(path)["lines"]
     except KeyError as exc:
-        return (f"This is not KSBC’s shop stock export - it has no ‘{exc.args[0]}’ "
+        return (f"This is not KSBC\u2019s shop stock export - it has no \u2018{exc.args[0]}\u2019 "
                 f"column. Download the Supplier Wise Shop Sale report for {picked} again.")
-    if not new:
+    if not lines:
         return "None of the shops in this file are in master data, so there is nothing to store."
-
-    for p in cumulative_periods():
-        if (p["start"], p["end"]) == (start, end):
-            continue
-        if (p["start"].year, p["start"].month) != (start.year, start.month):
-            continue
-        if cumulative_lines(p["path"])["lines"] == new:
-            return (f"This is the same export as the one already stored for "
-                    f"{_span_words(p['start'], p['end'])} - every line is identical. "
-                    f"Choose the {picked} pull.")
-
-    # Only inside a month. Across the 1st, KSBC's month-end postings land
-    # after the 16-day pull is taken: the 17-30 Sep pull closes 258 cs away
-    # from the 30 Sep daily on 97 lines, and 1-16 Oct opens off it on 239 -
-    # with both files genuine. Inside a month the join holds to a few dozen
-    # lines (44 in Sep, 34 in Oct), and inside a month is where a 17-25 file
-    # filed as 1-16 does its damage.
-    day_before, day_after = start - timedelta(days=1), end + timedelta(days=1)
-    before = (_neighbour(day_before, starting=False, skip=(start, end))
-              if day_before.month == start.month else None)
-    if before:
-        label, got = before
-        n = _disagree(got["lines"], new)
-        if n > CONTINUITY_LIMIT:
-            return (f"This file does not follow on from {label}: on {n:,} lines its opening stock "
-                    f"is not that upload’s closing stock (back-to-back pulls differ on a few "
-                    f"dozen at most). Check it is the {picked} pull. If it is, {label} is the "
-                    f"wrong file - upload that one again first.")
-    after = (_neighbour(day_after, starting=True, skip=(start, end))
-             if day_after.month == end.month else None)
-    if after:
-        label, got = after
-        n = _disagree(new, got["lines"])
-        if n > CONTINUITY_LIMIT:
-            return (f"{label[0].upper() + label[1:]} does not follow on from this file: on {n:,} "
-                    f"lines its opening stock is not this file’s closing stock (back-to-back "
-                    f"pulls differ on a few dozen at most). Check this is the {picked} pull. If it "
-                    f"is, {label} is the wrong file - upload that one again after this.")
     return ""
 
 
