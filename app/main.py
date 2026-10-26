@@ -111,7 +111,7 @@ def _cases(value, places: int = 0):
     """
     from decimal import Decimal, ROUND_HALF_UP
     step = Decimal(1).scaleb(-places)
-    got = Decimal(str(float(value or 0))).quantize(step, rounding=ROUND_HALF_UP)
+    got = Decimal(repr(round(float(value or 0), 9))).quantize(step, rounding=ROUND_HALF_UP)
     return int(got) if places == 0 else float(got)
 
 
@@ -975,10 +975,23 @@ async def build(
                     f"{cum_range[0]}-{cum_range[1]} CUMULATIVE.xlsx")
             target = stream.input_path() / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            _save_upload(files[0], target)
+            start = covers.replace(day=cum_range[0])
+            end = covers.replace(day=cum_range[1])
+            job.covers = start.isoformat()
+            job.covers_to = end.isoformat()
+            # Checked BEFORE it goes anywhere near the stored period. It used
+            # to be written straight over the period's file, so a wrong upload
+            # had already replaced the right one by the time anything could
+            # object - and a rejection then deleted what was left.
+            incoming = scratch_dir / "incoming-cumulative.xlsx"
+            _save_upload(files[0], incoming)
+            problem = reports_api.cumulative_upload_problem(
+                incoming, start, end, files[0].filename or "")
+            if problem:
+                incoming.unlink(missing_ok=True)
+                raise UploadRejected(problem)
+            os.replace(incoming, target)
             placed.append(target)
-            job.covers = covers.replace(day=cum_range[0]).isoformat()
-            job.covers_to = covers.replace(day=cum_range[1]).isoformat()
 
         elif stream_key == "secondary_sales":
             covers = _parse_date(covers_date)

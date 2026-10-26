@@ -95,7 +95,10 @@ def money(value: float, round_off: bool | None = None) -> str:
     """
     whole = ROUND_OFF if round_off is None else round_off
     step = Decimal("1") if whole else Decimal("0.01")
-    got = Decimal(str(value or 0)).quantize(step, rounding=ROUND_HALF_UP)
+    # Nine places first. Bottles over bottles-per-case, added up in floating
+    # point, land an exact half case on x.4999999999999996 - and five cells
+    # in the 1-25 Oct 2026 books rounded down because of it.
+    got = Decimal(repr(round(float(value or 0), 9))).quantize(step, rounding=ROUND_HALF_UP)
     out = f"{got:,.0f}" if whole else f"{got:,.2f}"
     return out.rstrip("0").rstrip(".") if "." in out else out
 
@@ -275,9 +278,20 @@ def draw_bands(c, cols, width, page_one, shop, bond, period) -> float:
 
     c.setFillColor(GOLD)
     c.rect(0, y - BAND_H, width, BAND_H, stroke=0, fill=1)
-    c.setFont(BOLD, F_BAND)
     c.setFillColor(NAVY_T)
-    c.drawString(INSET, y - BASE_BAND, shop)
+    # The shop's name gets the band up to the bond's, and no further.
+    # 7040-THRIKAKKARA(KOCHI METRO TRIPUNITHURA TERMINAL) ran straight over
+    # the word ALUVA, so a long name now steps down in size, and only past
+    # three-quarters of the band's size is it cut short.
+    room = width - 2 * INSET - w(bond, BOLD, F_BAND) - 14.0
+    size, text = F_BAND, shop
+    while w(text, BOLD, size) > room and size > F_BAND * 0.75:
+        size = round(size - 0.25, 2)
+    while w(text, BOLD, size) > room and len(text) > 4:
+        text = text[:-2].rstrip() + "\u2026"
+    c.setFont(BOLD, size)
+    c.drawString(INSET, y - BASE_BAND + (F_BAND - size) * 0.35, text)
+    c.setFont(BOLD, F_BAND)
     c.drawRightString(width - INSET, y - BASE_BAND, bond)
     y -= BAND_H
 
@@ -377,7 +391,14 @@ def draw_grid(c, cols, width, placed) -> None:
 
 
 def paginate(shops, h, first: bool = True):
-    """Greedy fill, exactly as the office's own files break."""
+    """Greedy fill, exactly as the office's own files break - except that a
+    shop's TOTAL never turns the page on its own.
+
+    6017-THOOKKUPALAM's TOTAL sat alone on Thodupuzha's page 13, a page with
+    nothing on it to be the total of. When the TOTAL is what would break, the
+    brand block it closes goes over with it (or, if one brand fills the whole
+    page, its last two packs), so the total always has rows above it.
+    """
     pages = []
     for i, lines in enumerate(shops):
         top = BODY_TOP_FIRST if i == 0 and first else BODY_TOP_REST
@@ -385,8 +406,18 @@ def paginate(shops, h, first: bool = True):
         for row in lines:
             need = max(h, TOTAL_MIN) if row["kind"] == "total" else h
             if y - need < BOTTOM and current:
+                carry = []
+                if row["kind"] == "total":
+                    cut = max((j for j, r in enumerate(current) if r["kind"] == "brand"),
+                              default=0)
+                    if cut == 0:
+                        cut = max(1, len(current) - 2)
+                    current, carry = current[:cut], current[cut:]
                 pages.append((i, current))
                 y, current = BODY_TOP_REST, []
+                for moved in carry:
+                    current.append(moved)
+                    y -= h
             current.append(row)
             y -= need
         pages.append((i, current))

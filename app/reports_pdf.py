@@ -113,7 +113,7 @@ def whole(v) -> int:
     Figures land on a half often enough in these files for that to be a visible
     disagreement between a report and its own PDF.
     """
-    return int(Decimal(str(float(v or 0))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int(Decimal(repr(round(float(v or 0), 9))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def cases(v, round_off: bool) -> str:

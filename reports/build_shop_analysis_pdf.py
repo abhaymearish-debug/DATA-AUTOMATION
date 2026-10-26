@@ -129,7 +129,7 @@ def whole(value: float, places: int = 0):
     for the figure as it actually stands.
     """
     step = Decimal(1).scaleb(-places)
-    got = Decimal(str(value)).quantize(step, rounding=ROUND_HALF_UP)
+    got = Decimal(repr(round(float(value), 9))).quantize(step, rounding=ROUND_HALF_UP)
     return int(got) if places == 0 else float(got)
 
 

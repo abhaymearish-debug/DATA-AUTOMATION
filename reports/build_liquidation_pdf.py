@@ -76,7 +76,7 @@ def w(text, font, size):
 
 
 def whole(v: float) -> int:
-    return int(Decimal(str(v)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int(Decimal(repr(round(float(v), 9))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 # Round off: whole cases and whole per cent, the way somebody reads the sheet
@@ -91,7 +91,7 @@ def money(v: float, places: str = "0.01") -> str:
     Rounded half-up through Decimal rather than by format string, so a figure
     reads the same here as it does in the workbook and on the screen.
     """
-    q = Decimal(str(v)).quantize(Decimal(places), rounding=ROUND_HALF_UP)
+    q = Decimal(repr(round(float(v), 9))).quantize(Decimal(places), rounding=ROUND_HALF_UP)
     # A figure that lands whole prints whole: "5.00" is 5 with noise after it.
     out = f"{q:f}"
     return out.rstrip("0").rstrip(".") if "." in out else out

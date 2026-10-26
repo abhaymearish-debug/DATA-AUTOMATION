@@ -1380,7 +1380,10 @@ def half_up(v: float) -> int:
     figure in these grids is rounded from its OWN unrounded aggregate, which is
     why a cluster row can differ by one from the sum of the rows above it.
     """
-    return int(_decimal.Decimal(repr(float(v or 0.0))).quantize(0, rounding=_decimal.ROUND_HALF_UP))
+    # Through nine places first: a sum of bottle fractions that is exactly
+    # x.5 arrives as x.4999999999999996, and rounded as it stands it went down.
+    return int(_decimal.Decimal(repr(round(float(v or 0.0), 9))).quantize(
+        0, rounding=_decimal.ROUND_HALF_UP))
 
 
 def find_shop_workbook() -> Path | None:
@@ -1908,6 +1911,129 @@ def previous_cumulative(period: dict) -> dict | None:
         if p["start"].day == start.day and p["end"].day == period["end"].day:
             return p
     return None
+
+# ---------------------------------------------------------------------------
+# Is this upload the period it was filed under?
+#
+# A KSBC shop-stock export carries no dates inside it - only the window the
+# office typed into its name, and the stock it opens and closes on. On 26 Oct
+# 2026 the 17-25 Oct pull was filed as 1-16 Oct (the dialog opened on 1-16 and
+# nothing looked at the file), so every bond book counted 17-25 twice and
+# printed 1-25 Oct sales 813 cs short. Three checks now stand between an
+# upload and the period it claims, each one something the file itself says.
+
+_NAME_MONTHS = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+                "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+# 'SHOP STOCK OCT 17 TH TO 25 TH', 'JULY 1 TO 16 TH', 'JULY 17 TH 18 TH',
+# 'SEPT 1ST TO 1ST', 'AUG 1ST TO 10'. Both days must be there: a lone day is
+# too easily something else in a name.
+_NAME_SPAN_RE = re.compile(
+    r"\b(JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUNE?|JULY?|AUG(?:UST)?"
+    r"|SEP(?:T(?:EMBER)?)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\b"
+    r"\s*(\d{1,2})(?!\d)\s*(?:ST|ND|RD|TH)?\s*(?:TO\b|-|–)?\s*(\d{1,2})(?!\d)\s*(?:ST|ND|RD|TH)?\b",
+    re.IGNORECASE)
+
+# Lines whose opening may differ from the previous pull's closing before the
+# pair is called a mismatch. Genuine back-to-back pulls differ on a few dozen
+# (31 lines for 1-16 / 17-25 Oct 2026: KSBC's own adjustments); one file
+# joined to itself differs on about a thousand.
+CONTINUITY_LIMIT = 150
+
+
+def window_in_name(filename: str) -> tuple[int, int, int] | None:
+    """(month, first day, last day) the office wrote into a file's name."""
+    m = _NAME_SPAN_RE.search(Path(filename or "").stem.replace("_", " "))
+    if not m:
+        return None
+    month = _NAME_MONTHS.get(m.group(1)[:3].upper())
+    a, b = int(m.group(2)), int(m.group(3))
+    if not month or not (1 <= a <= b <= 31):
+        return None
+    return month, a, b
+
+
+def _span_words(a: date, b: date) -> str:
+    return f"{a.day}–{b.day} {b.strftime('%b')}" if a != b else f"{a.day} {a.strftime('%b')}"
+
+
+def _neighbour(day: date, starting: bool, skip: tuple) -> tuple[str, dict] | None:
+    """The stored file that ends on `day` (or starts on it), already read.
+
+    A cumulative period is preferred to a single day's export: it is what the
+    books are built from. The period being replaced is never its own neighbour.
+    """
+    best = None
+    for p in cumulative_periods():
+        if (p["start"], p["end"]) == skip:
+            continue
+        hit = p["start"] == day if starting else p["end"] == day
+        if hit and (best is None or (p["end"] - p["start"]) > (best["end"] - best["start"])):
+            best = p
+    if best is not None:
+        return f"the {_span_words(best['start'], best['end'])} upload", cumulative_lines(best["path"])
+    path = shop_day_files().get(day)
+    if path is not None:
+        return f"the {_span_words(day, day)} daily export", _day_lines(path, load_master())
+    return None
+
+
+def _disagree(earlier: dict, later: dict) -> int:
+    """Lines where the later file does not open on the earlier one's close."""
+    keys = set(earlier) | set(later)
+    return sum(1 for k in keys
+               if abs((earlier.get(k) or [0, 0, 0, 0])[3] - (later.get(k) or [0, 0, 0, 0])[0]) > 0.01)
+
+
+def cumulative_upload_problem(path: Path, start: date, end: date, filename: str = "") -> str:
+    """Why this file cannot be stored as start..end - or "" when it can."""
+    picked = _span_words(start, end)
+
+    named = window_in_name(filename)
+    if named and (named[0], named[1], named[2]) != (start.month, start.day, end.day):
+        month, a, b = named
+        said = f"{a}–{b} {date(2000, month, 1).strftime('%b')}" if a != b \
+            else f"{a} {date(2000, month, 1).strftime('%b')}"
+        return (f"This file is named for {said} (“{Path(filename).name}”), but the "
+                f"days picked are {picked}. Pick {said}, or choose the {picked} file.")
+
+    try:
+        new = _cumulative_lines_read(path)["lines"]
+    except KeyError as exc:
+        return (f"This is not KSBC’s shop stock export - it has no ‘{exc.args[0]}’ "
+                f"column. Download the Supplier Wise Shop Sale report for {picked} again.")
+    if not new:
+        return "None of the shops in this file are in master data, so there is nothing to store."
+
+    for p in cumulative_periods():
+        if (p["start"], p["end"]) == (start, end):
+            continue
+        if (p["start"].year, p["start"].month) != (start.year, start.month):
+            continue
+        if cumulative_lines(p["path"])["lines"] == new:
+            return (f"This is the same export as the one already stored for "
+                    f"{_span_words(p['start'], p['end'])} - every line is identical. "
+                    f"Choose the {picked} pull.")
+
+    before = _neighbour(start - timedelta(days=1), starting=False, skip=(start, end))
+    if before:
+        label, got = before
+        n = _disagree(got["lines"], new)
+        if n > CONTINUITY_LIMIT:
+            return (f"This file does not follow on from {label}: on {n:,} lines its opening stock "
+                    f"is not that upload’s closing stock (back-to-back pulls differ on a few "
+                    f"dozen at most). Check it is the {picked} pull. If it is, {label} is the "
+                    f"wrong file - upload that one again first.")
+    after = _neighbour(end + timedelta(days=1), starting=True, skip=(start, end))
+    if after:
+        label, got = after
+        n = _disagree(new, got["lines"])
+        if n > CONTINUITY_LIMIT:
+            return (f"{label[0].upper() + label[1:]} does not follow on from this file: on {n:,} "
+                    f"lines its opening stock is not this file’s closing stock (back-to-back "
+                    f"pulls differ on a few dozen at most). Check this is the {picked} pull. If it "
+                    f"is, {label} is the wrong file - upload that one again after this.")
+    return ""
+
 
 _CUM_MEASURES = [("Shop Opening Cases", "Shop Opening Bottles"),
                  ("Shop In Cases", "Shop In Bottles"),
