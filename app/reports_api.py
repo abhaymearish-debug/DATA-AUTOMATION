@@ -1989,7 +1989,15 @@ def cumulative_upload_problem(path: Path, start: date, end: date) -> str:
                     f"{_span_words(p['start'], p['end'])} - every line is identical. "
                     f"Choose the {picked} pull.")
 
-    before = _neighbour(start - timedelta(days=1), starting=False, skip=(start, end))
+    # Only inside a month. Across the 1st, KSBC's month-end postings land
+    # after the 16-day pull is taken: the 17-30 Sep pull closes 258 cs away
+    # from the 30 Sep daily on 97 lines, and 1-16 Oct opens off it on 239 -
+    # with both files genuine. Inside a month the join holds to a few dozen
+    # lines (44 in Sep, 34 in Oct), and inside a month is where a 17-25 file
+    # filed as 1-16 does its damage.
+    day_before, day_after = start - timedelta(days=1), end + timedelta(days=1)
+    before = (_neighbour(day_before, starting=False, skip=(start, end))
+              if day_before.month == start.month else None)
     if before:
         label, got = before
         n = _disagree(got["lines"], new)
@@ -1998,7 +2006,8 @@ def cumulative_upload_problem(path: Path, start: date, end: date) -> str:
                     f"is not that upload’s closing stock (back-to-back pulls differ on a few "
                     f"dozen at most). Check it is the {picked} pull. If it is, {label} is the "
                     f"wrong file - upload that one again first.")
-    after = _neighbour(end + timedelta(days=1), starting=True, skip=(start, end))
+    after = (_neighbour(day_after, starting=True, skip=(start, end))
+             if day_after.month == end.month else None)
     if after:
         label, got = after
         n = _disagree(new, got["lines"])
