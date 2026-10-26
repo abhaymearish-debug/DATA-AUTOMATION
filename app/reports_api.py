@@ -1915,41 +1915,19 @@ def previous_cumulative(period: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 # Is this upload the period it was filed under?
 #
-# A KSBC shop-stock export carries no dates inside it - only the window the
-# office typed into its name, and the stock it opens and closes on. On 26 Oct
-# 2026 the 17-25 Oct pull was filed as 1-16 Oct (the dialog opened on 1-16 and
-# nothing looked at the file), so every bond book counted 17-25 twice and
-# printed 1-25 Oct sales 813 cs short. Three checks now stand between an
-# upload and the period it claims, each one something the file itself says.
-
-_NAME_MONTHS = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
-                "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
-# 'SHOP STOCK OCT 17 TH TO 25 TH', 'JULY 1 TO 16 TH', 'JULY 17 TH 18 TH',
-# 'SEPT 1ST TO 1ST', 'AUG 1ST TO 10'. Both days must be there: a lone day is
-# too easily something else in a name.
-_NAME_SPAN_RE = re.compile(
-    r"\b(JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUNE?|JULY?|AUG(?:UST)?"
-    r"|SEP(?:T(?:EMBER)?)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\b"
-    r"\s*(\d{1,2})(?!\d)\s*(?:ST|ND|RD|TH)?\s*(?:TO\b|-|–)?\s*(\d{1,2})(?!\d)\s*(?:ST|ND|RD|TH)?\b",
-    re.IGNORECASE)
+# The period is the one picked in the upload dialog - never the file's name
+# (Abhay, 26 Oct 2026). A KSBC shop-stock export carries no dates inside it,
+# but it does carry the stock it opens and closes on. On 26 Oct 2026 the 17-25
+# Oct pull was filed as 1-16 Oct (the dialog opened on 1-16), so every bond
+# book counted 17-25 twice and printed 1-25 Oct sales 813 cs short. So the
+# stock is checked: a file identical to another period already stored, or one
+# that does not follow on from the uploads either side of it, is refused.
 
 # Lines whose opening may differ from the previous pull's closing before the
 # pair is called a mismatch. Genuine back-to-back pulls differ on a few dozen
 # (31 lines for 1-16 / 17-25 Oct 2026: KSBC's own adjustments); one file
 # joined to itself differs on about a thousand.
 CONTINUITY_LIMIT = 150
-
-
-def window_in_name(filename: str) -> tuple[int, int, int] | None:
-    """(month, first day, last day) the office wrote into a file's name."""
-    m = _NAME_SPAN_RE.search(Path(filename or "").stem.replace("_", " "))
-    if not m:
-        return None
-    month = _NAME_MONTHS.get(m.group(1)[:3].upper())
-    a, b = int(m.group(2)), int(m.group(3))
-    if not month or not (1 <= a <= b <= 31):
-        return None
-    return month, a, b
 
 
 def _span_words(a: date, b: date) -> str:
@@ -1984,17 +1962,14 @@ def _disagree(earlier: dict, later: dict) -> int:
                if abs((earlier.get(k) or [0, 0, 0, 0])[3] - (later.get(k) or [0, 0, 0, 0])[0]) > 0.01)
 
 
-def cumulative_upload_problem(path: Path, start: date, end: date, filename: str = "") -> str:
-    """Why this file cannot be stored as start..end - or "" when it can."""
-    picked = _span_words(start, end)
+def cumulative_upload_problem(path: Path, start: date, end: date) -> str:
+    """Why this file cannot be stored as start..end - or "" when it can.
 
-    named = window_in_name(filename)
-    if named and (named[0], named[1], named[2]) != (start.month, start.day, end.day):
-        month, a, b = named
-        said = f"{a}–{b} {date(2000, month, 1).strftime('%b')}" if a != b \
-            else f"{a} {date(2000, month, 1).strftime('%b')}"
-        return (f"This file is named for {said} (“{Path(filename).name}”), but the "
-                f"days picked are {picked}. Pick {said}, or choose the {picked} file.")
+    The days picked in the dialog ARE the period; the file's name is never
+    read. What is checked is the stock inside the file against the uploads
+    already either side of it.
+    """
+    picked = _span_words(start, end)
 
     try:
         new = _cumulative_lines_read(path)["lines"]

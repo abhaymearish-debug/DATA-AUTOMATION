@@ -985,8 +985,7 @@ async def build(
             # object - and a rejection then deleted what was left.
             incoming = scratch_dir / "incoming-cumulative.xlsx"
             _save_upload(files[0], incoming)
-            problem = reports_api.cumulative_upload_problem(
-                incoming, start, end, files[0].filename or "")
+            problem = reports_api.cumulative_upload_problem(incoming, start, end)
             if problem:
                 incoming.unlink(missing_ok=True)
                 raise UploadRejected(problem)

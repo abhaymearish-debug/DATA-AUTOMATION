@@ -855,36 +855,12 @@ function dateFromFilename(name){
   if (mm < 0) return '';
   return `${m[3]}-${String(mm + 1).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
 }
-/* The office names a cumulative pull for its window - 'SHOP STOCK OCT 17 TH
-   TO 25 TH' - and that name is the only place a KSBC shop-stock export says
-   which days it covers. So the window is read from it and put in the boxes,
-   where it can be seen and changed. The server checks the same name again. */
-const SPAN_RE = /\b(JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUNE?|JULY?|AUG(?:UST)?|SEP(?:T(?:EMBER)?)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\b\s*(\d{1,2})(?!\d)\s*(?:ST|ND|RD|TH)?\s*(?:TO\b|-|\u2013)?\s*(\d{1,2})(?!\d)\s*(?:ST|ND|RD|TH)?\b/i;
-function spanFromFilename(name){
-  const m = SPAN_RE.exec((name || '').replace(/\.[^.]+$/, '').replace(/_/g, ' '));
-  if (!m) return null;
-  const mm = MONTH3.indexOf(m[1].slice(0,3).toLowerCase());
-  const a = +m[2], b = +m[3];
-  if (mm < 0 || a < 1 || b < a || b > 31) return null;
-  const now = new Date();
-  // A December pull uploaded in January belongs to last year.
-  const year = now.getFullYear() - (mm > now.getMonth() ? 1 : 0);
-  const ym = `${year}-${String(mm + 1).padStart(2,'0')}`;
-  if (b > daysIn(ym)) return null;
-  return { ym, a, b };
-}
-
 upFiles.addEventListener('change', () => {
   showPicked();
   if (card && card.mode === 'batch'){ refreshName(); return; }
-  if (card && card.mode === 'range' && upFiles.files.length){
-    const got = spanFromFilename(upFiles.files[0].name);
-    if (got){
-      setRange(got.ym, got.a, got.b);
-      rangeSay.textContent += ' \u00b7 read from the file name';
-    }
-    return;
-  }
+  // A cumulative's days are the ones picked in this dialog. The file's name
+  // is not read: what you pick is the period, whatever the file is called.
+  if (card && card.mode === 'range') return;
   if (!card || card.mode !== 'files' || !upFiles.files.length) return;
   // The date is NOT taken from the filename any more. Bevco names a stock
   // export for the day it was DOWNLOADED, so a past day pulled today comes
