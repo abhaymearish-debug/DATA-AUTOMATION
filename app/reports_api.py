@@ -466,6 +466,27 @@ def cluster_of_warehouse(name: str):
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, object]] = {}
+# family -> the one key that family holds now. See _cache_put.
+_CACHE_FAMILY: dict[str, str] = {}
+
+
+def _cache_put(family: str, key: str, value) -> None:
+    """Keep the newest result for each family, and only that.
+
+    A family is one file's parse, or one feed built over many files. Its key
+    carries the file's mtime and master data's, so every upload and every
+    master edit makes a new key - and the old entry, which can never be asked
+    for again, used to stay in memory for good. A day of uploads stacked up
+    copies of a month of dispatch lines until the process passed Render's
+    512 MB and was restarted mid-build (28 Oct 2026: the 27 Oct secondary
+    upload failed that way). Now a new key for a family drops the old one.
+    """
+    with _CACHE_LOCK:
+        old = _CACHE_FAMILY.get(family)
+        if old is not None and old != key:
+            _CACHE.pop(old, None)
+        _CACHE_FAMILY[family] = key
+        _CACHE[key] = (0.0, value)
 
 
 # ---------------------------------------------------------------------------
@@ -708,8 +729,7 @@ def load_master() -> dict[str, dict]:
         }
     wb.close()
 
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
+    _cache_put("master", key, out)
     return out
 
 
@@ -792,8 +812,7 @@ def load_dispatch_lines(workbook: Path) -> list[dict]:
            for l in _parsed("dispatch", workbook,
                             lambda: [dict(l, date=l["date"].isoformat())
                                      for l in _dispatch_lines_read(workbook)])]
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, got)
+    _cache_put(f"lines:{workbook}", key, got)
     return got
 
 
@@ -1055,8 +1074,7 @@ def secondary_lines() -> tuple[list, list]:
         claimed |= days
         sources.append(entry(path.name, fresh))
 
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, (lines, sources))
+    _cache_put("seclines", key, (lines, sources))
     return lines, sources
 
 
@@ -1287,8 +1305,7 @@ def load_stock_rows() -> list[dict]:
                 # A malformed line is skipped, never silently zeroed.
                 continue
 
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
+    _cache_put("stock", key, out)
     return out
 
 
@@ -1543,8 +1560,7 @@ def load_shop_daily(workbook: Path) -> list[dict]:
         out.extend(_shop_rows(wb[name], day, master))
     wb.close()
 
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
+    _cache_put(f"shopdaily:{workbook}", key, out)
     return out
 
 
@@ -1959,8 +1975,7 @@ def cumulative_lines(path: Path) -> dict:
     if hit:
         return hit[1]
     got = _parsed("cumline", path, lambda: _cumulative_lines_read(path))
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, got)
+    _cache_put(f"cumline:{path}", key, got)
     return got
 
 
@@ -2068,8 +2083,7 @@ def _day_lines(path: Path, master: dict) -> dict:
     if hit:
         return hit[1]
     got = _parsed("dayline", path, lambda: _day_lines_read(path, master))
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, got)
+    _cache_put(f"dayline:{path}", key, got)
     return got
 
 
@@ -3344,8 +3358,7 @@ def warehouse_dashboard_json() -> str:
     # does not care how a solidus is escaped, and the browser's tokeniser
     # stops looking for the closing tag once it sees the backslash.
     blob = blob.replace("</", "<\\/")
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, blob)
+    _cache_put("whdashjson", key, blob)
     return blob
 
 
@@ -3509,8 +3522,7 @@ def warehouse_dashboard() -> dict:
     out["sales"] = _warehouse_demand(as_of)
     out.update(_warehouse_mix(as_of))
     out["dailyDispatch"] = _daily_dispatch(as_of)
-    with _CACHE_LOCK:
-        _CACHE[key] = (0.0, out)
+    _cache_put("whdash", key, out)
     return out
 
 
