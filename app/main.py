@@ -2185,16 +2185,7 @@ def brandwise_pdf(
     require_user(request)
     round_off = _rounded(round_off)
 
-    # Only the official cluster books need the month's workbook - they are built
-    # by the same script the pipeline runs. The current view renders from the
-    # figures already on screen, which the raws alone can answer for.
-    workbook = reports_api.find_secondary_workbook()
-    if workbook is None and scope != "current" and view != "bond":
-        raise HTTPException(404, "No secondary-sales workbook has been built yet. "
-                                 "The current view still exports.")
-
-    import subprocess, tempfile
-    from .pipelines import APP_REPORTS
+    import tempfile
 
     outdir = Path(tempfile.mkdtemp())
 
@@ -2242,26 +2233,8 @@ def brandwise_pdf(
     # A file per cluster, because that is how they go out: each ASM cluster's
     # PDF sent to its own people. They travel together in one archive, which
     # opens as one folder with the three named files in it.
-    built = []
-    for c in wanted:
-        into = outdir / f"c{c}"
-        into.mkdir(parents=True, exist_ok=True)
-        argv = ["python3", str(APP_REPORTS / "build_secondary_brandwise_pdfs.py"),
-                "--base", str(config.CLAUDE_ROOT), "--workbook", str(workbook),
-                "--outdir", str(into), "--cluster", str(c)]
-        if date_from:
-            argv += ["--from", date_from]
-        if date_to:
-            argv += ["--to", date_to]
-        if round_off:
-            argv.append("--round-off")
-
-        proc = subprocess.run(argv, capture_output=True, text=True,
-                              timeout=config.STEP_TIMEOUT_SECONDS)
-        if proc.returncode != 0:
-            raise HTTPException(500, f"PDF build failed: {(proc.stderr or proc.stdout)[-400:]}")
-        built += list(into.glob("*.pdf"))
-
+    f, t = _report_args(date_from, date_to)
+    built = _brandwise_warehouse_books(outdir, wanted, f, t, bool(round_off))
     if not built:
         where = "any cluster" if len(wanted) > 1 else f"cluster {wanted[0]}"
         raise HTTPException(404, f"No dispatches for {where} in the selected range.")
@@ -2269,6 +2242,77 @@ def brandwise_pdf(
     label = f" ({span['short']})" if span else ""
     return _as_folder(built, f"Secondary Sales - Cumulative{label}")
 
+
+
+def _brandwise_warehouse_books(outdir: Path, clusters: list, date_from, date_to,
+                               round_off: bool) -> list:
+    """Secondary Sales - Cumulative, Warehouse view: a PDF per cluster, a page
+    per warehouse.
+
+    Drawn from the dispatch lines the screen itself shows - the month's
+    workbook, with the day raws filling whatever it does not hold yet - and
+    not from the workbook alone. Read off one workbook, the download could
+    disagree with the table beside it: on 28 Oct 2026 it answered "No
+    dispatches for any cluster" for 1-27 Oct while the screen listed them. The
+    page is still the pipeline's own (build_secondary_brandwise_pdfs.py), so
+    the books look exactly as they always have; only what feeds them changed,
+    and it is now the same thing the Bond view's books read.
+    """
+    from collections import defaultdict
+    import importlib.util
+    from .pipelines import APP_REPORTS
+
+    lines, _sources = reports_api.secondary_lines()
+    if not lines:
+        return []
+    if not date_from and not date_to:
+        days = sorted({l["date"] for l in lines if l["date"]}
+                      | reports_api.secondary_covered_days())
+        if days:
+            date_from, date_to = reports_api._latest_month(days)
+
+    data: dict = defaultdict(lambda: defaultdict(
+        lambda: {"name": "", "brands": defaultdict(float)}))
+    brands: set = set()
+    moved: list = []
+    grand = 0.0
+    for l in lines:
+        day = l.get("date")
+        if date_from and day and day < date_from:
+            continue
+        if date_to and day and day > date_to:
+            continue
+        if not l.get("cases") or not l.get("warehouse"):
+            continue
+        code = l.get("shop_code") or l.get("shop")
+        entry = data[l["warehouse"]][code]
+        name = l.get("shop") or code
+        if len(name) > len(entry["name"]):
+            entry["name"] = name
+        entry["brands"][l["brand"]] += l["cases"]
+        brands.add(l["brand"])
+        grand += l["cases"]
+        if day:
+            moved.append(day)
+
+    spec = importlib.util.spec_from_file_location(
+        "build_secondary_brandwise_pdfs", APP_REPORTS / "build_secondary_brandwise_pdfs.py")
+    book = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(book)
+    extracted = {
+        "data": data, "brands": sorted(brands),
+        "from": date_from or (min(moved) if moved else None),
+        "to": date_to or (max(moved) if moved else None),
+        "moved_from": min(moved) if moved else None,
+        "moved_to": max(moved) if moved else None,
+        "grand": grand, "skipped_warehouses": set(), "workbook": None,
+    }
+    built = []
+    for cl in clusters:
+        out = book.build_cluster_pdf(cl, extracted, outdir, round_off=round_off)
+        if out is not None:
+            built.append(out)
+    return built
 
 
 def _brandwise_bond_books(outdir: Path, clusters: list, date_from, date_to,
